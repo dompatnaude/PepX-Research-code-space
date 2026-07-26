@@ -774,6 +774,7 @@ footer .logo .logo-sub{transform:none;}
 	.section .sub{margin:8px auto 22px;font-size:13px;line-height:1.55;}
 	.grid{gap:16px;}
 	.product-card-media{height:180px;padding:0;}
+	.product-card-media img{object-fit:contain;object-position:center;}
 	.product-card-body{padding:14px;gap:10px;}
 	.product-card-meta{font-size:12px;}
 	.product-card-meta .label{padding:6px 10px;}
