@@ -43,9 +43,9 @@
     .btn-sm.danger{background:#a12626;border-color:#a12626;}
     .product-thumb{width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid #e7ebf1;background:#f4f6fa;}
     .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.38);display:flex;align-items:flex-start;justify-content:center;padding:1rem;z-index:9999;overflow-y:auto;}
-    .modal-card{width:min(760px,100%);max-height:min(90vh,900px);background:#fff;border-radius:14px;border:1px solid #d8deea;box-shadow:0 20px 60px rgba(15,23,42,.2);display:flex;flex-direction:column;overflow:hidden;}
+    .modal-card{width:min(760px,100%);max-height:calc(100vh - 2rem);background:#fff;border-radius:14px;border:1px solid #d8deea;box-shadow:0 20px 60px rgba(15,23,42,.2);display:flex;flex-direction:column;overflow:hidden;}
     .modal-head{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.1rem;border-bottom:1px solid #e8ecf4;}
-    #productForm{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden;}
+    .modal-card form{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden;}
     .modal-body{padding:1rem 1.1rem;overflow-y:auto;scroll-behavior:smooth;flex:1 1 auto;min-height:0;}
     .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;}
     .form-grid .full{grid-column:1 / -1;}
@@ -62,6 +62,7 @@
     .variant-empty{font-size:.86rem;color:#6b7280;}
     .stock-stepper{display:inline-flex;align-items:center;gap:.25rem;}
     .stock-stepper input{width:3.8rem;text-align:center;padding:.35rem .4rem;}
+    body.modal-open{overflow:hidden;}
     @media (max-width: 800px){
       .form-grid{grid-template-columns:1fr;}
       .variant-mini-grid{grid-template-columns:1fr;}
@@ -88,6 +89,7 @@
       <div class="admin-tabs" id="adminTabs">
         <button type="button" class="active" data-tab="orders">Orders</button>
         <button type="button" data-tab="products">Products</button>
+        <button type="button" data-tab="promos">Discount Codes</button>
       </div>
 
       <div id="ordersSection">
@@ -125,6 +127,38 @@
           </tr></thead>
           <tbody id="productsBody"><tr><td colspan="7" class="muted">Loading&hellip;</td></tr></tbody>
         </table>
+      </div>
+
+      <div id="promosSection" class="hidden">
+        <div class="admin-grid" style="margin-top:1rem;">
+          <div class="admin-panel"><div class="muted">Active Codes</div><div id="promoMetricActiveCodes"><strong>0</strong></div></div>
+          <div class="admin-panel"><div class="muted">Total Discounts Given</div><div id="promoMetricDiscounts"><strong>$0.00</strong></div></div>
+          <div class="admin-panel"><div class="muted">Total Revenue Generated</div><div id="promoMetricRevenue"><strong>$0.00</strong></div></div>
+          <div class="admin-panel"><div class="muted">Codes Used Today</div><div id="promoMetricToday"><strong>0</strong></div></div>
+          <div class="admin-panel"><div class="muted">Codes Used This Week</div><div id="promoMetricWeek"><strong>0</strong></div></div>
+          <div class="admin-panel"><div class="muted">Codes Used This Month</div><div id="promoMetricMonth"><strong>0</strong></div></div>
+        </div>
+
+        <div class="admin-bar admin-bar-between">
+          <input type="search" id="promoSearch" placeholder="Search discount code&hellip;">
+          <button type="button" class="btn-sm" id="btnAddPromo">Add Discount Code</button>
+        </div>
+        <div class="admin-filters" id="promoFilters">
+          <button type="button" data-filter="" class="active">All</button>
+          <button type="button" data-filter="active">Active</button>
+          <button type="button" data-filter="inactive">Inactive</button>
+          <button type="button" data-filter="expired">Expired</button>
+        </div>
+        <table class="admin-table">
+          <thead><tr>
+            <th>Code</th><th>Discount</th><th>Status</th><th>Uses</th><th>Usage Limit</th><th>Remaining Uses</th>
+            <th>Uses Per Customer</th><th>Customer Savings</th><th>Revenue Generated</th><th>Minimum Order</th>
+            <th>Start Date</th><th>Expiration Date</th><th>Created</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="promosBody"><tr><td colspan="14" class="muted">Loading&hellip;</td></tr></tbody>
+        </table>
+
+        <div id="promoAnalytics" class="admin-panel hidden"></div>
       </div>
     </div>
   </div>
@@ -204,6 +238,74 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <div class="modal-backdrop hidden" id="promoModalWrap" role="dialog" aria-modal="true" aria-labelledby="promoModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="promoModalTitle" style="margin:0;">Add Discount Code</h3>
+        <button class="link-btn" type="button" id="promoModalClose">Close</button>
+      </div>
+      <form id="promoForm">
+        <div class="modal-body">
+          <div class="form-grid">
+            <label class="form-field">Code
+              <input type="text" name="code" required maxlength="80" placeholder="SAVE15">
+            </label>
+            <label class="form-field">Discount type
+              <select name="discount_type" id="promoDiscountType">
+                <option value="percentage">Percentage</option>
+                <option value="fixed">Fixed</option>
+              </select>
+            </label>
+            <label class="form-field">Discount value
+              <input type="number" name="discount_value" required min="0.01" step="0.01">
+            </label>
+            <label class="form-field">Minimum order
+              <input type="number" name="minimum_order" min="0" step="0.01" placeholder="Optional">
+            </label>
+            <label class="form-field">Maximum uses
+              <input type="number" name="usage_limit" min="0" step="1" placeholder="Blank = Unlimited">
+            </label>
+            <label class="form-field">Uses per customer
+              <input type="number" name="uses_per_customer" min="0" step="1" placeholder="Blank = Unlimited">
+            </label>
+            <label class="form-field">Start date
+              <input type="datetime-local" name="starts_at">
+            </label>
+            <label class="form-field">Expiration date
+              <input type="datetime-local" name="expires_at">
+            </label>
+            <label class="form-field">Administrative state
+              <select name="active">
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
+            </label>
+            <div class="form-field">Current status
+              <div id="promo-current-status" class="muted">Not yet created</div>
+            </div>
+            <label class="form-field full">Notes
+              <textarea name="notes" rows="4" maxlength="4000"></textarea>
+            </label>
+            <div class="form-field full" style="display:flex;gap:.5rem;flex-direction:row;align-items:center;">
+              <button class="btn-sm secondary" type="button" id="promoGenerateBtn">Generate Code</button>
+              <button class="btn-sm secondary" type="button" id="promoCopyBtn">Copy Code</button>
+            </div>
+            <div class="form-field full" id="promoStatsWrap" style="display:none;">
+              <span><strong>Usage statistics</strong></span>
+              <div class="muted" id="promoStatsText"></div>
+            </div>
+          </div>
+          <input type="hidden" name="promo_id">
+        </div>
+        <div class="modal-actions">
+          <button class="btn-sm secondary" type="button" id="promoModalCancel">Cancel</button>
+          <button class="btn-sm" type="submit" id="promoModalSave">Save Discount Code</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="admin.js"></script>
 </body>
 </html>

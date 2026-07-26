@@ -124,6 +124,9 @@ function createAdminRouter(requireAuth) {
         items: itemsRes.rows,
         totals: {
           subtotal: order.subtotal,
+          subtotal_before_discount: order.subtotal_before_discount,
+          discount_amount: order.discount_amount,
+          promo_code: order.promo_code,
           shipping_cost: order.shipping_cost,
           total: order.total
         },

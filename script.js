@@ -41,7 +41,12 @@ var selectedProductId = null;
 var activeCategory = 'all';
 var activeSort = 'default';
 var currentAuthSession = null;
-var checkoutState = { promoCode: '', shippingCost: 0 };
+var checkoutState = {
+  shippingCost: 0,
+  appliedPromoCode: null,
+  appliedPromo: null,
+  promoValidating: false
+};
 var DEFAULT_PRODUCT_IMAGE_URL = 'assets/products/default-product.png';
 var homeFeaturedProductIds = null;
 var THEME_MODE_STORAGE_KEY = 'pepxThemeMode';
@@ -1085,10 +1090,42 @@ function renderCart(){
     badge.textContent = count;
     badge.style.display = count>0 ? 'flex' : 'none';
   }
+  var promoDiscount = 0;
+  if (checkoutState.appliedPromo && Number(checkoutState.appliedPromo.discount || 0) > 0) {
+    var promoSubtotal = Number(checkoutState.appliedPromo.subtotal || 0);
+    // If cart content changed after promo validation, clear promo state.
+    if (Math.abs(promoSubtotal - total) > 0.009) {
+      checkoutState.appliedPromo = null;
+      checkoutState.appliedPromoCode = null;
+      var staleMsg = document.getElementById('promoCodeMessage');
+      if (staleMsg) {
+        staleMsg.textContent = 'Cart updated. Please re-apply your discount code.';
+      }
+    } else {
+      promoDiscount = Number(checkoutState.appliedPromo.discount || 0);
+    }
+  }
+
+  var effectiveSubtotal = Math.max(0, total - promoDiscount);
+  var finalTotal = effectiveSubtotal + Number(checkoutState.shippingCost || 0);
+
   var totalEl = document.getElementById('cartTotal');
-  if(totalEl){ totalEl.textContent = formatMoney(total + Number(checkoutState.shippingCost || 0)); }
+  if(totalEl){ totalEl.textContent = formatMoney(finalTotal); }
+  var checkoutTotalEl = document.getElementById('checkoutTotal');
+  if(checkoutTotalEl){ checkoutTotalEl.textContent = formatMoney(finalTotal); }
   var checkoutSubtotalEl = document.getElementById('checkoutSubtotal');
   if(checkoutSubtotalEl){ checkoutSubtotalEl.textContent = formatMoney(total); }
+  var checkoutPromoRow = document.getElementById('checkoutPromoRow');
+  var checkoutPromoDiscount = document.getElementById('checkoutPromoDiscount');
+  if (checkoutPromoRow && checkoutPromoDiscount) {
+    if (promoDiscount > 0) {
+      checkoutPromoRow.style.display = '';
+      checkoutPromoDiscount.textContent = '-' + formatMoney(promoDiscount);
+    } else {
+      checkoutPromoRow.style.display = 'none';
+      checkoutPromoDiscount.textContent = '-' + formatMoney(0);
+    }
+  }
   var checkoutShippingEl = document.getElementById('checkoutShipping');
   if(checkoutShippingEl){ checkoutShippingEl.textContent = formatMoney(Number(checkoutState.shippingCost || 0)); }
   var savingsEl = document.getElementById('cartSavings');
@@ -1221,6 +1258,10 @@ function loadAuthSession(){
 
 function normalizeEmail(email){
   return (email || '').toString().trim().toLowerCase();
+}
+
+function normalizePromoCodeForCheckout(code){
+  return String(code || '').trim().toUpperCase();
 }
 
 function ensureAuthModal(){
@@ -1766,6 +1807,11 @@ function initAccountPage(){
       ? detail.payment.method
       : 'Not recorded';
     var subtotal = detail.totals && detail.totals.subtotal != null ? detail.totals.subtotal : 0;
+    var subtotalBeforeDiscount = detail.totals && detail.totals.subtotal_before_discount != null
+      ? detail.totals.subtotal_before_discount
+      : subtotal;
+    var discountAmount = detail.totals && detail.totals.discount_amount != null ? detail.totals.discount_amount : 0;
+    var promoCode = detail.totals && detail.totals.promo_code ? detail.totals.promo_code : '';
     var shippingCost = detail.totals && detail.totals.shipping_cost != null ? detail.totals.shipping_cost : 0;
     var total = detail.totals && detail.totals.total != null ? detail.totals.total : order.total;
     var customerName = order.shipping_name || (state.profile && state.profile.name) || '-';
@@ -1813,7 +1859,10 @@ function initAccountPage(){
             '</table>' +
           '</div>' +
           '<div class="account-order-totals">' +
-            '<p><span>Subtotal</span><strong>' + formatMoney(subtotal) + '</strong></p>' +
+            '<p><span>Subtotal</span><strong>' + formatMoney(subtotalBeforeDiscount) + '</strong></p>' +
+            (Number(discountAmount || 0) > 0
+              ? ('<p><span>Discount' + (promoCode ? ' (' + escapeHtml(promoCode) + ')' : '') + '</span><strong>-' + formatMoney(discountAmount) + '</strong></p>')
+              : '') +
             '<p><span>Shipping</span><strong>' + formatMoney(shippingCost) + '</strong></p>' +
             '<p class="grand"><span>Total</span><strong>' + formatMoney(total) + '</strong></p>' +
           '</div>' +
@@ -2420,17 +2469,65 @@ function initCheckoutPage(){
   var shippingForm = document.getElementById('shippingForm');
 
   checkoutState.shippingCost = 0;
+  checkoutState.appliedPromoCode = null;
+  checkoutState.appliedPromo = null;
+  checkoutState.promoValidating = false;
   renderCart();
 
   if(promoBtn && promoInput){
+    promoInput.addEventListener('input', function(){
+      if (!checkoutState.appliedPromoCode) return;
+      if (normalizePromoCodeForCheckout(promoInput.value) !== checkoutState.appliedPromoCode) {
+        checkoutState.appliedPromoCode = null;
+        checkoutState.appliedPromo = null;
+        if(promoMsg){ promoMsg.textContent = 'Code changed. Please apply again.'; }
+        renderCart();
+      }
+    });
+
     promoBtn.addEventListener('click', function(){
       var code = String(promoInput.value || '').trim();
-      checkoutState.promoCode = code;
-      if(promoMsg){
-        promoMsg.textContent = code
-          ? ('Promo code "' + code + '" saved. Any eligible discounts are validated during order processing.')
-          : 'Volume discounts are applied automatically when eligible.';
+      if (!code) {
+        checkoutState.appliedPromoCode = null;
+        checkoutState.appliedPromo = null;
+        if (promoMsg) { promoMsg.textContent = 'Please enter a discount code.'; }
+        renderCart();
+        return;
       }
+      if(!(cartData && Array.isArray(cartData.items) && cartData.items.length)){
+        if (promoMsg) { promoMsg.textContent = 'Your cart is empty.'; }
+        return;
+      }
+
+      checkoutState.promoValidating = true;
+      promoBtn.disabled = true;
+      if (promoMsg) { promoMsg.textContent = 'Applying code...'; }
+
+      authApi('/api/orders/validate-promo', {
+        method: 'POST',
+        body: JSON.stringify({ code: code })
+      }).then(function(result){
+        checkoutState.appliedPromoCode = String(result.code || '').toUpperCase();
+        checkoutState.appliedPromo = result;
+        promoInput.value = checkoutState.appliedPromoCode;
+        if (promoMsg) {
+          promoMsg.textContent = 'Discount code applied: ' + checkoutState.appliedPromoCode;
+        }
+        renderCart();
+      }).catch(function(err){
+        checkoutState.appliedPromoCode = null;
+        checkoutState.appliedPromo = null;
+        if (err && err.status === 401) {
+          if (promoMsg) { promoMsg.textContent = 'Please sign in to apply a discount code.'; }
+          openAuthModal('login');
+          return;
+        }
+        if (promoMsg) { promoMsg.textContent = (err && err.message) || 'Could not apply discount code.'; }
+        renderCart();
+      }).finally(function(){
+        checkoutState.promoValidating = false;
+        promoBtn.disabled = false;
+      });
     });
   }
 
@@ -2471,7 +2568,7 @@ function initCheckoutPage(){
       shipping_country: String((document.getElementById('shipping_country') || {}).value || '').trim(),
       shipping_phone: String((document.getElementById('shipping_phone') || {}).value || '').trim(),
       payment_method: paymentMethodEl ? paymentMethodEl.value : 'card',
-      promo_code: checkoutState.promoCode || null,
+      promo_code: checkoutState.appliedPromoCode || null,
       shipping_cost: Number(checkoutState.shippingCost || 0)
     };
 

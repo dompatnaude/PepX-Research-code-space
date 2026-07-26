@@ -5,6 +5,7 @@ const createOrdersRouter = require("./routes/orders");
 const createAdminRouter = require("./routes/admin");
 const createAdminProductsRouter = require('./routes/admin-products');
 const createAdminVariantsRouter = require('./routes/admin-variants');
+const createAdminPromosRouter = require('./routes/admin-promos');
 const { transferGuestCart } = require("./routes/cart");
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
@@ -643,7 +644,12 @@ app.use("/api/cart", createCartRouter(requireAuth));
 app.use("/api/orders", createOrdersRouter(requireAuth));
 app.use('/api/admin/products', createAdminProductsRouter(requireAuth));
 app.use('/api/admin', createAdminVariantsRouter(requireAuth));
+app.use('/api/admin', createAdminPromosRouter(requireAuth));
 app.use("/api/admin", createAdminRouter(requireAuth));
+
+app.use('/api/*', (req, res) => {
+  return res.status(404).json({ error: 'API endpoint not found' });
+});
 
 app.use(express.static(path.join(__dirname)));
 
