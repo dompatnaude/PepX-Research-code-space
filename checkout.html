@@ -24,14 +24,42 @@
 
   <main class="container page-checkout">
     <section class="section checkout-section">
+      <div id="cartLiveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
       <div class="checkout-head">
-        <p class="checkout-kicker">Secure Checkout</p>
-        <h1>Complete Your Order</h1>
-        <p class="sub">Review your items, confirm shipping details, and place your order securely.</p>
+        <p class="checkout-kicker">Your Cart</p>
+        <h1>Your Cart</h1>
+        <p class="sub">Review your items, adjust quantities, and continue to secure checkout.</p>
+        <p class="checkout-item-count" id="checkoutItemCountText">0 items</p>
       </div>
 
       <div class="checkout-layout">
         <div class="checkout-main">
+          <article class="checkout-card checkout-empty-state" id="checkoutEmptyState" style="display:none;">
+            <div class="checkout-empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><circle cx="9" cy="20" r="1.4" fill="currentColor"></circle><circle cx="18" cy="20" r="1.4" fill="currentColor"></circle><path d="M2 4h2l2.2 9.2a1 1 0 0 0 1 .8h9.6a1 1 0 0 0 1-.8L17 7H6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </div>
+            <h2>Your cart is empty</h2>
+            <p>Explore our latest compounds and add products to continue.</p>
+            <a class="btn primary co" href="shop.html">Continue Shopping</a>
+          </article>
+
+          <article class="checkout-card checkout-summary-card checkout-cart-card" id="checkoutCartShell">
+            <div class="checkout-card-head">
+              <h2>Cart Items</h2>
+              <p>Verify product options, quantities, and totals before checkout.</p>
+            </div>
+            <div class="checkout-free-ship" id="checkoutFreeShipPanel">
+              <p id="checkoutFreeShipMessage">Add $300.00 more to qualify for free shipping</p>
+              <div class="checkout-free-ship-track" aria-hidden="true"><span id="checkoutFreeShipBar"></span></div>
+            </div>
+            <div class="cart-table checkout-summary-items" id="checkoutCart"></div>
+
+            <div class="checkout-cart-footer-links">
+              <a href="shop.html" class="checkout-continue-link">Continue shopping</a>
+            </div>
+          </article>
+
+          <div id="checkoutFlowCards">
           <article class="checkout-card">
             <div class="checkout-card-head">
               <h2>Customer Information</h2>
@@ -89,25 +117,27 @@
               <li>Shipping status and tracking updates appear in your account orders.</li>
             </ul>
           </article>
-
-          <button class="btn primary co" id="checkoutBtn">Place Order</button>
+          </div>
         </div>
 
-        <aside class="checkout-side">
-          <article class="checkout-card checkout-summary-card">
+        <aside class="checkout-side" id="checkoutSide">
+          <article class="checkout-card checkout-totals-card">
             <div class="checkout-card-head">
               <h2>Order Summary</h2>
-              <p>Adjust quantities before placing your order.</p>
+              <p>Estimated totals update instantly as you edit your cart.</p>
             </div>
-            <div class="cart-table checkout-summary-items" id="checkoutCart"></div>
 
             <div class="checkout-promo">
               <label for="promoCodeInput">Promo Code</label>
               <div class="checkout-promo-row">
-                <input type="text" id="promoCodeInput" placeholder="Enter promo code">
+                <input type="text" id="promoCodeInput" placeholder="Enter promo code" aria-describedby="promoCodeMessage">
                 <button type="button" class="btn ghost btn-sm" id="applyPromoBtn">Apply</button>
               </div>
-              <p class="checkout-note" id="promoCodeMessage">Volume discounts are applied automatically when eligible.</p>
+              <div class="checkout-promo-applied" id="checkoutPromoApplied" style="display:none;">
+                <span id="checkoutPromoAppliedCode"></span>
+                <button type="button" class="checkout-promo-remove" id="removePromoBtn">Remove</button>
+              </div>
+              <p class="checkout-note" id="promoCodeMessage" aria-live="polite">Volume discounts are applied automatically when eligible.</p>
             </div>
 
             <div class="checkout-totals">
@@ -115,10 +145,17 @@
               <div id="checkoutPromoRow" style="display:none;"><span>Discount</span><strong id="checkoutPromoDiscount">-$0.00</strong></div>
               <div><span>Shipping</span><strong id="checkoutShipping">$0.00</strong></div>
               <div class="checkout-savings" id="cartSavings" style="display:none;">You saved $0.00</div>
+              <p class="checkout-tax-note">Estimated tax is calculated at final checkout.</p>
               <div class="total"><span>Total</span><strong id="checkoutTotal">$0.00</strong></div>
             </div>
 
-            <p class="checkout-secure-msg">Secure checkout powered by authenticated session and protected order APIs.</p>
+            <button class="btn primary co" id="checkoutBtn" type="button">Place Order</button>
+
+            <p class="checkout-secure-msg">Secure checkout uses your authenticated session and server-validated order totals.</p>
+          </article>
+
+          <article class="checkout-card checkout-continue-card">
+            <a class="btn ghost co" href="shop.html">Continue Shopping</a>
           </article>
         </aside>
       </div>

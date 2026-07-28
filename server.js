@@ -16,7 +16,18 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const pool = require('./db/connection');
 const { runMigrations } = require('./db/migrate');
+const {
+  OAuthResolutionError,
+  resolveGoogleAuthUser,
+  completeGoogleLogin,
+  verifyPasswordLogin
+} = require('./services/google-auth');
+const { sanitizeReturnPath, withAuthQuery } = require('./services/oauth-redirect');
+const { ensureBootstrapAdmin } = require('./services/admin-bootstrap');
+const { loadProjectEnv } = require('./services/runtime-config');
+const { resolveGoogleCallbackUrl } = require('./services/google-config');
 
+loadProjectEnv({ cwd: __dirname });
 require('dotenv').config();
 
 const app = express();
@@ -49,7 +60,8 @@ function mapUserRow(row) {
     provider: row.provider,
     passwordHash: row.password_hash || '',
     googleId: row.google_id || '',
-    createdAt: row.created_at || null
+    createdAt: row.created_at || null,
+    role: row.role || 'customer'
   };
 }
 
@@ -72,21 +84,9 @@ function toMoney(value) {
   return Math.round(num * 100) / 100;
 }
 
-function sanitizeReturnPath(value) {
-  const raw = String(value || '').trim();
-  if (!raw.startsWith('/')) return null;
-  if (raw.startsWith('//')) return null;
-  if (raw.includes('://')) return null;
-  return raw;
-}
-
-function withAuthQuery(pathname, authValue) {
-  const safePath = sanitizeReturnPath(pathname) || '/index.html';
-  const [base, queryString = ''] = safePath.split('?');
-  const params = new URLSearchParams(queryString);
-  params.set('auth', authValue);
-  const query = params.toString();
-  return query ? `${base}?${query}` : base;
+function authCodeFromError(err) {
+  if (err && err.code) return String(err.code);
+  return 'google-failed';
 }
 
 async function findUserById(id) {
@@ -107,8 +107,8 @@ async function saveOrUpdateUser(nextUser) {
     await pool.query(
       `
       UPDATE users
-      SET name = $1, email = $2, institution = $3, provider = $4, password_hash = $5, google_id = $6, updated_at = NOW()
-      WHERE id = $7;
+      SET name = $1, email = $2, institution = $3, provider = $4, password_hash = $5, google_id = $6, role = $7, updated_at = NOW()
+      WHERE id = $8;
       `,
       [
         nextUser.name,
@@ -117,6 +117,7 @@ async function saveOrUpdateUser(nextUser) {
         nextUser.provider,
         nextUser.passwordHash || null,
         nextUser.googleId || null,
+        nextUser.role || 'customer',
         nextUser.id,
       ]
     );
@@ -125,8 +126,8 @@ async function saveOrUpdateUser(nextUser) {
 
   await pool.query(
     `
-    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id)
-    VALUES ($1, $2, $3, $4, $5, $6, $7);
+    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
     `,
     [
       nextUser.id,
@@ -136,6 +137,7 @@ async function saveOrUpdateUser(nextUser) {
       nextUser.provider,
       nextUser.passwordHash || null,
       nextUser.googleId || null,
+      nextUser.role || 'customer',
     ]
   );
 }
@@ -311,10 +313,13 @@ passport.deserializeUser(async (id, done) => {
   }
 });
 
+const googleCallbackUrl = resolveGoogleCallbackUrl(process.env);
 const googleConfigured =
   !!process.env.GOOGLE_CLIENT_ID &&
   !!process.env.GOOGLE_CLIENT_SECRET &&
-  !!process.env.GOOGLE_CALLBACK_URL;
+  !!googleCallbackUrl;
+
+const bootstrapAdminConfigured = !!process.env.ADMIN_EMAIL && !!process.env.ADMIN_PASSWORD;
 
 if (googleConfigured) {
   passport.use(
@@ -322,43 +327,20 @@ if (googleConfigured) {
       {
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: process.env.GOOGLE_CALLBACK_URL
+        callbackURL: googleCallbackUrl
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
-          const email = normalizeEmail(profile.emails && profile.emails[0] ? profile.emails[0].value : '');
-          const displayName = profile.displayName || 'Google User';
-          const googleId = profile.id;
-
-          if (!email) {
-            return done(new Error('Google account did not provide an email address.'));
-          }
-          const googleResult = await pool.query('SELECT * FROM users WHERE google_id = $1;', [googleId]);
-          const existingByGoogle = googleResult.rows[0];
-          const emailResult = await pool.query('SELECT * FROM users WHERE email = $1;', [email]);
-          const existingByEmail = emailResult.rows[0];
-          let user = mapUserRow(existingByGoogle || existingByEmail);
-
-          if (!user) {
-            user = {
-              id: crypto.randomUUID(),
-              name: displayName,
-              email,
-              institution: 'Google Account',
-              provider: 'Google',
-              googleId,
-              passwordHash: ''
-            };
-            await saveOrUpdateUser(user);
-          } else {
-            user.name = user.name || displayName;
-            user.provider = 'Google';
-            user.googleId = googleId;
-            await saveOrUpdateUser(user);
-          }
-
+          const user = await resolveGoogleAuthUser({
+            pool,
+            profile,
+            createId: () => crypto.randomUUID()
+          });
           return done(null, user);
         } catch (error) {
+          if (error instanceof OAuthResolutionError) {
+            return done(null, false, { code: authCodeFromError(error) });
+          }
           return done(error);
         }
       }
@@ -430,11 +412,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   const user = await findUserByEmail(normalizedEmail);
-  if (!user || !user.passwordHash) {
-    return res.status(401).json({ error: 'Invalid email or password.' });
-  }
-
-  const matches = await bcrypt.compare(String(password), user.passwordHash);
+  const matches = await verifyPasswordLogin(user, password, bcrypt.compare.bind(bcrypt));
   if (!matches) {
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
@@ -473,25 +451,59 @@ app.get('/api/auth/session', async (req, res) => {
 app.get('/auth/google', (req, res, next) => {
   if (!googleConfigured) {
     const fallbackTarget = sanitizeReturnPath(req.query.next) || '/index.html';
+    console.warn('Google OAuth requested but not configured. Missing client ID/secret or callback URL.');
     return res.redirect(withAuthQuery(fallbackTarget, 'google-not-configured'));
   }
 
   const requestedNext = sanitizeReturnPath(req.query.next) || '/account.html';
+  if (!req.session) {
+    return res.redirect(withAuthQuery(requestedNext, 'google-session-failed'));
+  }
   req.session.oauthReturnTo = requestedNext;
-  return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+
+  req.session.save(function (saveErr) {
+    if (saveErr) {
+      return res.redirect(withAuthQuery(requestedNext, 'google-session-failed'));
+    }
+    return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+  });
 });
 
 app.get('/auth/google/callback', (req, res, next) => {
   if (!googleConfigured) {
+    console.warn('Google OAuth callback requested but not configured.');
     return res.redirect('/index.html?auth=google-not-configured');
   }
-  const returnTo = sanitizeReturnPath(req.session.oauthReturnTo) || '/account.html';
-  delete req.session.oauthReturnTo;
 
-  return passport.authenticate('google', { failureRedirect: withAuthQuery(returnTo, 'google-failed') })(req, res, () => {
-    req.session.userId = req.user.id;
-        transferGuestCart(req.sessionID, req.user.id).catch(function(e){ console.error(e); });
-    res.redirect(withAuthQuery(returnTo, 'google-success'));
+  if (String(req.query.error || '') === 'access_denied') {
+    const cancelledReturn = sanitizeReturnPath(req.session && req.session.oauthReturnTo) || '/account.html';
+    if (req.session) delete req.session.oauthReturnTo;
+    return res.redirect(withAuthQuery(cancelledReturn, 'google-cancelled'));
+  }
+
+  const returnTo = sanitizeReturnPath(req.session && req.session.oauthReturnTo) || '/account.html';
+  if (req.session) delete req.session.oauthReturnTo;
+
+  return passport.authenticate('google', function (err, user, info) {
+    if (err) {
+      return res.redirect(withAuthQuery(returnTo, authCodeFromError(err)));
+    }
+    if (!user) {
+      const code = info && info.code ? String(info.code) : 'google-failed';
+      return res.redirect(withAuthQuery(returnTo, code));
+    }
+
+    req.logIn(user, async function (loginErr) {
+      if (loginErr) {
+        return res.redirect(withAuthQuery(returnTo, 'google-session-failed'));
+      }
+      try {
+        await completeGoogleLogin(req, user, transferGuestCart);
+        return res.redirect(withAuthQuery(returnTo, 'google-success'));
+      } catch (sessionErr) {
+        return res.redirect(withAuthQuery(returnTo, authCodeFromError(sessionErr)));
+      }
+    });
   });
 });
 
@@ -659,6 +671,16 @@ app.get('*', (req, res) => {
 
 async function startServer() {
   await runMigrations();
+  await ensureBootstrapAdmin({
+    pool,
+    bcrypt,
+    env: process.env,
+    createId: () => crypto.randomUUID()
+  });
+
+  if (bootstrapAdminConfigured && process.env.ADMIN_EMAIL) {
+    console.log(`Bootstrap admin ready for ${process.env.ADMIN_EMAIL}`);
+  }
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`PepX server listening on http://0.0.0.0:${PORT}`);
   });

@@ -2,11 +2,13 @@
   'use strict';
 
   var state = {
-    tab: 'orders',
+    tab: 'home',
     filter: '',
     search: '',
     orders: [],
     statuses: [],
+    pagination: { page: 1, page_size: 25, total_count: 0, total_pages: 1 },
+    summary: null,
     currentId: null,
     products: [],
     productSearch: '',
@@ -86,11 +88,28 @@
 
   function statusBadge(status) {
     var cls = 'gray';
-    if (status === 'processing' || status === 'paid') cls = 'blue';
-    else if (status === 'shipped') cls = 'amber';
-    else if (status === 'completed') cls = 'green';
-    else if (status === 'cancelled') cls = 'red';
-    return '<span class="badge ' + cls + '">' + esc(status || '') + '</span>';
+    var label = String(status || '').trim();
+    var normalized = label.toLowerCase();
+
+    if (normalized === 'processing' || normalized === 'paid' || normalized === 'available') cls = 'blue';
+    else if (normalized === 'shipped' || normalized === 'pending') cls = 'amber';
+    else if (normalized === 'completed' || normalized === 'delivered') cls = 'green';
+    else if (normalized === 'cancelled' || normalized === 'canceled' || normalized === 'missing') cls = 'red';
+
+    if (!label) label = 'Unknown';
+    else if (normalized === 'pending_payment') label = 'Pending payment';
+    else if (normalized === 'processing') label = 'Processing';
+    else if (normalized === 'paid') label = 'Paid';
+    else if (normalized === 'shipped') label = 'Shipped';
+    else if (normalized === 'completed') label = 'Completed';
+    else if (normalized === 'cancelled' || normalized === 'canceled') label = 'Cancelled';
+    else if (normalized === 'pending') label = 'Pending';
+    else if (normalized === 'delivered') label = 'Delivered';
+    else if (normalized === 'available') label = 'Available';
+    else if (normalized === 'missing') label = 'Missing';
+    else label = label.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+
+    return '<span class="badge ' + cls + '">' + esc(label) + '</span>';
   }
   function fulfillmentBadge(f) {
     var cls = 'gray', label = f || 'unfulfilled';
@@ -104,12 +123,18 @@
     var status = filterToStatus(state.filter);
     if (status) qs.push('status=' + encodeURIComponent(status));
     if (state.search) qs.push('search=' + encodeURIComponent(state.search));
+    qs.push('page=' + encodeURIComponent(state.pagination.page || 1));
+    qs.push('page_size=' + encodeURIComponent(state.pagination.page_size || 25));
+    qs.push('sort_by=created_at');
+    qs.push('sort_dir=desc');
     var url = '/api/admin/orders' + (qs.length ? ('?' + qs.join('&')) : '');
     return api(url).then(function (data) {
       state.orders = data.orders || [];
       state.statuses = data.statuses || [];
-      $('adminDenied').classList.add('hidden');
-      $('adminApp').classList.remove('hidden');
+      state.pagination = data.pagination || state.pagination;
+      if ($('adminDenied')) $('adminDenied').classList.add('hidden');
+      if ($('adminApp')) $('adminApp').classList.remove('hidden');
+      renderDashboard();
       renderTable();
     }).catch(function (err) {
       if (err.status === 401 || err.status === 403) { showDenied(err.status); }
@@ -117,12 +142,115 @@
     });
   }
 
+  function loadSummary() {
+    return api('/api/admin/summary').then(function (data) {
+      state.summary = data || null;
+      if ($('adminDenied')) $('adminDenied').classList.add('hidden');
+      if ($('adminApp')) $('adminApp').classList.remove('hidden');
+      renderDashboard();
+      return data;
+    }).catch(function (err) {
+      if (err.status === 401 || err.status === 403) { showDenied(err.status); }
+      else { toast(err.message || 'Failed to load dashboard summary'); }
+    });
+  }
+
+  function renderDashboard() {
+    var wrap = $('dashboardSummary');
+    if (!wrap) return;
+
+    var s = state.summary || {};
+    var counts = s.counts || {};
+    var sales = s.sales || {};
+    var discounts = s.discounts || {};
+    var cards = [
+      { label: 'Orders requiring fulfillment', value: Number(counts.requiring_fulfillment || 0), action: 'ready_to_ship' },
+      { label: 'Pending payment', value: Number(counts.pending_payment || 0), action: 'pending_payment' },
+      { label: 'Paid orders', value: Number(counts.paid || 0), action: 'paid' },
+      { label: 'Shipped orders', value: Number(counts.shipped || 0), action: 'shipped' },
+      { label: 'Low-stock variants', value: Array.isArray(s.low_stock_variants) ? s.low_stock_variants.length : 0, action: 'products' },
+      { label: 'Out-of-stock variants', value: Array.isArray(s.out_of_stock_variants) ? s.out_of_stock_variants.length : 0, action: 'products' },
+      { label: '30-day sales', value: money(sales.sales_total_30d || 0), action: 'orders' },
+      { label: 'Promo redemptions', value: Number(discounts.redemptions_30d || 0), action: 'promos' }
+    ];
+
+    wrap.innerHTML = cards.map(function (card) {
+      return '<button type="button" class="dash-card" data-summary-action="' + esc(card.action) + '">'
+        + '<span class="dash-label">' + esc(card.label) + '</span>'
+        + '<span class="dash-value">' + esc(card.value) + '</span>'
+        + '</button>';
+    }).join('');
+
+    Array.prototype.forEach.call(wrap.querySelectorAll('[data-summary-action]'), function (btn) {
+      btn.addEventListener('click', function () {
+        var action = btn.getAttribute('data-summary-action');
+        if (action === 'products') {
+          switchTab('products');
+          return;
+        }
+        if (action === 'promos') {
+          switchTab('promos');
+          return;
+        }
+        state.filter = '';
+        if (action === 'ready_to_ship') state.filter = 'processing';
+        if (action === 'pending_payment') state.filter = 'new';
+        if (action === 'paid') state.filter = '';
+        if (action === 'shipped') state.filter = 'shipped';
+        switchTab('orders');
+      });
+    });
+
+    var recentOrders = $('dashboardRecentOrders');
+    if (recentOrders) {
+      recentOrders.innerHTML = (s.recent_orders || []).map(function (o) {
+        return '<tr>'
+          + '<td>' + esc(o.order_number || '') + '</td>'
+          + '<td>' + esc(fmtDate(o.created_at)) + '</td>'
+          + '<td>' + esc(o.shipping_name || '') + '</td>'
+          + '<td>' + statusBadge(o.status) + '</td>'
+          + '<td>' + money(o.total) + '</td>'
+          + '<td><button type="button" class="link-btn" data-open-order="' + o.id + '">Open</button></td>'
+          + '</tr>';
+      }).join('') || '<tr><td colspan="6" class="muted">No recent orders.</td></tr>';
+      Array.prototype.forEach.call(recentOrders.querySelectorAll('[data-open-order]'), function (btn) {
+        btn.addEventListener('click', function () {
+          openOrder(parseInt(btn.getAttribute('data-open-order'), 10));
+          switchTab('orders');
+        });
+      });
+    }
+
+    var recentCustomers = $('dashboardRecentCustomers');
+    if (recentCustomers) {
+      recentCustomers.innerHTML = (s.recent_customers || []).map(function (customer) {
+        return '<li><span>' + esc(customer.name || customer.email || 'Customer') + '</span><span class="muted">' + esc(fmtDate(customer.created_at)) + '</span></li>';
+      }).join('') || '<li class="muted">No recent customers.</li>';
+    }
+
+    var alerts = $('adminAlertStrip');
+    if (alerts) {
+      var alertBits = [];
+      if ((counts.label_not_purchased || 0) > 0) alertBits.push(String(counts.label_not_purchased) + ' orders still need labels');
+      if ((counts.missing_tracking || 0) > 0) alertBits.push(String(counts.missing_tracking) + ' shipped orders need tracking numbers');
+      if ((discounts.redemptions_30d || 0) > 0) alertBits.push(String(discounts.redemptions_30d) + ' promo redemptions in the last 30 days');
+      alerts.textContent = alertBits.length ? alertBits.join(' • ') : 'No operational alerts right now.';
+    }
+  }
+
   function showDenied(status) {
-    $('adminApp').classList.add('hidden');
-    var d = $('adminDenied'); d.classList.remove('hidden');
-    d.querySelector('p').textContent = status === 401
-      ? 'You must be signed in as an administrator to use this console.'
-      : 'Your account does not have admin access.';
+    var app = $('adminApp');
+    var d = $('adminDenied');
+    if (app) app.classList.add('hidden');
+    if (d) {
+      d.classList.remove('hidden');
+      var msg = d.querySelector('p');
+      if (msg) {
+        msg.textContent = status === 401
+          ? 'You must be signed in as an administrator to use this console.'
+          : 'Your account does not have admin access.';
+      }
+    }
   }
 
   function renderProductTable() {
@@ -887,18 +1015,24 @@
   }
 
   function switchTab(tab) {
-    if (tab === 'products' || tab === 'orders' || tab === 'promos') {
+    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos') {
       state.tab = tab;
     } else {
-      state.tab = 'orders';
+      state.tab = 'home';
     }
-    Array.prototype.forEach.call($('adminTabs').querySelectorAll('button'), function (b) {
-      b.classList.toggle('active', b.getAttribute('data-tab') === state.tab);
-    });
-    $('ordersSection').classList.toggle('hidden', state.tab !== 'orders');
-    $('productsSection').classList.toggle('hidden', state.tab !== 'products');
-    $('promosSection').classList.toggle('hidden', state.tab !== 'promos');
-    if (state.tab === 'products') {
+    var tabs = $('adminTabs');
+    if (tabs) {
+      Array.prototype.forEach.call(tabs.querySelectorAll('button'), function (b) {
+        b.classList.toggle('active', b.getAttribute('data-tab') === state.tab);
+      });
+    }
+    if ($('homeSection')) $('homeSection').classList.toggle('hidden', state.tab !== 'home');
+    if ($('ordersSection')) $('ordersSection').classList.toggle('hidden', state.tab !== 'orders');
+    if ($('productsSection')) $('productsSection').classList.toggle('hidden', state.tab !== 'products');
+    if ($('promosSection')) $('promosSection').classList.toggle('hidden', state.tab !== 'promos');
+    if (state.tab === 'home') {
+      loadSummary();
+    } else if (state.tab === 'products') {
       loadProducts();
     } else if (state.tab === 'promos') {
       loadPromos();
@@ -910,7 +1044,7 @@
   function renderTable() {
     var body = $('ordersBody');
     if (!state.orders.length) {
-      body.innerHTML = '<tr><td colspan="8" class="muted">No orders found.</td></tr>';
+      body.innerHTML = '<tr><td colspan="10" class="muted">No orders found.</td></tr>';
       return;
     }
     body.innerHTML = state.orders.map(function (o) {
@@ -919,12 +1053,15 @@
         : '<span class="muted">\u2014</span>';
       return '<tr>'
         + '<td>' + esc(o.order_number) + '</td>'
-        + '<td>' + esc(o.shipping_name || '') + '<br><span class="muted">' + esc(o.shipping_email || '') + '</span></td>'
         + '<td>' + esc(fmtDate(o.created_at)) + '</td>'
+        + '<td>' + esc(o.shipping_name || '') + '<br><span class="muted">' + esc(o.shipping_email || '') + '</span></td>'
         + '<td>' + money(o.total) + '</td>'
+        + '<td>' + esc(String(o.item_count || 0)) + '</td>'
         + '<td>' + statusBadge(o.status) + '</td>'
         + '<td>' + fulfillmentBadge(o.fulfillment_status) + '</td>'
         + '<td>' + tracking + '</td>'
+        + '<td>' + statusBadge(o.payment_status) + '</td>'
+        + '<td>' + statusBadge(o.tracking_status) + '</td>'
         + '<td><button class="link-btn" data-open="' + o.id + '">Open</button></td>'
         + '</tr>';
     }).join('');
@@ -946,36 +1083,51 @@
     var tr = d.tracking || {};
     var panel = $('orderDetail');
     var itemsRows = items.map(function (it) {
-      return '<tr><td>' + esc(it.name) + '</td><td>' + (Number(it.quantity) || 0) + '</td><td>'
+      var variant = it.variant_name ? '<div class="muted">' + esc(it.variant_name) + '</div>' : '';
+      return '<tr><td>' + esc(it.name) + variant + '</td><td>' + (Number(it.quantity) || 0) + '</td><td>'
         + money(it.price) + '</td><td>' + money(Number(it.price) * (Number(it.quantity) || 0)) + '</td></tr>';
     }).join('') || '<tr><td colspan="4" class="muted">No items</td></tr>';
+    var timelineRows = (d.timeline || []).map(function (entry) {
+      return '<li><strong>' + esc(entry.label || entry.type || '') + '</strong><span class="muted">' + esc(fmtDate(entry.at)) + '</span></li>';
+    }).join('') || '<li class="muted">No timeline events yet.</li>';
 
     panel.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:center;">'
       + '<h2 style="margin:0;">' + esc(order.order_number) + '</h2>'
       + '<button class="link-btn" id="detailClose">Close</button></div>'
-      + '<p>Status: ' + statusBadge(order.status) + ' &nbsp; Fulfillment: '
-      + fulfillmentBadge(tr.shipped_at ? 'shipped' : (tr.shipping_label_url ? 'label_created' : 'unfulfilled')) + '</p>'
+      + '<p>Status: ' + statusBadge(order.status) + ' &nbsp; Payment: ' + statusBadge(d.payment_status) + ' &nbsp; Fulfillment: '
+      + fulfillmentBadge(d.fulfillment_status) + '</p>'
       + '<div class="admin-grid">'
       + '<div><h3>Customer</h3><div>' + esc(d.customer && d.customer.name || '') + '</div>'
-      + '<div class="muted">' + esc(d.customer && d.customer.email || '') + '</div></div>'
+      + '<div class="muted">' + esc(d.customer && d.customer.email || '') + '</div>'
+      + '<div class="muted">Orders: ' + esc(String(d.customer && d.customer.order_count || 0)) + ' · Total spend: ' + money(d.customer && d.customer.total_spend || 0) + '</div></div>'
       + '<div><h3>Shipping address</h3>'
       + '<div>' + esc(addr.name || '') + '</div>'
       + '<div>' + esc(addr.address || '') + '</div>'
-      + '<div>' + esc([addr.city, addr.state, addr.zip].filter(Boolean).join(', ')) + '</div></div>'
+      + '<div>' + esc([addr.city, addr.state, addr.zip].filter(Boolean).join(', ')) + '</div>'
+      + '<div>' + esc(addr.country || '') + '</div></div>'
       + '</div>'
       + '<h3 style="margin-top:1rem;">Items</h3>'
       + '<table class="admin-table"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Line total</th></tr></thead>'
       + '<tbody>' + itemsRows + '</tbody></table>'
-      + '<p style="margin-top:.6rem;">Subtotal: ' + money(d.totals && d.totals.subtotal) + ' &nbsp; '
-      + ((Number(d.totals && d.totals.discount_amount || 0) > 0)
-        ? ('Discount (' + esc((d.totals && d.totals.promo_code) || '') + '): -' + money(d.totals && d.totals.discount_amount) + ' &nbsp; ')
-        : '')
-      + 'Shipping: ' + money(d.totals && d.totals.shipping_cost) + ' &nbsp; '
-      + '<strong>Total: ' + money(d.totals && d.totals.total) + '</strong></p>'
-      + '<h3 style="margin-top:1rem;">Tracking</h3>'
-      + '<div>Carrier: ' + esc(tr.carrier || '\u2014') + ' &nbsp; Tracking #: ' + esc(tr.tracking_number || '\u2014') + '</div>'
+      + '<div class="admin-grid" style="margin-top:1rem;">'
+      + '<div><h3>Payment summary</h3>'
+      + '<div class="kv"><span>Subtotal</span><strong>' + money(d.totals && d.totals.subtotal_before_discount != null ? d.totals.subtotal_before_discount : d.totals && d.totals.subtotal) + '</strong></div>'
+      + '<div class="kv"><span>Discount</span><strong>-' + money(d.totals && d.totals.discount_amount) + '</strong></div>'
+      + '<div class="kv"><span>Shipping</span><strong>' + money(d.totals && d.totals.shipping_cost) + '</strong></div>'
+      + '<div class="kv"><span>Total</span><strong>' + money(d.totals && d.totals.total) + '</strong></div>'
+      + '</div>'
+      + '<div><h3>Tracking</h3>'
+      + '<div>Carrier: ' + esc(tr.carrier || '\u2014') + '</div>'
+      + '<div>Tracking #: ' + esc(tr.tracking_number || '\u2014') + '</div>'
       + '<div>Label: ' + (tr.shipping_label_url ? '<a href="' + esc(tr.shipping_label_url) + '" target="_blank" rel="noopener">view label</a>' : '<span class="muted">none</span>') + '</div>'
+      + '<div class="chip-row"><span class="chip">' + esc(d.customer_status && d.customer_status.label || 'In progress') + '</span><span class="chip">' + esc(d.fulfillment_status || 'unfulfilled') + '</span><span class="chip">' + esc(d.payment_status || 'pending') + '</span></div>'
+      + '</div>'
+      + '</div>'
+      + '<h3 style="margin-top:1rem;">Timeline</h3>'
+      + '<ul class="inline-list">' + timelineRows + '</ul>'
+      + '<h3 style="margin-top:1rem;">Notes</h3>'
+      + '<p class="muted">Internal notes support can be added in a later phase without exposing customer-facing data.</p>'
       + '<div class="track-form">'
       + '<input id="tfCarrier" placeholder="Carrier" value="' + esc(tr.carrier || '') + '">'
       + '<input id="tfTracking" placeholder="Tracking number" value="' + esc(tr.tracking_number || '') + '">'
@@ -1028,18 +1180,23 @@
   function wire() {
     var search = $('adminSearch');
     var timer = null;
-    search.addEventListener('input', function () {
-      clearTimeout(timer);
-      timer = setTimeout(function () { state.search = search.value.trim(); loadOrders(); }, 300);
-    });
-    Array.prototype.forEach.call($('adminFilters').querySelectorAll('button'), function (btn) {
-      btn.addEventListener('click', function () {
-        Array.prototype.forEach.call($('adminFilters').querySelectorAll('button'), function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        state.filter = btn.getAttribute('data-filter') || '';
-        loadOrders();
+    if (search) {
+      search.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () { state.search = search.value.trim(); loadOrders(); }, 300);
       });
-    });
+    }
+    var adminFilters = $('adminFilters');
+    if (adminFilters) {
+      Array.prototype.forEach.call(adminFilters.querySelectorAll('button'), function (btn) {
+        btn.addEventListener('click', function () {
+          Array.prototype.forEach.call(adminFilters.querySelectorAll('button'), function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          state.filter = btn.getAttribute('data-filter') || '';
+          loadOrders();
+        });
+      });
+    }
     var lb = $('adminLoginBtn');
     if (lb) lb.addEventListener('click', function () { window.location.href = 'account.html'; });
 
@@ -1073,16 +1230,20 @@
     var productForm = $('productForm');
     if (productForm) {
       productForm.addEventListener('submit', saveProduct);
-      var slugInput = productForm.elements.slug;
-      var nameInput = productForm.elements.name;
-      nameInput.addEventListener('input', function () {
-        if (!slugInput.value.trim()) {
-          slugInput.value = slugify(nameInput.value);
-        }
-      });
-      slugInput.addEventListener('blur', function () {
-        slugInput.value = slugify(slugInput.value);
-      });
+      var slugInput = productForm.elements && productForm.elements.slug;
+      var nameInput = productForm.elements && productForm.elements.name;
+      if (nameInput) {
+        nameInput.addEventListener('input', function () {
+          if (slugInput && !slugInput.value.trim()) {
+            slugInput.value = slugify(nameInput.value);
+          }
+        });
+      }
+      if (slugInput) {
+        slugInput.addEventListener('blur', function () {
+          slugInput.value = slugify(slugInput.value);
+        });
+      }
     }
 
     var modalWrap = $('productModalWrap');
@@ -1152,7 +1313,27 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    wire();
-    loadOrders();
+    try {
+      wire();
+      if ($('adminApp')) {
+        $('adminApp').classList.remove('hidden');
+      }
+      if ($('adminDenied')) {
+        $('adminDenied').classList.add('hidden');
+      }
+      switchTab('home');
+    } catch (err) {
+      var fallback = $('adminDenied');
+      if (fallback) {
+        fallback.classList.remove('hidden');
+        var copy = fallback.querySelector('p');
+        if (copy) {
+          copy.textContent = 'The admin console could not initialize. Please refresh the page or sign in again.';
+        }
+      }
+      if (console && console.error) {
+        console.error('Admin init failed', err);
+      }
+    }
   });
 })();

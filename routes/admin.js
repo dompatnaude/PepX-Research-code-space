@@ -14,8 +14,85 @@ const ORDER_STATUSES = [
   'cancelled'
 ];
 
+const ORDER_LIST_SORT_FIELDS = {
+  created_at: 'o.created_at',
+  total: 'o.total',
+  order_number: 'o.order_number',
+  status: 'o.status'
+};
+
 function money(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
+function parseDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
+function buildOrderWhereSql(query) {
+  const params = [];
+  const where = [];
+
+  const status = (query.status || '').trim();
+  if (status && ORDER_STATUSES.indexOf(status) !== -1) {
+    params.push(status);
+    where.push('o.status = $' + params.length);
+  }
+
+  const view = String(query.view || '').trim().toLowerCase();
+  if (view === 'unfulfilled') {
+    where.push("(o.shipped_at IS NULL AND o.status IN ('paid','processing'))");
+  } else if (view === 'ready_to_ship') {
+    where.push("(o.shipped_at IS NULL AND o.status = 'processing')");
+  } else if (view === 'fulfilled') {
+    where.push("(o.shipped_at IS NOT NULL OR o.status IN ('shipped','completed'))");
+  } else if (view === 'shipped') {
+    where.push("(o.shipped_at IS NOT NULL OR o.status = 'shipped')");
+  } else if (view === 'delivered') {
+    where.push("o.status = 'completed'");
+  } else if (view === 'pending_payment') {
+    where.push("o.status = 'pending_payment'");
+  } else if (view === 'paid') {
+    where.push("o.status IN ('paid','processing','shipped','completed')");
+  } else if (view === 'canceled') {
+    where.push("o.status = 'cancelled'");
+  } else if (view === 'refunded') {
+    where.push('1 = 0');
+  } else if (view === 'missing_tracking') {
+    where.push("(COALESCE(TRIM(o.tracking_number), '') = '' AND (o.shipped_at IS NOT NULL OR o.status IN ('shipped','completed')))");
+  } else if (view === 'label_not_purchased') {
+    where.push("(COALESCE(TRIM(o.shipping_label_url), '') = '' AND o.status IN ('paid','processing'))");
+  }
+
+  const search = (query.search || '').trim();
+  if (search) {
+    params.push('%' + search + '%');
+    const p = '$' + params.length;
+    where.push('(o.order_number ILIKE ' + p +
+      ' OR o.shipping_name ILIKE ' + p +
+      ' OR o.shipping_email ILIKE ' + p +
+      ' OR o.tracking_number ILIKE ' + p + ')');
+  }
+
+  const startDate = parseDate(query.start_date || query.startDate);
+  if (startDate) {
+    params.push(startDate.toISOString());
+    where.push('o.created_at >= $' + params.length);
+  }
+
+  const endDate = parseDate(query.end_date || query.endDate);
+  if (endDate) {
+    params.push(endDate.toISOString());
+    where.push('o.created_at <= $' + params.length);
+  }
+
+  return {
+    params,
+    whereSql: where.length ? ('WHERE ' + where.join(' AND ')) : ''
+  };
 }
 
 /**
@@ -50,37 +127,188 @@ function createAdminRouter(requireAuth) {
   // Every admin route is gated by requireAuth THEN requireAdmin.
   const gate = [requireAuth, requireAdmin];
 
+  router.get('/summary', gate, async (req, res) => {
+    try {
+      const [
+        statusCountsRes,
+        requiringFulfillmentRes,
+        missingTrackingRes,
+        labelIssuesRes,
+        sales30Res,
+        recentOrdersRes,
+        lowStockRes,
+        outOfStockRes,
+        customersRes
+      ] = await Promise.all([
+        pool.query(
+          `SELECT status, COUNT(*)::int AS count
+             FROM orders
+            GROUP BY status`
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS count
+             FROM orders
+            WHERE status IN ('paid','processing')
+              AND shipped_at IS NULL`
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS count
+             FROM orders
+            WHERE COALESCE(TRIM(tracking_number), '') = ''
+              AND (shipped_at IS NOT NULL OR status IN ('shipped','completed'))`
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS count
+             FROM orders
+            WHERE COALESCE(TRIM(shipping_label_url), '') = ''
+              AND status IN ('paid','processing')`
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS order_count,
+                  COALESCE(SUM(total), 0) AS sales_total,
+                  COALESCE(AVG(total), 0) AS avg_order_value
+             FROM orders
+            WHERE created_at >= NOW() - INTERVAL '30 days'`
+        ),
+        pool.query(
+          `SELECT id, order_number, status, total, created_at, shipping_name, shipping_email, tracking_number, carrier
+             FROM orders
+            ORDER BY created_at DESC
+            LIMIT 8`
+        ),
+        pool.query(
+          `SELECT pv.id, pv.product_id, pv.name, pv.stock_quantity, p.name AS product_name
+             FROM product_variants pv
+             JOIN products p ON p.id = pv.product_id
+            WHERE pv.active = true
+              AND pv.stock_quantity > 0
+              AND pv.stock_quantity <= 5
+            ORDER BY pv.stock_quantity ASC, pv.updated_at DESC
+            LIMIT 8`
+        ),
+        pool.query(
+          `SELECT pv.id, pv.product_id, pv.name, pv.stock_quantity, p.name AS product_name
+             FROM product_variants pv
+             JOIN products p ON p.id = pv.product_id
+            WHERE pv.active = true
+              AND pv.stock_quantity <= 0
+            ORDER BY pv.updated_at DESC
+            LIMIT 8`
+        ),
+        pool.query(
+          `SELECT id, name, email, created_at
+             FROM users
+            WHERE COALESCE(role, 'customer') <> 'admin'
+            ORDER BY created_at DESC
+            LIMIT 8`
+        )
+      ]);
+
+      let promoSummary = {
+        redemptions_30d: 0,
+        discount_total_30d: 0
+      };
+      try {
+        const promoRes = await pool.query(
+          `SELECT COUNT(*)::int AS redemptions_30d,
+                  COALESCE(SUM(discount_amount), 0) AS discount_total_30d
+             FROM promo_code_redemptions
+            WHERE redeemed_at >= NOW() - INTERVAL '30 days'`
+        );
+        promoSummary = {
+          redemptions_30d: Number(promoRes.rows[0].redemptions_30d || 0),
+          discount_total_30d: Number(promoRes.rows[0].discount_total_30d || 0)
+        };
+      } catch (err) {
+        promoSummary = {
+          redemptions_30d: 0,
+          discount_total_30d: 0
+        };
+      }
+
+      const statusCounts = Object.create(null);
+      statusCountsRes.rows.forEach((row) => {
+        statusCounts[String(row.status || '')] = Number(row.count || 0);
+      });
+
+      return res.json({
+        counts: {
+          pending_payment: Number(statusCounts.pending_payment || 0),
+          paid: Number(statusCounts.paid || 0),
+          processing: Number(statusCounts.processing || 0),
+          shipped: Number(statusCounts.shipped || 0),
+          completed: Number(statusCounts.completed || 0),
+          cancelled: Number(statusCounts.cancelled || 0),
+          requiring_fulfillment: Number(requiringFulfillmentRes.rows[0].count || 0),
+          missing_tracking: Number(missingTrackingRes.rows[0].count || 0),
+          label_not_purchased: Number(labelIssuesRes.rows[0].count || 0)
+        },
+        sales: {
+          order_count_30d: Number(sales30Res.rows[0].order_count || 0),
+          sales_total_30d: Number(sales30Res.rows[0].sales_total || 0),
+          average_order_value_30d: Number(sales30Res.rows[0].avg_order_value || 0)
+        },
+        discounts: promoSummary,
+        recent_orders: recentOrdersRes.rows,
+        recent_customers: customersRes.rows,
+        low_stock_variants: lowStockRes.rows,
+        out_of_stock_variants: outOfStockRes.rows
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Failed to load admin summary' });
+    }
+  });
+
   // --- GET /api/admin/orders ---------------------------------------
   // list all orders, with optional ?search= and ?status= filters
   router.get('/orders', gate, async (req, res) => {
     try {
-      const params = [];
-      const where = [];
-      const status = (req.query.status || '').trim();
-      if (status && ORDER_STATUSES.indexOf(status) !== -1) {
-        params.push(status);
-        where.push('o.status = $' + params.length);
-      }
-      const search = (req.query.search || '').trim();
-      if (search) {
-        params.push('%' + search + '%');
-        const p = '$' + params.length;
-        where.push('(o.order_number ILIKE ' + p +
-          ' OR o.shipping_name ILIKE ' + p +
-          ' OR o.shipping_email ILIKE ' + p +
-          ' OR o.tracking_number ILIKE ' + p + ')');
-      }
-      const whereSql = where.length ? ('WHERE ' + where.join(' AND ')) : '';
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size || req.query.pageSize, 10) || 25));
+      const sortByInput = String(req.query.sort_by || req.query.sortBy || 'created_at').trim();
+      const sortBySql = ORDER_LIST_SORT_FIELDS[sortByInput] || ORDER_LIST_SORT_FIELDS.created_at;
+      const sortDir = String(req.query.sort_dir || req.query.sortDir || 'desc').toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+      const offset = (page - 1) * pageSize;
+
+      const whereBuilt = buildOrderWhereSql(req.query || {});
+      const whereSql = whereBuilt.whereSql;
+      const params = whereBuilt.params.slice();
+
+      const countSql = 'SELECT COUNT(*)::int AS total_count FROM orders o ' + whereSql;
+      const countRes = await pool.query(countSql, params);
+      const totalCount = Number((countRes.rows[0] && countRes.rows[0].total_count) || 0);
+
+      params.push(pageSize);
+      const limitParam = '$' + params.length;
+      params.push(offset);
+      const offsetParam = '$' + params.length;
+
       const sql =
         'SELECT o.id, o.order_number, o.status, o.total, o.created_at, ' +
         'o.shipping_name, o.shipping_email, o.tracking_number, o.carrier, ' +
         'o.shipping_label_url, o.shipped_at, ' +
-        "CASE WHEN o.shipped_at IS NOT NULL THEN 'shipped' " +
+        '(SELECT COALESCE(SUM(oi.quantity), 0)::int FROM order_items oi WHERE oi.order_id = o.id) AS item_count, ' +
+        "CASE WHEN o.status = 'pending_payment' THEN 'pending' ELSE 'paid' END AS payment_status, " +
+        "CASE WHEN o.status = 'completed' THEN 'delivered' " +
+        "WHEN o.shipped_at IS NOT NULL THEN 'shipped' " +
         "WHEN o.shipping_label_url IS NOT NULL THEN 'label_created' " +
-        "ELSE 'unfulfilled' END AS fulfillment_status " +
-        'FROM orders o ' + whereSql + ' ORDER BY o.created_at DESC';
+        "ELSE 'unfulfilled' END AS fulfillment_status, " +
+        "CASE WHEN COALESCE(TRIM(o.tracking_number), '') = '' THEN 'missing' ELSE 'available' END AS tracking_status " +
+        'FROM orders o ' + whereSql +
+        ' ORDER BY ' + sortBySql + ' ' + sortDir + ', o.id DESC ' +
+        'LIMIT ' + limitParam + ' OFFSET ' + offsetParam;
       const result = await pool.query(sql, params);
-      res.json({ orders: result.rows, statuses: ORDER_STATUSES });
+      res.json({
+        orders: result.rows,
+        statuses: ORDER_STATUSES,
+        pagination: {
+          page,
+          page_size: pageSize,
+          total_count: totalCount,
+          total_pages: Math.max(1, Math.ceil(totalCount / pageSize))
+        }
+      });
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: 'Failed to list orders' });
@@ -100,14 +328,25 @@ function createAdminRouter(requireAuth) {
       }
       const order = orderRes.rows[0];
       const itemsRes = await pool.query(
-        "SELECT id, product_id, variant_id, " +
-        "CASE WHEN variant_name IS NOT NULL AND variant_name <> '' THEN name || ' (' || variant_name || ')' ELSE name END AS name, " +
-        'price, quantity FROM order_items WHERE order_id = $1 ORDER BY id ASC',
+        "SELECT id, product_id, variant_id, name, variant_name, variant_price, price, quantity " +
+        'FROM order_items WHERE order_id = $1 ORDER BY id ASC',
         [orderId]
+      );
+      const customerStatsRes = await pool.query(
+        `SELECT COUNT(*)::int AS order_count,
+                COALESCE(SUM(total), 0) AS total_spend,
+                MAX(created_at) AS last_order_at
+           FROM orders
+          WHERE shipping_email = $1`,
+        [order.shipping_email || null]
       );
       const customer = {
         name: order.shipping_name,
-        email: order.shipping_email
+        email: order.shipping_email,
+        phone: order.shipping_phone || null,
+        order_count: Number(customerStatsRes.rows[0] && customerStatsRes.rows[0].order_count || 0),
+        total_spend: Number(customerStatsRes.rows[0] && customerStatsRes.rows[0].total_spend || 0),
+        last_order_at: customerStatsRes.rows[0] ? customerStatsRes.rows[0].last_order_at : null
       };
       const shippingAddress = {
         name: order.shipping_name,
@@ -115,8 +354,23 @@ function createAdminRouter(requireAuth) {
         city: order.shipping_city,
         state: order.shipping_state,
         zip: order.shipping_zip,
+        country: order.shipping_country || null,
+        phone: order.shipping_phone || null,
         email: order.shipping_email
       };
+      const timeline = [];
+      timeline.push({ type: 'order_placed', at: order.created_at, label: 'Order placed' });
+      if (order.shipping_label_created_at) {
+        timeline.push({ type: 'label_purchased', at: order.shipping_label_created_at, label: 'Shipping label purchased' });
+      }
+      if (order.tracking_number) {
+        timeline.push({ type: 'tracking_added', at: order.updated_at || order.shipping_label_created_at || order.created_at, label: 'Tracking added' });
+      }
+      if (order.shipped_at) {
+        timeline.push({ type: 'shipped', at: order.shipped_at, label: 'Order marked shipped' });
+      }
+      timeline.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
       res.json({
         order: order,
         customer: customer,
@@ -137,7 +391,15 @@ function createAdminRouter(requireAuth) {
           shipping_label_url: order.shipping_label_url,
           shipping_label_created_at: order.shipping_label_created_at,
           shipped_at: order.shipped_at
-        }
+        },
+        payment_status: order.status === 'pending_payment' ? 'pending' : 'paid',
+        fulfillment_status: order.status === 'completed'
+          ? 'delivered'
+          : (order.shipped_at ? 'shipped' : (order.shipping_label_url ? 'label_created' : 'unfulfilled')),
+        customer_status: {
+          label: order.status === 'completed' ? 'Delivered' : (order.status === 'cancelled' ? 'Canceled' : 'In progress')
+        },
+        timeline
       });
     } catch (error) {
       console.error(error);

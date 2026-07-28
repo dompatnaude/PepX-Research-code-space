@@ -7,7 +7,9 @@
   "scripts": {
     "migrate": "node scripts/migrate.js",
     "start": "npm run migrate && node server.js",
-    "dev": "npm run migrate && node server.js"
+    "dev": "npm run migrate && node server.js",
+    "test": "node --test",
+    "test:auth": "node --test test/auth/**/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

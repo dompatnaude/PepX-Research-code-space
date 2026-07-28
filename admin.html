@@ -63,9 +63,67 @@
     .stock-stepper{display:inline-flex;align-items:center;gap:.25rem;}
     .stock-stepper input{width:3.8rem;text-align:center;padding:.35rem .4rem;}
     body.modal-open{overflow:hidden;}
+    .admin-wrap{max-width:1440px;}
+    .admin-shell{display:grid;grid-template-columns:240px minmax(0,1fr);gap:0;border:1px solid #dde4f1;border-radius:14px;overflow:hidden;background:#f5f8fd;min-height:78vh;}
+    .admin-sidebar{background:#fff;border-right:1px solid #e3eaf5;padding:14px 10px;display:grid;align-content:start;gap:4px;}
+    .admin-sidebar .brand{font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#1c4379;padding:8px 10px 12px;}
+    .admin-nav-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:1px solid transparent;background:transparent;border-radius:10px;padding:9px 10px;font:inherit;font-size:14px;color:#334155;cursor:pointer;text-align:left;}
+    .admin-nav-btn:hover{background:#f6f8fd;border-color:#e1e8f5;}
+    .admin-nav-btn.active{background:#e9f0fd;border-color:#cfe0ff;color:#1c4379;font-weight:700;}
+    .admin-main{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;}
+    .admin-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;background:#fff;border-bottom:1px solid #e3eaf5;position:sticky;top:0;z-index:10;}
+    .admin-topbar-left{display:flex;align-items:center;gap:10px;min-width:0;}
+    .admin-topbar-right{display:flex;align-items:center;gap:8px;}
+    .admin-title{font-size:20px;line-height:1.2;margin:0;color:#0f172a;}
+    .admin-mobile-nav-btn{display:none;border:1px solid #cdd7e8;background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer;}
+    .admin-global-search{width:min(460px,46vw);padding:.55rem .65rem;border:1px solid #cbd2dc;border-radius:10px;font:inherit;}
+    .admin-alert-strip{padding:8px 16px;background:#f8fbff;border-bottom:1px solid #e3ebf8;color:#334155;font-size:13px;display:flex;gap:10px;flex-wrap:wrap;}
+    .admin-content{padding:14px 16px 18px;overflow:auto;min-width:0;}
+    .dash-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+    .dash-card{background:#fff;border:1px solid #e2eaf7;border-radius:12px;padding:12px;display:grid;gap:5px;}
+    .dash-label{font-size:12px;font-weight:700;color:#64748b;letter-spacing:.04em;text-transform:uppercase;}
+    .dash-value{font-size:24px;line-height:1.05;font-weight:800;color:#0f172a;}
+    .dash-link{font-size:12px;color:#1c4379;text-decoration:none;font-weight:700;}
+    .dash-columns{display:grid;grid-template-columns:1.4fr 1fr;gap:10px;margin-top:10px;}
+    .dash-panel{background:#fff;border:1px solid #e2eaf7;border-radius:12px;padding:12px;}
+    .dash-panel h3{margin:.1rem 0 .6rem;font-size:15px;}
+    .inline-list{display:grid;gap:7px;margin:0;padding:0;list-style:none;}
+    .inline-list li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #eef3fa;padding-bottom:6px;}
+    .inline-list li:last-child{border-bottom:none;padding-bottom:0;}
+    .order-toolbar{display:grid;grid-template-columns:minmax(240px,1.2fr) repeat(5,minmax(120px,auto));gap:8px;align-items:end;margin:0 0 10px;}
+    .order-toolbar .field{display:grid;gap:4px;}
+    .order-toolbar label{font-size:11px;font-weight:700;color:#64748b;letter-spacing:.05em;text-transform:uppercase;}
+    .order-toolbar input,.order-toolbar select{padding:.5rem .55rem;border:1px solid #cbd2dc;border-radius:8px;font:inherit;min-width:0;}
+    .table-wrap{overflow:auto;border:1px solid #e2eaf7;border-radius:12px;background:#fff;}
+    .pagination{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:10px;}
+    .pagination button{padding:.42rem .72rem;border:1px solid #c9d4e7;border-radius:8px;background:#fff;cursor:pointer;}
+    .detail-grid{display:grid;grid-template-columns:1.3fr .9fr;gap:10px;}
+    .detail-card{background:#fff;border:1px solid #e2eaf7;border-radius:12px;padding:12px;}
+    .kv{display:grid;grid-template-columns:1fr auto;gap:6px;border-bottom:1px solid #eef3fa;padding:6px 0;}
+    .kv:last-child{border-bottom:none;}
+    .addr{white-space:pre-line;line-height:1.45;}
+    .admin-section-title{margin:0 0 8px;font-size:16px;}
+    .admin-subtle{font-size:12px;color:#64748b;}
+    .chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+    .chip{padding:.25rem .52rem;border-radius:999px;background:#eef2f9;color:#334155;font-size:12px;font-weight:600;}
     @media (max-width: 800px){
       .form-grid{grid-template-columns:1fr;}
       .variant-mini-grid{grid-template-columns:1fr;}
+    }
+    @media (max-width: 1100px){
+      .dash-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+      .dash-columns{grid-template-columns:1fr;}
+      .order-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));}
+      .detail-grid{grid-template-columns:1fr;}
+    }
+    @media (max-width: 900px){
+      .admin-shell{grid-template-columns:1fr;}
+      .admin-sidebar{position:fixed;inset:0 auto 0 0;width:86vw;max-width:320px;z-index:1100;transform:translateX(-104%);transition:transform .2s ease;box-shadow:10px 0 30px rgba(15,23,42,.2);}
+      .admin-shell.nav-open .admin-sidebar{transform:translateX(0);}
+      .admin-mobile-nav-btn{display:inline-flex;align-items:center;justify-content:center;}
+      .admin-global-search{width:100%;}
+      .admin-topbar{position:sticky;top:0;}
+      .order-toolbar{grid-template-columns:1fr;}
     }
   </style>
 </head>
@@ -87,12 +145,36 @@
 
     <div id="adminApp" class="hidden">
       <div class="admin-tabs" id="adminTabs">
-        <button type="button" class="active" data-tab="orders">Orders</button>
+        <button type="button" class="active" data-tab="home">Dashboard</button>
+        <button type="button" data-tab="orders">Orders</button>
         <button type="button" data-tab="products">Products</button>
         <button type="button" data-tab="promos">Discount Codes</button>
       </div>
 
-      <div id="ordersSection">
+      <section id="homeSection">
+        <div class="admin-bar admin-bar-between">
+          <div>
+            <h2 class="admin-section-title">Operations Dashboard</h2>
+            <div class="admin-subtle">Snapshot of order flow, inventory, and promo activity.</div>
+          </div>
+        </div>
+        <div class="dash-grid" id="dashboardSummary"></div>
+        <div class="dash-columns">
+          <div class="dash-panel">
+            <h3>Recent Orders</h3>
+            <table class="admin-table">
+              <thead><tr><th>Order #</th><th>Date</th><th>Customer</th><th>Status</th><th>Total</th><th>Action</th></tr></thead>
+              <tbody id="dashboardRecentOrders"><tr><td colspan="6" class="muted">Loading&hellip;</td></tr></tbody>
+            </table>
+          </div>
+          <div class="dash-panel">
+            <h3>Recent Customers</h3>
+            <ul class="inline-list" id="dashboardRecentCustomers"><li class="muted">Loading&hellip;</li></ul>
+          </div>
+        </div>
+      </section>
+
+      <div id="ordersSection" class="hidden">
       <div class="admin-bar">
         <input type="search" id="adminSearch" placeholder="Search order #, name, email, tracking&hellip;">
         <div class="admin-filters" id="adminFilters">
@@ -106,10 +188,10 @@
 
       <table class="admin-table">
         <thead><tr>
-          <th>Order #</th><th>Customer</th><th>Date</th><th>Total</th>
-          <th>Status</th><th>Fulfillment</th><th>Tracking</th><th>Actions</th>
+          <th>Order #</th><th>Date</th><th>Customer</th><th>Total</th>
+          <th>Items</th><th>Status</th><th>Fulfillment</th><th>Tracking</th><th>Payment</th><th>Tracking Status</th><th>Actions</th>
         </tr></thead>
-        <tbody id="ordersBody"><tr><td colspan="8" class="muted">Loading&hellip;</td></tr></tbody>
+        <tbody id="ordersBody"><tr><td colspan="11" class="muted">Loading&hellip;</td></tr></tbody>
       </table>
 
       <div id="orderDetail" class="admin-panel hidden"></div>
