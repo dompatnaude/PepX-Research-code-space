@@ -30,6 +30,10 @@ cp .env.example .env
 - `SESSION_SECRET` (required)
 - `DATABASE_URL` (required PostgreSQL connection string)
 - `NODE_ENV` (`development` locally, `production` on deploy)
+- `EASYPOST_API_KEY` (required for shipping rates and labels)
+- `EASYPOST_WEBHOOK_SECRET` (required for EasyPost webhook verification)
+- `SHIP_FROM_NAME`, `SHIP_FROM_STREET1`, `SHIP_FROM_CITY`, `SHIP_FROM_STATE`, `SHIP_FROM_ZIP` (required ship-from address)
+- `SHIP_FROM_COMPANY`, `SHIP_FROM_STREET2`, `SHIP_FROM_COUNTRY`, `SHIP_FROM_PHONE`, `SHIP_FROM_EMAIL` (optional ship-from details)
 - `GOOGLE_CLIENT_ID` (optional for Google auth)
 - `GOOGLE_CLIENT_SECRET` (optional for Google auth)
 - `GOOGLE_CALLBACK_URL` (optional for Google auth, required if enabling Google login)
@@ -49,6 +53,24 @@ npm run migrate
 5. Open the site:
 
 - http://localhost:3000/index.html
+
+## EasyPost Shipping
+
+The admin order panel can fetch shipping rates, purchase labels, and void unused labels through EasyPost.
+
+- Webhook endpoint: `POST /api/webhooks/easypost`
+- Register that URL in EasyPost and copy the webhook signing secret into `EASYPOST_WEBHOOK_SECRET`
+- Use an EasyPost test-mode API key while developing so rate lookup and label purchase do not spend production funds
+- Keep the `SHIP_FROM_*` values pointed at the fulfillment address used for outbound shipments
+- Run `npm run migrate` after pulling the shipping schema changes so the `shipments` tables exist before starting the app
+
+Suggested test flow:
+
+1. Set `EASYPOST_API_KEY` to a test-mode key.
+2. Start the app and open an order in the admin panel.
+3. Load rates, select one, and purchase a label against a test order.
+4. Confirm the webhook arrives and the shipment history updates.
+5. Void the label only if EasyPost still allows the refund.
 
 ## Google OAuth Configuration
 

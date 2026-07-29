@@ -18,7 +18,26 @@
     promoSearch: '',
     promoFilter: '',
     promoSummary: null,
-    editingPromoId: null
+    editingPromoId: null,
+    orderDetail: null,
+    shipping: {
+      shipmentId: null,
+      selectedRateId: null,
+      rates: [],
+      loadingRates: false,
+      loadingPurchase: false,
+      loadingVoid: false,
+      error: '',
+      info: '',
+      addressVerification: null,
+      package: {
+        pounds: '',
+        ounces: '',
+        length: '',
+        width: '',
+        height: ''
+      }
+    }
   };
 
   function $(id) { return document.getElementById(id); }
@@ -72,6 +91,9 @@
           var err = new Error(data.error || ('Request failed (' + res.status + ')'));
           err.status = res.status; throw err;
         }
+        if (data && typeof data === 'object') {
+          data._status = res.status;
+        }
         return data;
       });
     });
@@ -116,6 +138,66 @@
     if (f === 'shipped') { cls = 'green'; }
     else if (f === 'label_created') { cls = 'blue'; label = 'label created'; }
     return '<span class="badge ' + cls + '">' + esc(label) + '</span>';
+  }
+
+  function shipmentStatusBadge(status) {
+    var value = String(status || '').toLowerCase();
+    if (value === 'label_created') return '<span class="badge blue">Label created</span>';
+    if (value === 'pre_transit') return '<span class="badge amber">Pre-transit</span>';
+    if (value === 'in_transit') return '<span class="badge blue">In transit</span>';
+    if (value === 'out_for_delivery') return '<span class="badge blue">Out for delivery</span>';
+    if (value === 'delivered') return '<span class="badge green">Delivered</span>';
+    if (value === 'available_for_pickup') return '<span class="badge amber">Available for pickup</span>';
+    if (value === 'return_to_sender') return '<span class="badge red">Return to sender</span>';
+    if (value === 'failure') return '<span class="badge red">Failure</span>';
+    if (value === 'cancelled') return '<span class="badge red">Cancelled</span>';
+    if (value === 'voided') return '<span class="badge gray">Voided</span>';
+    if (value === 'rated') return '<span class="badge gray">Rates ready</span>';
+    return '<span class="badge gray">' + esc(value ? value.replace(/_/g, ' ') : 'unknown') + '</span>';
+  }
+
+  function formatShippingAddress(row) {
+    if (!row) return 'No shipping address on file.';
+    var lines = [];
+    if (row.name) lines.push(row.name);
+    if (row.address) lines.push(row.address);
+    var cityStateZip = [row.city, row.state, row.zip].filter(Boolean).join(', ');
+    if (cityStateZip) lines.push(cityStateZip);
+    if (row.country) lines.push(row.country);
+    if (row.phone) lines.push('Phone: ' + row.phone);
+    if (row.email) lines.push('Email: ' + row.email);
+    return lines.join('\n');
+  }
+
+  function formatShipmentAddress(address) {
+    if (!address) return 'No address';
+    var lines = [];
+    if (address.name) lines.push(address.name);
+    if (address.company) lines.push(address.company);
+    if (address.street1) lines.push(address.street1);
+    if (address.street2) lines.push(address.street2);
+    var cityStateZip = [address.city, address.state, address.zip].filter(Boolean).join(', ');
+    if (cityStateZip) lines.push(cityStateZip);
+    if (address.country) lines.push(address.country);
+    return lines.join('\n');
+  }
+
+  function shippingPackagePayload() {
+    return {
+      pounds: Number($('shipWeightPounds') && $('shipWeightPounds').value),
+      ounces: Number($('shipWeightOunces') && $('shipWeightOunces').value),
+      length: Number($('shipLength') && $('shipLength').value),
+      width: Number($('shipWidth') && $('shipWidth').value),
+      height: Number($('shipHeight') && $('shipHeight').value)
+    };
+  }
+
+  function setShippingPackageInputs() {
+    if ($('shipWeightPounds')) $('shipWeightPounds').value = state.shipping.package.pounds;
+    if ($('shipWeightOunces')) $('shipWeightOunces').value = state.shipping.package.ounces;
+    if ($('shipLength')) $('shipLength').value = state.shipping.package.length;
+    if ($('shipWidth')) $('shipWidth').value = state.shipping.package.width;
+    if ($('shipHeight')) $('shipHeight').value = state.shipping.package.height;
   }
 
   function loadOrders() {
@@ -1072,15 +1154,29 @@
 
   function openOrder(id) {
     state.currentId = id;
+    state.shipping.shipmentId = null;
+    state.shipping.selectedRateId = null;
+    state.shipping.rates = [];
+    state.shipping.loadingRates = false;
+    state.shipping.loadingPurchase = false;
+    state.shipping.loadingVoid = false;
+    state.shipping.error = '';
+    state.shipping.info = '';
+    state.shipping.addressVerification = null;
     return api('/api/admin/orders/' + id).then(function (d) { renderDetail(d); })
       .catch(function (err) { toast(err.message || 'Failed to open order'); });
   }
 
   function renderDetail(d) {
+    state.orderDetail = d || null;
+
     var order = d.order || {};
     var addr = d.shipping_address || {};
     var items = d.items || [];
-    var tr = d.tracking || {};
+    var shipments = Array.isArray(d.shipments) ? d.shipments : [];
+    var latestShipment = shipments.length ? shipments[0] : null;
+    var activeShipment = shipments.find(function (s) { return s.purchasedAt && !s.isVoided; }) || null;
+    var displayShipment = activeShipment || latestShipment || null;
     var panel = $('orderDetail');
     var itemsRows = items.map(function (it) {
       var variant = it.variant_name ? '<div class="muted">' + esc(it.variant_name) + '</div>' : '';
@@ -1090,6 +1186,58 @@
     var timelineRows = (d.timeline || []).map(function (entry) {
       return '<li><strong>' + esc(entry.label || entry.type || '') + '</strong><span class="muted">' + esc(fmtDate(entry.at)) + '</span></li>';
     }).join('') || '<li class="muted">No timeline events yet.</li>';
+    var rates = Array.isArray(state.shipping.rates) ? state.shipping.rates : [];
+    var selectedRate = rates.find(function (rate) { return rate.rateId === state.shipping.selectedRateId; }) || null;
+    var shipmentHistoryRows = shipments.map(function (shipment) {
+      var rateText = [shipment.carrier, shipment.service].filter(Boolean).join(' ');
+      var labelLink = shipment.labelUrl ? '<a href="' + esc(shipment.labelUrl) + '" target="_blank" rel="noopener">open</a>' : '<span class="muted">none</span>';
+      return '<tr>'
+        + '<td>' + esc(fmtDate(shipment.createdAt || shipment.purchasedAt || shipment.updatedAt)) + '</td>'
+        + '<td>' + shipmentStatusBadge(shipment.shipmentStatus) + '</td>'
+        + '<td>' + esc(rateText || '\u2014') + '</td>'
+        + '<td>' + esc(shipment.trackingNumber || '\u2014') + '</td>'
+        + '<td>' + labelLink + '</td>'
+        + '<td>' + (shipment.isVoided ? '<span class="badge gray">Voided</span>' : '<span class="muted">Active</span>') + '</td>'
+        + '</tr>';
+    }).join('') || '<tr><td colspan="6" class="muted">No shipments yet.</td></tr>';
+
+    var verificationBanner = '';
+    if (state.shipping.addressVerification && state.shipping.addressVerification.needsConfirmation) {
+      verificationBanner = '<div class="shipping-banner">'
+        + '<strong>EasyPost suggests a corrected destination address.</strong>'
+        + '<div class="shipping-banner-columns">'
+        + '<div class="shipping-card"><h4>Original</h4><div class="shipping-address">' + esc(formatShipmentAddress(state.shipping.addressVerification.originalAddress)).replace(/\n/g, '<br>') + '</div></div>'
+        + '<div class="shipping-card"><h4>Suggested</h4><div class="shipping-address">' + esc(formatShipmentAddress(state.shipping.addressVerification.suggestedAddress)).replace(/\n/g, '<br>') + '</div></div>'
+        + '</div>'
+        + '<div class="shipping-actions"><button type="button" class="btn-sm" id="btnUseSuggestedAddress">Use suggested address</button><button type="button" class="btn-sm secondary" id="btnDismissSuggestedAddress">Dismiss</button></div>'
+        + '</div>';
+    }
+
+    var shippingSummary = displayShipment
+      ? '<div class="shipping-summary-grid">'
+        + '<div class="shipping-summary-row"><span class="label">Status</span><span>' + shipmentStatusBadge(displayShipment.shipmentStatus) + '</span></div>'
+        + '<div class="shipping-summary-row"><span class="label">Carrier</span><span>' + esc(displayShipment.carrier || '\u2014') + '</span></div>'
+        + '<div class="shipping-summary-row"><span class="label">Service</span><span>' + esc(displayShipment.service || '\u2014') + '</span></div>'
+        + '<div class="shipping-summary-row"><span class="label">Cost</span><span>' + money(displayShipment.labelCost || 0) + '</span></div>'
+        + '<div class="shipping-summary-row"><span class="label">Tracking</span><span>' + esc(displayShipment.trackingNumber || '\u2014') + '</span></div>'
+        + '<div class="shipping-summary-row"><span class="label">Label</span><span>' + (displayShipment.labelUrl ? '<a href="' + esc(displayShipment.labelUrl) + '" target="_blank" rel="noopener">open label</a>' : '<span class="muted">none</span>') + '</span></div>'
+        + '<div class="shipping-summary-row"><span class="label">Tracking link</span><span>' + (displayShipment.trackingUrl ? '<a href="' + esc(displayShipment.trackingUrl) + '" target="_blank" rel="noopener">open tracking</a>' : '<span class="muted">none</span>') + '</span></div>'
+        + '</div>'
+      : '<div class="muted">No purchased shipment yet.</div>';
+
+    var ratesHtml = rates.length
+      ? rates.map(function (rate) {
+        var selected = rate.rateId === state.shipping.selectedRateId;
+        return '<label class="shipping-rate' + (selected ? ' selected' : '') + '">'
+          + '<input type="radio" name="shippingRate" value="' + esc(rate.rateId) + '"' + (selected ? ' checked' : '') + '>'
+          + '<div class="shipping-rate-main">'
+          + '<strong>' + esc(rate.carrier || '') + ' ' + esc(rate.service || '') + '</strong>'
+          + '<span class="muted">' + esc(rate.deliveryDays != null ? String(rate.deliveryDays) + ' business days' : (rate.deliveryDate ? 'ETA ' + fmtDate(rate.deliveryDate) : '')) + '</span>'
+          + '</div>'
+          + '<div><strong>' + money(rate.price || 0) + '</strong><div class="muted">' + esc(rate.currency || 'USD') + '</div></div>'
+          + '</label>';
+      }).join('')
+      : '<div class="muted">No rates loaded yet.</div>';
 
     panel.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:center;">'
@@ -1118,44 +1266,230 @@
       + '<div class="kv"><span>Total</span><strong>' + money(d.totals && d.totals.total) + '</strong></div>'
       + '</div>'
       + '<div><h3>Tracking</h3>'
-      + '<div>Carrier: ' + esc(tr.carrier || '\u2014') + '</div>'
-      + '<div>Tracking #: ' + esc(tr.tracking_number || '\u2014') + '</div>'
-      + '<div>Label: ' + (tr.shipping_label_url ? '<a href="' + esc(tr.shipping_label_url) + '" target="_blank" rel="noopener">view label</a>' : '<span class="muted">none</span>') + '</div>'
+      + '<div>Carrier: ' + esc((displayShipment && displayShipment.carrier) || '\u2014') + '</div>'
+      + '<div>Tracking #: ' + esc((displayShipment && displayShipment.trackingNumber) || '\u2014') + '</div>'
+      + '<div>Label: ' + ((displayShipment && displayShipment.labelUrl) ? '<a href="' + esc(displayShipment.labelUrl) + '" target="_blank" rel="noopener">view label</a>' : '<span class="muted">none</span>') + '</div>'
       + '<div class="chip-row"><span class="chip">' + esc(d.customer_status && d.customer_status.label || 'In progress') + '</span><span class="chip">' + esc(d.fulfillment_status || 'unfulfilled') + '</span><span class="chip">' + esc(d.payment_status || 'pending') + '</span></div>'
+      + '</div>'
+      + '</div>'
+      + '<div class="shipping-shell">'
+      + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">'
+      + '<div><h3 class="shipping-section-title" style="margin:0;">Shipping</h3><div class="admin-subtle">Paid → Ready to ship → Get rates → Select service → Buy label → Print label → Carrier scan → In transit → Delivered</div></div>'
+      + '<div class="shipping-state">' + shipmentStatusBadge(displayShipment && displayShipment.shipmentStatus || 'rated') + '</div>'
+      + '</div>'
+      + '<div class="shipping-top">'
+      + '<div class="shipping-card"><h4>Saved destination address</h4><div class="shipping-address">' + esc(formatShippingAddress(addr)).replace(/\n/g, '<br>') + '</div></div>'
+      + '<div class="shipping-card"><h4>Current shipment</h4>' + shippingSummary + '</div>'
+      + '</div>'
+      + verificationBanner
+      + '<div class="shipping-card">'
+      + '<h4>Package details</h4>'
+      + '<div class="shipping-input-grid">'
+      + '<input id="shipWeightPounds" type="number" min="0" step="1" placeholder="Pounds" value="' + esc(state.shipping.package.pounds) + '">'
+      + '<input id="shipWeightOunces" type="number" min="0" step="0.01" placeholder="Ounces" value="' + esc(state.shipping.package.ounces) + '">'
+      + '<input id="shipLength" type="number" min="0" step="0.01" placeholder="Length (in)" value="' + esc(state.shipping.package.length) + '">'
+      + '<input id="shipWidth" type="number" min="0" step="0.01" placeholder="Width (in)" value="' + esc(state.shipping.package.width) + '">'
+      + '<input id="shipHeight" type="number" min="0" step="0.01" placeholder="Height (in)" value="' + esc(state.shipping.package.height) + '">'
+      + '</div>'
+      + '<div class="shipping-actions" style="margin-top:10px;">'
+      + '<button type="button" class="btn-sm" id="btnGetShippingRates"' + (state.shipping.loadingRates ? ' disabled' : '') + '>Get rates</button>'
+      + '<button type="button" class="btn-sm secondary" id="btnPurchaseShippingLabel"' + ((!state.shipping.selectedRateId || state.shipping.loadingPurchase || (activeShipment && !activeShipment.isVoided)) ? ' disabled' : '') + '>Purchase label</button>'
+      + '<button type="button" class="btn-sm secondary" id="btnVoidShippingLabel"' + ((!activeShipment || activeShipment.isVoided || state.shipping.loadingVoid) ? ' disabled' : '') + '>Void label</button>'
+      + '</div>'
+      + (state.shipping.error ? '<div class="shipping-error" style="margin-top:10px;">' + esc(state.shipping.error) + '</div>' : '')
+      + (state.shipping.info ? '<div class="muted" style="margin-top:10px;">' + esc(state.shipping.info) + '</div>' : '')
+      + '</div>'
+      + '<div class="shipping-card">'
+      + '<h4>Available rates</h4>'
+      + '<div class="shipping-rates" id="shippingRates">' + ratesHtml + '</div>'
+      + '<div class="shipping-actions" style="margin-top:10px;">'
+      + '<button type="button" class="btn-sm secondary" id="btnRefreshRates"' + (state.shipping.loadingRates ? ' disabled' : '') + '>Refresh rates</button>'
+      + '<div class="muted">Selected rate: ' + (selectedRate ? esc(selectedRate.carrier + ' ' + selectedRate.service + ' · ' + money(selectedRate.price || 0)) : 'none') + '</div>'
+      + '</div>'
+      + '</div>'
+      + '<div class="shipping-card">'
+      + '<h4>Shipment history</h4>'
+      + '<table class="admin-table"><thead><tr><th>Created</th><th>Status</th><th>Carrier / Service</th><th>Tracking</th><th>Label</th><th>Void</th></tr></thead><tbody>' + shipmentHistoryRows + '</tbody></table>'
       + '</div>'
       + '</div>'
       + '<h3 style="margin-top:1rem;">Timeline</h3>'
       + '<ul class="inline-list">' + timelineRows + '</ul>'
       + '<h3 style="margin-top:1rem;">Notes</h3>'
       + '<p class="muted">Internal notes support can be added in a later phase without exposing customer-facing data.</p>'
-      + '<div class="track-form">'
-      + '<input id="tfCarrier" placeholder="Carrier" value="' + esc(tr.carrier || '') + '">'
-      + '<input id="tfTracking" placeholder="Tracking number" value="' + esc(tr.tracking_number || '') + '">'
-      + '<input id="tfLabel" placeholder="Label URL" value="' + esc(tr.shipping_label_url || '') + '">'
-      + '<button class="secondary" id="btnSaveTracking">Add Tracking</button>'
-      + '</div>'
       + '<div class="admin-actions">'
-      + '<button id="btnLabel">Create Shipping Label</button>'
-      + '<button class="secondary" id="btnProcessing">Mark Processing</button>'
+      + '<button id="btnProcessing">Mark Processing</button>'
       + '<button id="btnShipped">Mark Shipped</button>'
       + '</div>';
     panel.classList.remove('hidden');
 
     $('detailClose').addEventListener('click', function () { panel.classList.add('hidden'); });
-    $('btnLabel').addEventListener('click', createLabel);
     $('btnProcessing').addEventListener('click', function () { setStatus('processing'); });
     $('btnShipped').addEventListener('click', function () { setStatus('shipped'); });
-    $('btnSaveTracking').addEventListener('click', saveTracking);
+    $('btnGetShippingRates').addEventListener('click', function () { requestShippingRates(false); });
+    $('btnRefreshRates').addEventListener('click', function () { requestShippingRates(false); });
+    if ($('btnPurchaseShippingLabel')) {
+      $('btnPurchaseShippingLabel').addEventListener('click', purchaseSelectedShippingLabel);
+    }
+    if ($('btnVoidShippingLabel')) {
+      $('btnVoidShippingLabel').addEventListener('click', voidSelectedShippingLabel);
+    }
+    if ($('btnUseSuggestedAddress')) {
+      $('btnUseSuggestedAddress').addEventListener('click', function () { requestShippingRates(true); });
+    }
+    if ($('btnDismissSuggestedAddress')) {
+      $('btnDismissSuggestedAddress').addEventListener('click', function () {
+        state.shipping.addressVerification = null;
+        renderDetail(state.orderDetail);
+      });
+    }
+
+    var ratePanel = $('shippingRates');
+    if (ratePanel) {
+      Array.prototype.forEach.call(ratePanel.querySelectorAll('input[type="radio"][name="shippingRate"]'), function (radio) {
+        radio.addEventListener('change', function () {
+          state.shipping.selectedRateId = radio.value;
+          renderDetail(state.orderDetail);
+        });
+      });
+    }
+
+    ['shipWeightPounds', 'shipWeightOunces', 'shipLength', 'shipWidth', 'shipHeight'].forEach(function (fieldId) {
+      var input = $(fieldId);
+      if (!input) return;
+      input.addEventListener('input', function () {
+        state.shipping.package = shippingPackagePayload();
+      });
+    });
+
+    setShippingPackageInputs();
   }
 
-  function createLabel() {
-    api('/api/admin/orders/' + state.currentId + '/label', { method: 'POST', body: '{}' })
-      .then(function (r) {
-        var lbl = r.label || {};
-        toast('Label created \u2014 ' + (lbl.carrier || '') + ' ' + (lbl.tracking_number || ''));
-        return openOrder(state.currentId);
-      }).then(loadOrders)
-      .catch(function (err) { toast(err.message || 'Failed to create label'); });
+  function refreshCurrentOrder() {
+    if (!state.currentId) return Promise.resolve();
+    return api('/api/admin/orders/' + state.currentId).then(function (d) {
+      renderDetail(d);
+      return d;
+    });
+  }
+
+  function requestShippingRates(confirmVerifiedAddress) {
+    if (!state.currentId || state.shipping.loadingRates) return;
+    state.shipping.loadingRates = true;
+    state.shipping.error = '';
+    state.shipping.info = '';
+    renderDetail(state.orderDetail);
+
+    var payload = shippingPackagePayload();
+    state.shipping.package = {
+      pounds: payload.pounds,
+      ounces: payload.ounces,
+      length: payload.length,
+      width: payload.width,
+      height: payload.height
+    };
+    payload.confirmVerifiedAddress = !!confirmVerifiedAddress;
+    payload.confirm_verified_address = !!confirmVerifiedAddress;
+
+    api('/api/admin/orders/' + state.currentId + '/shipping/rates', { method: 'POST', body: JSON.stringify(payload) })
+      .then(function (result) {
+        state.shipping.loadingRates = false;
+        state.shipping.shipmentId = result && result.shipment && result.shipment.providerShipmentId ? result.shipment.providerShipmentId : null;
+        state.shipping.rates = (result && result.rates) || [];
+        state.shipping.selectedRateId = '';
+        state.shipping.addressVerification = result && result.addressVerification ? result.addressVerification : null;
+        state.shipping.info = state.shipping.addressVerification && state.shipping.addressVerification.needsConfirmation
+          ? 'Address verification requires confirmation before rates can be used.'
+          : 'Rates loaded successfully.';
+        renderDetail(state.orderDetail);
+      })
+      .catch(function (err) {
+        state.shipping.loadingRates = false;
+        if (err.status === 409 && err.code === 'address-verification-confirmation-required' && err.details) {
+          state.shipping.addressVerification = err.details;
+          state.shipping.rates = [];
+          state.shipping.selectedRateId = '';
+          state.shipping.info = 'Address verification requires confirmation before rates can be retrieved.';
+          renderDetail(state.orderDetail);
+          return;
+        }
+        state.shipping.error = err.message || 'Failed to retrieve shipping rates';
+        renderDetail(state.orderDetail);
+      });
+  }
+
+  function purchaseSelectedShippingLabel() {
+    if (!state.currentId || state.shipping.loadingPurchase) return;
+    var selectedRate = state.shipping.rates.find(function (rate) { return rate.rateId === state.shipping.selectedRateId; });
+    var currentOrder = state.orderDetail || {};
+    var destination = currentOrder.shipping_address || {};
+    if (!selectedRate || !state.shipping.shipmentId) {
+      toast('Select a rate first');
+      return;
+    }
+
+    var confirmText = [
+      'Purchase label?',
+      'Carrier: ' + (selectedRate.carrier || ''),
+      'Service: ' + (selectedRate.service || ''),
+      'Cost: ' + money(selectedRate.price || 0),
+      'Destination: ' + [destination.city, destination.state].filter(Boolean).join(', '),
+      'Package: ' + [state.shipping.package.pounds || 0, 'lb', state.shipping.package.ounces || 0, 'oz'] .join(' ')
+    ].join('\n');
+
+    if (!window.confirm(confirmText)) {
+      return;
+    }
+
+    state.shipping.loadingPurchase = true;
+    state.shipping.error = '';
+    renderDetail(state.orderDetail);
+
+    api('/api/admin/orders/' + state.currentId + '/shipping/purchase', {
+      method: 'POST',
+      body: JSON.stringify({ shipmentId: state.shipping.shipmentId, rateId: selectedRate.rateId })
+    }).then(function () {
+      toast('Shipping label purchased');
+      state.shipping.loadingPurchase = false;
+      state.shipping.rates = [];
+      state.shipping.selectedRateId = null;
+      state.shipping.shipmentId = null;
+      state.shipping.info = 'Label purchased successfully.';
+      return refreshCurrentOrder();
+    }).catch(function (err) {
+      state.shipping.loadingPurchase = false;
+      state.shipping.error = err.message || 'Failed to purchase shipping label';
+      renderDetail(state.orderDetail);
+    });
+  }
+
+  function voidSelectedShippingLabel() {
+    if (!state.currentId || state.shipping.loadingVoid) return;
+    var currentOrder = state.orderDetail || {};
+    var shipments = Array.isArray(currentOrder.shipments) ? currentOrder.shipments : [];
+    var purchasedShipment = shipments.find(function (shipment) { return shipment.purchasedAt && !shipment.isVoided; }) || null;
+    if (!purchasedShipment) {
+      toast('No eligible label to void');
+      return;
+    }
+    if (!window.confirm('Void this shipping label? Only unused labels can be refunded.')) {
+      return;
+    }
+
+    state.shipping.loadingVoid = true;
+    renderDetail(state.orderDetail);
+    api('/api/admin/orders/' + state.currentId + '/shipping/void', {
+      method: 'POST',
+      body: JSON.stringify({ shipmentId: purchasedShipment.providerShipmentId })
+    }).then(function () {
+      toast('Shipping label voided');
+      state.shipping.loadingVoid = false;
+      state.shipping.info = 'Label voided.';
+      return refreshCurrentOrder();
+    }).catch(function (err) {
+      state.shipping.loadingVoid = false;
+      state.shipping.error = err.message || 'Failed to void shipping label';
+      renderDetail(state.orderDetail);
+    });
   }
 
   function setStatus(status) {
@@ -1163,18 +1497,6 @@
       .then(function () { toast('Status \u2192 ' + status); return openOrder(state.currentId); })
       .then(loadOrders)
       .catch(function (err) { toast(err.message || 'Failed to update status'); });
-  }
-
-  function saveTracking() {
-    var body = {
-      carrier: $('tfCarrier').value,
-      tracking_number: $('tfTracking').value,
-      shipping_label_url: $('tfLabel').value
-    };
-    api('/api/admin/orders/' + state.currentId + '/shipping', { method: 'PUT', body: JSON.stringify(body) })
-      .then(function () { toast('Tracking saved'); return openOrder(state.currentId); })
-      .then(loadOrders)
-      .catch(function (err) { toast(err.message || 'Failed to save tracking'); });
   }
 
   function wire() {

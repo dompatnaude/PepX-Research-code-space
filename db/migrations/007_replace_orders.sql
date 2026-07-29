@@ -30,3 +30,41 @@ CREATE TABLE IF NOT EXISTS order_items (
     quantity INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS shipments (
+    id SERIAL PRIMARY KEY,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    provider VARCHAR(50) NOT NULL DEFAULT 'easypost',
+    provider_shipment_id TEXT NOT NULL,
+    provider_tracker_id TEXT,
+    rate_id TEXT,
+    carrier VARCHAR(100),
+    service VARCHAR(100),
+    tracking_number VARCHAR(255),
+    tracking_url TEXT,
+    label_url TEXT,
+    label_format VARCHAR(20) NOT NULL DEFAULT 'PDF',
+    label_cost NUMERIC(10,2),
+    currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+    shipment_status VARCHAR(50) NOT NULL DEFAULT 'rated',
+    is_voided BOOLEAN NOT NULL DEFAULT FALSE,
+    voided_at TIMESTAMP,
+    purchased_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT shipments_provider_shipment_id_key UNIQUE (provider, provider_shipment_id)
+);
+
+CREATE INDEX IF NOT EXISTS shipments_order_id_created_at_idx ON shipments (order_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS shipments_provider_tracker_id_idx ON shipments (provider_tracker_id);
+CREATE INDEX IF NOT EXISTS shipments_tracking_number_idx ON shipments (tracking_number);
+CREATE INDEX IF NOT EXISTS shipments_purchased_at_idx ON shipments (order_id, purchased_at DESC);
+
+CREATE TABLE IF NOT EXISTS shipment_webhook_events (
+    id SERIAL PRIMARY KEY,
+    event_id TEXT NOT NULL UNIQUE,
+    provider VARCHAR(50) NOT NULL DEFAULT 'easypost',
+    event_type VARCHAR(100),
+    tracker_status VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

@@ -2,7 +2,13 @@
 
 const express = require('express');
 const pool = require('../db/connection');
-const shipping = require('../services/shipping');
+const {
+  ShippingWorkflowError,
+  createRatesForOrder,
+  purchaseShipmentForOrder,
+  voidShipmentForOrder,
+  loadShipmentsForOrder
+} = require('../services/shipping-workflow');
 
 // Allowed order statuses (kept in one place, reused by validation).
 const ORDER_STATUSES = [
@@ -99,8 +105,11 @@ function buildOrderWhereSql(query) {
  * Factory. Takes the app's existing requireAuth middleware so we reuse
  * the exact same session/authentication logic (no duplicate auth).
  */
-function createAdminRouter(requireAuth) {
+function createAdminRouter(requireAuth, deps) {
+  deps = deps || {};
   const router = express.Router();
+  const db = deps.pool || pool;
+  const shippingClient = deps.client || null;
 
   // --- requireAdmin -------------------------------------------------
   // 1. runs requireAuth first (verifies logged in, sets req.user)
@@ -112,7 +121,7 @@ function createAdminRouter(requireAuth) {
       if (!userId) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
-      const result = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+      const result = await db.query('SELECT role FROM users WHERE id = $1', [userId]);
       const role = result.rows.length ? result.rows[0].role : null;
       if (role !== 'admin') {
         return res.status(403).json({ error: 'Admin access required' });
@@ -140,43 +149,43 @@ function createAdminRouter(requireAuth) {
         outOfStockRes,
         customersRes
       ] = await Promise.all([
-        pool.query(
+        db.query(
           `SELECT status, COUNT(*)::int AS count
              FROM orders
             GROUP BY status`
         ),
-        pool.query(
+        db.query(
           `SELECT COUNT(*)::int AS count
              FROM orders
             WHERE status IN ('paid','processing')
               AND shipped_at IS NULL`
         ),
-        pool.query(
+        db.query(
           `SELECT COUNT(*)::int AS count
              FROM orders
             WHERE COALESCE(TRIM(tracking_number), '') = ''
               AND (shipped_at IS NOT NULL OR status IN ('shipped','completed'))`
         ),
-        pool.query(
+        db.query(
           `SELECT COUNT(*)::int AS count
              FROM orders
             WHERE COALESCE(TRIM(shipping_label_url), '') = ''
               AND status IN ('paid','processing')`
         ),
-        pool.query(
+        db.query(
           `SELECT COUNT(*)::int AS order_count,
                   COALESCE(SUM(total), 0) AS sales_total,
                   COALESCE(AVG(total), 0) AS avg_order_value
              FROM orders
             WHERE created_at >= NOW() - INTERVAL '30 days'`
         ),
-        pool.query(
+        db.query(
           `SELECT id, order_number, status, total, created_at, shipping_name, shipping_email, tracking_number, carrier
              FROM orders
             ORDER BY created_at DESC
             LIMIT 8`
         ),
-        pool.query(
+        db.query(
           `SELECT pv.id, pv.product_id, pv.name, pv.stock_quantity, p.name AS product_name
              FROM product_variants pv
              JOIN products p ON p.id = pv.product_id
@@ -186,7 +195,7 @@ function createAdminRouter(requireAuth) {
             ORDER BY pv.stock_quantity ASC, pv.updated_at DESC
             LIMIT 8`
         ),
-        pool.query(
+        db.query(
           `SELECT pv.id, pv.product_id, pv.name, pv.stock_quantity, p.name AS product_name
              FROM product_variants pv
              JOIN products p ON p.id = pv.product_id
@@ -195,7 +204,7 @@ function createAdminRouter(requireAuth) {
             ORDER BY pv.updated_at DESC
             LIMIT 8`
         ),
-        pool.query(
+        db.query(
           `SELECT id, name, email, created_at
              FROM users
             WHERE COALESCE(role, 'customer') <> 'admin'
@@ -209,7 +218,7 @@ function createAdminRouter(requireAuth) {
         discount_total_30d: 0
       };
       try {
-        const promoRes = await pool.query(
+        const promoRes = await db.query(
           `SELECT COUNT(*)::int AS redemptions_30d,
                   COALESCE(SUM(discount_amount), 0) AS discount_total_30d
              FROM promo_code_redemptions
@@ -276,7 +285,7 @@ function createAdminRouter(requireAuth) {
       const params = whereBuilt.params.slice();
 
       const countSql = 'SELECT COUNT(*)::int AS total_count FROM orders o ' + whereSql;
-      const countRes = await pool.query(countSql, params);
+      const countRes = await db.query(countSql, params);
       const totalCount = Number((countRes.rows[0] && countRes.rows[0].total_count) || 0);
 
       params.push(pageSize);
@@ -298,7 +307,7 @@ function createAdminRouter(requireAuth) {
         'FROM orders o ' + whereSql +
         ' ORDER BY ' + sortBySql + ' ' + sortDir + ', o.id DESC ' +
         'LIMIT ' + limitParam + ' OFFSET ' + offsetParam;
-      const result = await pool.query(sql, params);
+      const result = await db.query(sql, params);
       res.json({
         orders: result.rows,
         statuses: ORDER_STATUSES,
@@ -322,17 +331,17 @@ function createAdminRouter(requireAuth) {
       if (!Number.isInteger(orderId)) {
         return res.status(400).json({ error: 'Invalid order id' });
       }
-      const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+      const orderRes = await db.query('SELECT * FROM orders WHERE id = $1', [orderId]);
       if (orderRes.rows.length === 0) {
         return res.status(404).json({ error: 'Order not found' });
       }
       const order = orderRes.rows[0];
-      const itemsRes = await pool.query(
+      const itemsRes = await db.query(
         "SELECT id, product_id, variant_id, name, variant_name, variant_price, price, quantity " +
         'FROM order_items WHERE order_id = $1 ORDER BY id ASC',
         [orderId]
       );
-      const customerStatsRes = await pool.query(
+      const customerStatsRes = await db.query(
         `SELECT COUNT(*)::int AS order_count,
                 COALESCE(SUM(total), 0) AS total_spend,
                 MAX(created_at) AS last_order_at
@@ -358,13 +367,17 @@ function createAdminRouter(requireAuth) {
         phone: order.shipping_phone || null,
         email: order.shipping_email
       };
+      const shipmentRows = await loadShipmentsForOrder(pool, orderId);
+      const latestShipment = shipmentRows.length ? shipmentRows[0] : null;
       const timeline = [];
       timeline.push({ type: 'order_placed', at: order.created_at, label: 'Order placed' });
-      if (order.shipping_label_created_at) {
+      if (latestShipment && latestShipment.purchasedAt) {
+        timeline.push({ type: 'label_purchased', at: latestShipment.purchasedAt, label: 'Shipping label purchased' });
+      } else if (order.shipping_label_created_at) {
         timeline.push({ type: 'label_purchased', at: order.shipping_label_created_at, label: 'Shipping label purchased' });
       }
-      if (order.tracking_number) {
-        timeline.push({ type: 'tracking_added', at: order.updated_at || order.shipping_label_created_at || order.created_at, label: 'Tracking added' });
+      if ((latestShipment && latestShipment.trackingNumber) || order.tracking_number) {
+        timeline.push({ type: 'tracking_added', at: latestShipment && latestShipment.updatedAt || order.updated_at || order.shipping_label_created_at || order.created_at, label: 'Tracking added' });
       }
       if (order.shipped_at) {
         timeline.push({ type: 'shipped', at: order.shipped_at, label: 'Order marked shipped' });
@@ -376,6 +389,7 @@ function createAdminRouter(requireAuth) {
         customer: customer,
         shipping_address: shippingAddress,
         items: itemsRes.rows,
+        shipments: shipmentRows,
         totals: {
           subtotal: order.subtotal,
           subtotal_before_discount: order.subtotal_before_discount,
@@ -386,16 +400,16 @@ function createAdminRouter(requireAuth) {
         },
         status: order.status,
         tracking: {
-          tracking_number: order.tracking_number,
-          carrier: order.carrier,
-          shipping_label_url: order.shipping_label_url,
-          shipping_label_created_at: order.shipping_label_created_at,
+          tracking_number: latestShipment && latestShipment.trackingNumber || order.tracking_number,
+          carrier: latestShipment && latestShipment.carrier || order.carrier,
+          shipping_label_url: latestShipment && latestShipment.labelUrl || order.shipping_label_url,
+          shipping_label_created_at: latestShipment && latestShipment.purchasedAt || order.shipping_label_created_at,
           shipped_at: order.shipped_at
         },
         payment_status: order.status === 'pending_payment' ? 'pending' : 'paid',
         fulfillment_status: order.status === 'completed'
           ? 'delivered'
-          : (order.shipped_at ? 'shipped' : (order.shipping_label_url ? 'label_created' : 'unfulfilled')),
+          : (order.shipped_at ? 'shipped' : ((latestShipment && latestShipment.labelUrl) || order.shipping_label_url ? 'label_created' : 'unfulfilled')),
         customer_status: {
           label: order.status === 'completed' ? 'Delivered' : (order.status === 'cancelled' ? 'Canceled' : 'In progress')
         },
@@ -423,7 +437,7 @@ function createAdminRouter(requireAuth) {
       const sql = setShipped
         ? 'UPDATE orders SET status = $1, shipped_at = COALESCE(shipped_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, status, shipped_at'
         : 'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, status, shipped_at';
-      const result = await pool.query(sql, [status, orderId]);
+      const result = await db.query(sql, [status, orderId]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Order not found' });
       }
@@ -434,71 +448,92 @@ function createAdminRouter(requireAuth) {
     }
   });
 
-  // --- POST /api/admin/orders/:id/label ----------------------------
-  // placeholder shipping-label workflow via services/shipping.js
-  router.post('/orders/:id/label', gate, async (req, res) => {
+  router.get('/orders/:id/shipments', gate, async (req, res) => {
     try {
       const orderId = parseInt(req.params.id, 10);
       if (!Number.isInteger(orderId)) {
         return res.status(400).json({ error: 'Invalid order id' });
       }
-      const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
-      if (orderRes.rows.length === 0) {
-        return res.status(404).json({ error: 'Order not found' });
-      }
-      const order = orderRes.rows[0];
-      const itemsRes = await pool.query(
-        'SELECT product_id, name, price, quantity FROM order_items WHERE order_id = $1 ORDER BY id ASC',
-        [orderId]
-      );
-      order.items = itemsRes.rows;
-
-      // Delegate to the provider abstraction (stub for now).
-      const label = await shipping.createShippingLabel(order);
-
-      const updated = await pool.query(
-        'UPDATE orders SET tracking_number = $1, carrier = $2, shipping_label_url = $3, ' +
-        'shipping_label_created_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP ' +
-        'WHERE id = $4 RETURNING id, tracking_number, carrier, shipping_label_url, shipping_label_created_at, status',
-        [label.tracking_number, label.carrier, label.label_url, orderId]
-      );
-      res.status(201).json({
-        order: updated.rows[0],
-        label: label
-      });
+      const shipments = await loadShipmentsForOrder(db, orderId);
+      return res.json({ shipments: shipments });
     } catch (error) {
+      if (error instanceof ShippingWorkflowError) {
+        return res.status(error.status || 500).json({ error: error.message });
+      }
       console.error(error);
-      res.status(500).json({ error: 'Failed to create shipping label' });
+      res.status(500).json({ error: 'Failed to load shipments' });
     }
   });
 
-  // --- PUT /api/admin/orders/:id/shipping --------------------------
-  // manually save/override tracking info
-  router.put('/orders/:id/shipping', gate, async (req, res) => {
+  router.post('/orders/:id/shipping/rates', gate, async (req, res) => {
     try {
       const orderId = parseInt(req.params.id, 10);
       if (!Number.isInteger(orderId)) {
         return res.status(400).json({ error: 'Invalid order id' });
       }
-      const body = req.body || {};
-      const result = await pool.query(
-        'UPDATE orders SET tracking_number = $1, carrier = $2, shipping_label_url = $3, ' +
-        'updated_at = CURRENT_TIMESTAMP WHERE id = $4 ' +
-        'RETURNING id, tracking_number, carrier, shipping_label_url, status',
-        [
-          body.tracking_number != null ? body.tracking_number : null,
-          body.carrier != null ? body.carrier : null,
-          body.shipping_label_url != null ? body.shipping_label_url : null,
-          orderId
-        ]
-      );
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Order not found' });
-      }
-      res.json(result.rows[0]);
+      const result = await createRatesForOrder({
+        pool: db,
+        client: shippingClient,
+        orderId: orderId,
+        body: req.body || {},
+        package: req.body || {},
+        confirmVerifiedAddress: !!(req.body && (req.body.confirmVerifiedAddress || req.body.confirm_verified_address)),
+        env: process.env
+      });
+      return res.json(result);
     } catch (error) {
+      if (error instanceof ShippingWorkflowError) {
+        return res.status(error.status || 500).json({ error: error.message, code: error.code, details: error.details || undefined });
+      }
       console.error(error);
-      res.status(500).json({ error: 'Failed to save shipping info' });
+      res.status(500).json({ error: 'Failed to retrieve shipping rates' });
+    }
+  });
+
+  router.post('/orders/:id/shipping/purchase', gate, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(orderId)) {
+        return res.status(400).json({ error: 'Invalid order id' });
+      }
+      const result = await purchaseShipmentForOrder({
+        pool: db,
+        client: shippingClient,
+        orderId: orderId,
+        shipmentId: req.body && (req.body.shipmentId || req.body.shipment_id),
+        rateId: req.body && (req.body.rateId || req.body.rate_id),
+        env: process.env
+      });
+      return res.status(201).json(result);
+    } catch (error) {
+      if (error instanceof ShippingWorkflowError) {
+        return res.status(error.status || 500).json({ error: error.message, code: error.code, details: error.details || undefined });
+      }
+      console.error(error);
+      res.status(500).json({ error: 'Failed to purchase shipping label' });
+    }
+  });
+
+  router.post('/orders/:id/shipping/void', gate, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(orderId)) {
+        return res.status(400).json({ error: 'Invalid order id' });
+      }
+      const result = await voidShipmentForOrder({
+        pool: db,
+        client: shippingClient,
+        orderId: orderId,
+        shipmentId: req.body && (req.body.shipmentId || req.body.shipment_id),
+        env: process.env
+      });
+      return res.json(result);
+    } catch (error) {
+      if (error instanceof ShippingWorkflowError) {
+        return res.status(error.status || 500).json({ error: error.message, code: error.code, details: error.details || undefined });
+      }
+      console.error(error);
+      res.status(500).json({ error: 'Failed to void shipping label' });
     }
   });
 

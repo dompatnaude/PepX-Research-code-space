@@ -6,6 +6,7 @@ const createAdminRouter = require("./routes/admin");
 const createAdminProductsRouter = require('./routes/admin-products');
 const createAdminVariantsRouter = require('./routes/admin-variants');
 const createAdminPromosRouter = require('./routes/admin-promos');
+const createEasyPostWebhookRouter = require('./routes/easypost-webhooks');
 const { transferGuestCart } = require("./routes/cart");
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
@@ -276,6 +277,7 @@ async function createOrderByUserId(userId, payloadItems) {
   };
 }
 
+app.use('/api/webhooks/easypost', express.raw({ type: 'application/json' }), createEasyPostWebhookRouter({ pool }));
 app.use(express.json());
 const sessionCookieSecure = process.env.NODE_ENV === 'production';
 app.use(

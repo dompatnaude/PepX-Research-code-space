@@ -47,5 +47,8 @@ chmod +x deploy.sh
 Notes & limitations
 - I can't push from this environment because outbound network/Git operations are restricted here. Use the above commands on your machine or a server with git/gh access.
 - For production, copy `styles.css` and `script.js` directly into the theme `assets/` folder and update `functions.php` to use `get_stylesheet_directory_uri()` for stable asset hosting.
+- If you are deploying the Express app with EasyPost shipping enabled, set `EASYPOST_API_KEY`, `EASYPOST_WEBHOOK_SECRET`, and the `SHIP_FROM_*` variables before running migrations.
+- Register the production webhook URL at `/api/webhooks/easypost` in EasyPost before switching the app to production mode.
+- Run `npm run migrate` against the production database before exposing the admin shipping actions.
 
 If you want, tell me the Git remote URL and I can prepare a PR patch (local changes are already in the workspace). If you give me permission to run commands from your machine or provide CI credentials, I can help script automated deployment instead.
