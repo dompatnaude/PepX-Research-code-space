@@ -405,14 +405,6 @@ function escapeHtml(value){
     .replace(/'/g, '&#39;');
 }
 
-function buildProductDescription(product){
-  return [
-    product.description,
-    'Prepared for ' + product.category.toLowerCase() + ' workflows where purity, repeatability, and documented handling matter.',
-    'Each order is packaged for controlled laboratory storage and batch traceability.'
-  ].join(' ');
-}
-
 function buildProductDisclaimer(product){
   return [
     '<p>The products offered by PepX Research are intended strictly for laboratory research purposes only and are sold exclusively to qualified professionals, institutions, and entities. These products are not for human consumption, veterinary use, or any other application involving living organisms, including but not limited to diagnostic, therapeutic, or recreational purposes.</p>',
@@ -1019,12 +1011,8 @@ function renderProductDetailPage(){
   }
 
   var doseOptionsContainer = document.getElementById('productDetailDoseOptions');
-  var tabs = page.querySelectorAll('[data-detail-tab]');
   var detailMedia = page.querySelector('.product-detail-media');
-  var tabContent = {
-    description: buildProductDescription(product),
-    disclaimer: buildProductDisclaimer(product)
-  };
+  var disclaimerContent = buildProductDisclaimer(product);
 
   if(doseOptionsContainer){
     doseOptionsContainer.innerHTML = '';
@@ -1123,24 +1111,9 @@ function renderProductDetailPage(){
   }
   updateDetailPrice();
 
-  function setActiveTab(tabName){
-    tabs.forEach(function(tab){
-      tab.classList.toggle('active', tab.getAttribute('data-detail-tab') === tabName);
-    });
-    if(!descPanel) return;
-    if(tabName === 'disclaimer'){
-      descPanel.innerHTML = tabContent.disclaimer || '';
-      return;
-    }
-    descPanel.innerHTML = '<p>' + escapeHtml(tabContent[tabName] || '') + '</p>';
+  if(descPanel){
+    descPanel.innerHTML = disclaimerContent || '';
   }
-
-  tabs.forEach(function(tab){
-    tab.addEventListener('click', function(){
-      setActiveTab(tab.getAttribute('data-detail-tab'));
-    });
-  });
-  setActiveTab('description');
 
   function addDetailProductToCart(){
     var qty = qtyEl ? Math.max(0, parseInt(qtyEl.value, 10) || 0) : 0;

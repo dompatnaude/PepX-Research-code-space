@@ -63,7 +63,6 @@ body.dark-mode .auth-form label,
 body.dark-mode .auth-divider,
 body.dark-mode .auth-close,
 body.dark-mode .signed-box p{color:#d7e3fb;}
-body.dark-mode .detail-tab,
 body.dark-mode .dose-option,
 body.dark-mode .sort-select,
 body.dark-mode .shop-search-input,
@@ -125,24 +124,6 @@ body.dark-mode .pill.active{
 	background:linear-gradient(135deg,#1c4379 0%,#1c4379 100%);
 	color:#ffffff;
 	border-color:#1c4379;
-}
-
-body.dark-mode .detail-tab{
-	background:#0b1222;
-	border-color:#2c3f66;
-	color:#eef4ff;
-}
-
-body.dark-mode .detail-tab:hover{
-	background:#14213f;
-	border-color:#3f5f97;
-	color:#ffffff;
-}
-
-body.dark-mode .detail-tab.active{
-	background:linear-gradient(135deg,#1c4379 0%,#1c4379 100%);
-	border-color:#1c4379;
-	color:#ffffff;
 }
 
 body.dark-mode .btn,
@@ -290,6 +271,7 @@ body.dark-mode .policy-links a:hover{
 header{position:sticky;top:0;background:rgba(255,255,255,var(--header-bg-alpha,1));z-index:50;border-bottom:1px solid #eee;transition:background-color .22s linear;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
 .nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;}
 .logo{font-weight:800;letter-spacing:-0.5px;display:inline-flex;align-items:flex-start;}
+.logo-image{display:block;height:56px;width:auto;max-width:280px;object-fit:contain;background:transparent;}
 .logo-mark{display:flex;flex-direction:column;align-items:flex-start;gap:2px;line-height:0.9;position:relative;overflow:hidden;padding-right:8px;}
 .logo-mark::before{display:none;}
 .logo-word{display:inline-flex;align-items:baseline;gap:2px;}
@@ -549,9 +531,7 @@ nav.menu a:hover{color:var(--blue);}
 .qty-stepper input[type=number]{-moz-appearance:textfield;appearance:textfield;}
 .product-detail-qty .qty-stepper{width:120px;}
 .product-detail-tabs-section{border:1px solid #edf0f6;border-radius:28px;padding:28px;background:#fff;box-shadow:0 18px 45px rgba(15,23,42,.05);margin-bottom:34px;}
-.product-detail-tabs{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
-.detail-tab{padding:12px 18px;border-radius:999px;border:1px solid #d7dbe8;background:#fff;color:#111827;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s ease;}
-.detail-tab.active,.detail-tab:hover{background:var(--blue);border-color:var(--blue);color:#fff;}
+.product-disclaimer-caption{margin:0 0 14px;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--blue);}
 .product-detail-tab-panel p{font-size:16px;line-height:1.8;color:#4b5563;max-width:900px;}
 .product-detail-tab-panel h4{font-size:18px;line-height:1.25;letter-spacing:-.3px;margin:16px 0 8px;color:#111827;}
 .product-detail-tab-panel ul{padding-left:22px;display:grid;gap:8px;margin:8px 0 12px;}
@@ -750,6 +730,7 @@ footer .logo .logo-sub{transform:none;}
 
 @media(max-width:720px){
 	.notice-bar{font-size:12px;padding:8px 14px;}
+	.logo-image{height:40px;max-width:220px;}
 	.logo-pep{font-size:24px;}
 	.logo-x{font-size:38px;}
 	.logo-sub{font-size:9px;letter-spacing:.12em;}
@@ -835,8 +816,6 @@ footer .logo .logo-sub{transform:none;}
 	.product-detail-media{min-height:220px;}
 	.product-detail-copy h1{font-size:26px;}
 	.product-detail-price{font-size:22px;}
-	.product-detail-tabs{gap:8px;}
-	.detail-tab{padding:10px 14px;font-size:13px;}
 	.shop-banner h1{font-size:30px;}
 	.stats{grid-template-columns:1fr;}
 	.search-wrap.active input{width:100px;}
@@ -1137,7 +1116,7 @@ header{border-bottom:1px solid #dbe3ef;}
 footer{background:#1f2937;}
 
 .btn{border-radius:8px;}
-.pill,.tag,.detail-tab,.rail-link,.policy-btn,.badge,.sort-select{border-radius:8px;}
+.pill,.tag,.rail-link,.policy-btn,.badge,.sort-select{border-radius:8px;}
 .search-wrap,.menu-dropdown,.shop-hero-modern,.shop-banner{border-radius:10px;}
 
 .product-card,.product-modal-card,.review-form,.tcard,.qa,.account-card,.policy-page-card{border-radius:12px;}
@@ -1170,7 +1149,7 @@ footer{background:#1f2937;}
 
 @media(max-width:430px){
 	.product-detail-actions{grid-template-columns:1fr;}
-	.btn,.icon-btn,.mobile-nav-toggle,.hero-best-arrow,.detail-tab,.pill,.policy-btn{min-height:44px;}
+	.btn,.icon-btn,.mobile-nav-toggle,.hero-best-arrow,.pill,.policy-btn{min-height:44px;}
 	input,select,textarea{font-size:16px;}
 	.search-wrap{min-height:44px;}
 	.search-wrap.active input{width:118px;}
