@@ -31,11 +31,6 @@
           <small class="auth-inline-error" data-error-for="email"></small>
         </label>
         <label>
-          <span>Birthday</span>
-          <input type="date" name="birthday" autocomplete="bday">
-          <small class="auth-inline-error" data-error-for="birthday"></small>
-        </label>
-        <label>
           <span>Password</span>
           <span class="password-input-wrap">
             <input type="password" name="password" autocomplete="new-password" required>
@@ -64,6 +59,11 @@
           </select>
           <small class="auth-inline-error" data-error-for="businessType"></small>
         </label>
+        <label class="auth-page-row" style="align-items:flex-start;gap:10px;">
+          <input type="checkbox" name="age_confirmed_21_plus" id="regAgeConfirmStandalone" style="width:16px;height:16px;margin-top:2px;accent-color:var(--blue);flex-shrink:0;">
+          <span>I confirm that I am <strong>21 years of age or older</strong>.</span>
+        </label>
+        <small class="auth-inline-error" id="regAgeConfirmStandaloneError" data-error-for="age_confirmed_21_plus"></small>
         <p class="auth-page-helper">Your personal data will be used to support your experience throughout this website, to manage access to your account, and for other purposes described in our <a href="privacy-policy.html">Privacy Policy</a>.</p>
         <p class="auth-page-message" id="registerPageMessage" aria-live="polite"></p>
         <div class="auth-page-actions">

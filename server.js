@@ -143,6 +143,8 @@ function mapUserRow(row) {
     googleId: row.google_id || '',
     resetTokenHash: row.reset_token_hash || null,
     resetTokenExpiresAt: row.reset_token_expires_at || null,
+    ageConfirmed21Plus: !!(row.age_confirmed_21_plus),
+    ageConfirmedAt: row.age_confirmed_at || null,
     createdAt: row.created_at || null,
     role: row.role || 'customer'
   };
@@ -211,8 +213,8 @@ async function saveOrUpdateUser(nextUser) {
 
   await pool.query(
     `
-    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role, birthday, business_type)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role, birthday, business_type, age_confirmed_21_plus, age_confirmed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
     `,
     [
       nextUser.id,
@@ -225,6 +227,8 @@ async function saveOrUpdateUser(nextUser) {
       nextUser.role || 'customer',
       toNullableDate(nextUser.birthday),
       String(nextUser.businessType || '').trim() || null,
+      nextUser.ageConfirmed21Plus === true,
+      nextUser.ageConfirmed21Plus === true ? new Date().toISOString() : null,
     ]
   );
 }
@@ -462,10 +466,12 @@ if (googleConfigured) {
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
+          const ageConfirmed = !!(req && req.session && req.session.oauthAgeConfirmed);
           const user = await resolveGoogleAuthUser({
             pool,
             profile,
-            createId: () => crypto.randomUUID()
+            createId: () => crypto.randomUUID(),
+            ageConfirmed
           });
           return done(null, user);
         } catch (error) {
@@ -504,16 +510,23 @@ app.get('/api/version', (req, res) => {
   });
 });
 
+// Pre-OAuth age confirmation — stores flag in session before Google redirect
+app.post('/api/auth/pre-oauth-age-confirm', (req, res) => {
+  const ageConfirmed = (req.body && req.body.ageConfirmed) === true;
+  if (!ageConfirmed) {
+    return res.status(400).json({ error: 'Age confirmation is required.' });
+  }
+  if (req.session) {
+    req.session.oauthAgeConfirmed = true;
+  }
+  req.session.save(function (err) {
+    if (err) return res.status(500).json({ error: 'Session error.' });
+    return res.json({ ok: true });
+  });
+});
+
 app.post('/api/auth/signup', async (req, res) => {
-  const {
-    name,
-    email,
-    password,
-    confirmPassword,
-    institution,
-    businessType,
-    birthday
-  } = req.body || {};
+  const {name, email, password, confirmPassword, institution, businessType, age_confirmed_21_plus} = req.body || {};
   const normalizedEmail = normalizeEmail(email);
   const selectedBusinessType = String(businessType || institution || '').trim();
   const displayName = String(name || '').trim() || deriveDisplayNameFromEmail(normalizedEmail);
@@ -530,6 +543,10 @@ app.post('/api/auth/signup', async (req, res) => {
     return res.status(400).json({ error: 'Passwords do not match.' });
   }
 
+  if (age_confirmed_21_plus !== true) {
+    return res.status(400).json({ error: 'You must confirm that you are 21 years of age or older.' });
+  }
+
   if (await findUserByEmail(normalizedEmail)) {
     return res.status(400).json({ error: 'Unable to create account with the provided details.' });
   }
@@ -541,7 +558,8 @@ app.post('/api/auth/signup', async (req, res) => {
     email: normalizedEmail,
     institution: selectedBusinessType,
     businessType: selectedBusinessType,
-    birthday: toNullableDate(birthday),
+    birthday: null,
+    ageConfirmed21Plus: true,
     provider: 'Email',
     passwordHash,
     googleId: ''
@@ -715,7 +733,10 @@ app.get('/auth/google/callback', (req, res, next) => {
   }
 
   const returnTo = sanitizeReturnPath(req.session && req.session.oauthReturnTo) || '/account.html';
-  if (req.session) delete req.session.oauthReturnTo;
+  if (req.session) {
+    delete req.session.oauthReturnTo;
+    delete req.session.oauthAgeConfirmed;
+  }
 
   return passport.authenticate('google', function (err, user, info) {
     if (err) {

@@ -59,6 +59,7 @@ async function safelyLinkOrCreateUser(client, input) {
   var displayName = input.displayName;
   var avatarUrl = input.avatarUrl;
   var newUserId = input.newUserId;
+  var ageConfirmed = !!input.ageConfirmed;
 
   var byGoogle = await client.query('SELECT * FROM users WHERE google_id = $1 FOR UPDATE', [googleId]);
   if (byGoogle.rows[0]) {
@@ -79,8 +80,13 @@ async function safelyLinkOrCreateUser(client, input) {
     return mapUserRow(updated.rows[0]);
   }
 
+  // Brand-new user — require age confirmation
+  if (!ageConfirmed) {
+    throw new OAuthResolutionError('google-age-required', 'You must confirm that you are 21 years of age or older to create an account.');
+  }
+
   var created = await client.query(
-    'INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, google_avatar_url, google_email_verified_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING *',
+    'INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, google_avatar_url, google_email_verified_at, age_confirmed_21_plus, age_confirmed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), TRUE, NOW()) RETURNING *',
     [
       newUserId,
       displayName,
@@ -151,6 +157,7 @@ async function resolveGoogleAuthUser(options) {
   var displayName = String(profile && profile.displayName || '').trim() || 'Google User';
   var avatarUrl = String(profile && profile.photos && profile.photos[0] && profile.photos[0].value || '').trim();
   var newUserId = createId();
+  var ageConfirmed = !!options.ageConfirmed;
 
   var client = await pool.connect();
   try {
@@ -160,7 +167,8 @@ async function resolveGoogleAuthUser(options) {
       verifiedEmail: verifiedEmail,
       displayName: displayName,
       avatarUrl: avatarUrl,
-      newUserId: newUserId
+      newUserId: newUserId,
+      ageConfirmed: ageConfirmed
     });
     await client.query('COMMIT');
     return user;

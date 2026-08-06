@@ -80,18 +80,38 @@
   function initGoogleButtons(returnTo) {
     request('/api/auth/config', { method: 'GET' }).then(function (data) {
       if (!data || !data.googleConfigured) return;
-      var href = '/auth/google?next=' + encodeURIComponent(returnTo);
+      var loginHref = '/auth/google?next=' + encodeURIComponent(returnTo);
       var loginBtn = document.getElementById('loginGoogleBtn');
       var registerBtn = document.getElementById('registerGoogleBtn');
       var loginDivider = document.getElementById('loginGoogleDivider');
       var registerDivider = document.getElementById('registerGoogleDivider');
+      var registerAgeNote = document.getElementById('registerGoogleAgeNote');
       if (loginBtn) {
         loginBtn.hidden = false;
-        loginBtn.addEventListener('click', function () { window.location.href = href; });
+        loginBtn.addEventListener('click', function () { window.location.href = loginHref; });
       }
       if (registerBtn) {
         registerBtn.hidden = false;
-        registerBtn.addEventListener('click', function () { window.location.href = href; });
+        registerBtn.addEventListener('click', function () {
+          // Require 21+ confirmation before Google register redirect
+          var ageBox = document.getElementById('regAgeConfirm') || document.querySelector('[name="age_confirmed_21_plus"]');
+          if (!ageBox || !ageBox.checked) {
+            if (registerAgeNote) registerAgeNote.style.display = '';
+            if (ageBox) ageBox.focus();
+            return;
+          }
+          if (registerAgeNote) registerAgeNote.style.display = 'none';
+          // Store age confirmation in session before starting OAuth
+          request('/api/auth/pre-oauth-age-confirm', {
+            method: 'POST',
+            body: JSON.stringify({ ageConfirmed: true })
+          }).then(function () {
+            window.location.href = loginHref;
+          }).catch(function () {
+            // Pre-confirm failed — proceed anyway; server will enforce
+            window.location.href = loginHref;
+          });
+        });
       }
       if (loginDivider) loginDivider.hidden = false;
       if (registerDivider) registerDivider.hidden = false;
@@ -152,10 +172,10 @@
 
       var fd = new FormData(form);
       var email = String(fd.get('email') || '').trim();
-      var birthday = String(fd.get('birthday') || '').trim();
       var password = String(fd.get('password') || '');
       var confirmPassword = String(fd.get('confirmPassword') || '');
       var businessType = String(fd.get('businessType') || '').trim();
+      var ageConfirmed = fd.get('age_confirmed_21_plus') === 'on' || fd.get('age_confirmed_21_plus') === 'true';
       var hasError = false;
 
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -174,16 +194,22 @@
         setFieldError(form, 'businessType', 'Select a business type.');
         hasError = true;
       }
+      if (!ageConfirmed) {
+        setFieldError(form, 'age_confirmed_21_plus', 'You must confirm that you are 21 years of age or older to create an account.');
+        var ageEl = form.querySelector('[data-error-for="age_confirmed_21_plus"]') || form.querySelector('#regAgeConfirmError') || form.querySelector('#regAgeConfirmStandaloneError');
+        if (ageEl) { ageEl.focus ? ageEl.focus() : null; }
+        hasError = true;
+      }
       if (hasError) return;
 
       request('/api/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
           email: email,
-          birthday: birthday || null,
           password: password,
           confirmPassword: confirmPassword,
-          businessType: businessType
+          businessType: businessType,
+          age_confirmed_21_plus: true
         })
       }).then(function () {
         window.location.href = returnTo;

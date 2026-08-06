@@ -152,13 +152,23 @@ test('creates a new Google user when no account exists', async () => {
   const user = await resolveGoogleAuthUser({
     pool,
     profile: googleProfile(),
-    createId: () => 'user-new'
+    createId: () => 'user-new',
+    ageConfirmed: true
   });
 
   assert.equal(user.id, 'user-new');
   assert.equal(user.email, 'pat@example.com');
   assert.equal(user.googleId, 'google-123');
   assert.equal(pool.state.users.length, 1);
+});
+
+test('rejects new Google user without age confirmation', async () => {
+  const pool = createMockPool([]);
+  await assert.rejects(
+    () => resolveGoogleAuthUser({ pool, profile: googleProfile(), createId: () => 'u-blocked' }),
+    (err) => err.code === 'google-age-required'
+  );
+  assert.equal(pool.state.users.length, 0);
 });
 
 test('logs in an existing user by google_id', async () => {
@@ -243,7 +253,8 @@ test('prevents duplicate user creation during unique-race conflicts', async () =
   const user = await resolveGoogleAuthUser({
     pool,
     profile: googleProfile(),
-    createId: () => 'u-new'
+    createId: () => 'u-new',
+    ageConfirmed: true
   });
 
   assert.equal(user.id, 'u-race');
