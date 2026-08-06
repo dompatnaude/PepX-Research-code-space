@@ -422,6 +422,15 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Prevent CDN/browser caching of HTML pages so the auth gate is always re-evaluated
+app.use(function noStorHtml(req, res, next) {
+  const p = req.path;
+  if (p === '/' || p.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  }
+  next();
+});
+
 passport.serializeUser((user, done) => {
   done(null, user.id);
 });
@@ -484,6 +493,15 @@ async function requireAuth(req, res, next) {
 
 app.get('/api/auth/config', (req, res) => {
   return res.json({ googleConfigured });
+});
+
+// Version endpoint — useful for confirming which commit is live on Vercel
+app.get('/api/version', (req, res) => {
+  return res.json({
+    sha: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_SHA || 'dev',
+    env: process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
+    ts: new Date().toISOString()
+  });
 });
 
 app.post('/api/auth/signup', async (req, res) => {
