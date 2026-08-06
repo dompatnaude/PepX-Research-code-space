@@ -40,8 +40,6 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
 const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
 const PUBLIC_HTML_PATHS = new Set([
-  '/',
-  '/index.html',
   '/auth.html',
   '/login.html',
   '/register.html',
@@ -917,7 +915,10 @@ app.get(Object.keys(PAGE_ALIASES), (req, res) => {
 app.get(['/', '/index.html'], async (req, res, next) => {
   try {
     const user = await hydrateAuthenticatedUser(req);
-    const fileName = user ? 'index.html' : 'public-index.html';
+    const authenticated = !!(user);
+    const fileName = authenticated ? 'storefront.html' : 'auth.html';
+    console.log('[PAGE]', req.path, { authenticated, file: fileName });
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
     return res.sendFile(path.join(__dirname, fileName));
   } catch (error) {
     return next(error);
@@ -932,6 +933,12 @@ app.use(async (req, res, next) => {
 
     if (req.path === '/script.js' && !(await hydrateAuthenticatedUser(req))) {
       return res.status(404).end();
+    }
+
+    if (req.path === '/storefront.html' && !(await hydrateAuthenticatedUser(req))) {
+      console.log('[BLOCKED] storefront.html served to unauthenticated request');
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      return res.redirect(buildLoginRedirectTarget(req));
     }
 
     if (req.path.startsWith('/assets/products/') && !(await hydrateAuthenticatedUser(req))) {
@@ -969,7 +976,10 @@ app.use(express.static(path.join(__dirname)));
 app.get('*', async (req, res, next) => {
   try {
     const user = await hydrateAuthenticatedUser(req);
-    const fileName = user ? 'index.html' : 'public-index.html';
+    const authenticated = !!(user);
+    const fileName = authenticated ? 'storefront.html' : 'auth.html';
+    console.log('[PAGE:fallback]', req.path, { authenticated, file: fileName });
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
     return res.sendFile(path.join(__dirname, fileName));
   } catch (error) {
     return next(error);

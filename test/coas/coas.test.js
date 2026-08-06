@@ -326,7 +326,7 @@ test('draft COA can be deleted', () => {
 test('homepage button text is View COAs', async () => {
   const fs = require('fs');
   const path = require('path');
-  const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../../storefront.html'), 'utf8');
   assert.ok(html.includes('View COAs'), 'Homepage must contain "View COAs" button text');
   assert.ok(!html.includes('"#about" class="btn ghost">Learn More'), 'Old "Learn More" button must be gone');
 });
@@ -334,7 +334,7 @@ test('homepage button text is View COAs', async () => {
 test('homepage COA button links to coas.html', async () => {
   const fs = require('fs');
   const path = require('path');
-  const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../../storefront.html'), 'utf8');
   assert.ok(html.includes('href="coas.html"'), 'Homepage button must link to coas.html');
 });
 
