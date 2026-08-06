@@ -1,13 +1,40 @@
 {
   "version": 2,
-  "rewrites": [
+  "builds": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index.js"
+      "src": "api/index.js",
+      "use": "@vercel/node",
+      "config": { "includeFiles": ["**/*.html", "**/*.js", "**/*.css", "assets/**", "db/**", "routes/**", "services/**", "lib/**", "middleware/**"] }
     },
     {
-      "source": "/auth/(.*)",
-      "destination": "/api/index.js"
-    }
+      "src": "login.html",
+      "use": "@vercel/static"
+    },
+    { "src": "register.html", "use": "@vercel/static" },
+    { "src": "forgot-password.html", "use": "@vercel/static" },
+    { "src": "reset-password.html", "use": "@vercel/static" },
+    { "src": "privacy-policy.html", "use": "@vercel/static" },
+    { "src": "terms-of-service.html", "use": "@vercel/static" },
+    { "src": "terms-conditions.html", "use": "@vercel/static" },
+    { "src": "refund-policy.html", "use": "@vercel/static" },
+    { "src": "shipping-policy.html", "use": "@vercel/static" },
+    { "src": "styles.css", "use": "@vercel/static" },
+    { "src": "auth-page.js", "use": "@vercel/static" },
+    { "src": "assets/logo-pepx-navbar.png", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/login.html", "dest": "/login.html" },
+    { "src": "/register.html", "dest": "/register.html" },
+    { "src": "/forgot-password.html", "dest": "/forgot-password.html" },
+    { "src": "/reset-password.html", "dest": "/reset-password.html" },
+    { "src": "/privacy-policy.html", "dest": "/privacy-policy.html" },
+    { "src": "/terms-of-service.html", "dest": "/terms-of-service.html" },
+    { "src": "/terms-conditions.html", "dest": "/terms-conditions.html" },
+    { "src": "/refund-policy.html", "dest": "/refund-policy.html" },
+    { "src": "/shipping-policy.html", "dest": "/shipping-policy.html" },
+    { "src": "/styles.css", "dest": "/styles.css" },
+    { "src": "/auth-page.js", "dest": "/auth-page.js" },
+    { "src": "/assets/logo-pepx-navbar.png", "dest": "/assets/logo-pepx-navbar.png" },
+    { "src": "/(.*)", "dest": "/api/index.js" }
   ]
 }
