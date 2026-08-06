@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In | PepX Research Chemicals</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* auth.html-specific additions — do not affect other pages */
+    .auth-brand{text-align:center;margin-bottom:22px;}
+    .auth-brand img{height:36px;width:auto;}
+    .auth-tabs{display:flex;gap:0;border-bottom:2px solid #e5e7ef;margin-bottom:20px;}
+    .auth-tab-btn{flex:1;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;padding:10px 0 12px;font:700 15px/1 inherit;color:#64748b;cursor:pointer;transition:color .15s,border-color .15s;}
+    .auth-tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+    .auth-tab-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:4px;}
+    .auth-panel{animation:auth-fade .18s ease;}
+    @keyframes auth-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    /* Compact card on unified page — slightly wider to fit more register fields */
+    .auth-unified .auth-page-card{width:min(100%,460px);}
+  </style>
+</head>
+<body class="auth-page auth-unified" data-auth-page="auth">
+
+  <main class="auth-page-shell">
+    <div class="auth-brand">
+      <a href="index.html" aria-label="PepX Research Chemicals home">
+        <img src="assets/logo-pepx-navbar.png" alt="PepX Research Chemicals">
+      </a>
+    </div>
+
+    <section class="auth-page-card">
+
+      <!-- Tab row -->
+      <div class="auth-tabs" role="tablist" aria-label="Authentication options">
+        <button type="button" class="auth-tab-btn active" data-auth-tab="login"
+                role="tab" aria-selected="true" aria-controls="authLoginPanel" id="tabLogin">Login</button>
+        <button type="button" class="auth-tab-btn" data-auth-tab="register"
+                role="tab" aria-selected="false" aria-controls="authRegisterPanel" id="tabRegister">Register</button>
+      </div>
+
+      <!-- ── LOGIN PANEL ──────────────────────────────────────── -->
+      <div id="authLoginPanel" class="auth-panel" role="tabpanel" aria-labelledby="tabLogin">
+        <p class="auth-page-switch">Don't have an account?
+          <a href="#" data-auth-tab-link="register">Register</a>
+        </p>
+        <form class="auth-page-form" id="loginFormPage" novalidate>
+          <input type="hidden" name="returnTo" id="loginReturnTo">
+          <label>
+            <span>Email Address</span>
+            <input type="email" name="email" autocomplete="email" required>
+            <small class="auth-inline-error" data-error-for="email"></small>
+          </label>
+          <label>
+            <span>Password</span>
+            <span class="password-input-wrap">
+              <input type="password" name="password" autocomplete="current-password" required>
+              <button type="button" class="password-toggle" data-toggle-password>Show</button>
+            </span>
+            <small class="auth-inline-error" data-error-for="password"></small>
+          </label>
+          <div class="auth-page-row">
+            <label><input type="checkbox" name="rememberMe" checked> <span>Remember Me</span></label>
+            <a class="auth-inline-link" href="forgot-password.html">Forgot Password?</a>
+          </div>
+          <p class="auth-page-message" id="loginPageMessage" aria-live="polite"></p>
+          <div class="auth-page-actions">
+            <button type="submit" class="btn primary">Login</button>
+          </div>
+        </form>
+        <div class="auth-page-divider" id="loginGoogleDivider" hidden><span>or</span></div>
+        <button type="button" class="google-auth-btn" id="loginGoogleBtn" hidden>
+          <span class="google-auth-icon">
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+              <path fill="#EA4335" d="M12 10.2v3.9h5.4c-.24 1.25-.95 2.3-2.02 3.01l3.26 2.53c1.9-1.75 2.99-4.33 2.99-7.39 0-.71-.06-1.39-.2-2.05H12z"></path>
+              <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.63-2.43l-3.26-2.53c-.9.61-2.05.98-3.37.98-2.59 0-4.78-1.75-5.56-4.11l-3.37 2.6C4.72 19.83 8.1 22 12 22z"></path>
+              <path fill="#4A90E2" d="M6.44 13.91A5.98 5.98 0 0 1 6.12 12c0-.66.12-1.31.32-1.91l-3.37-2.6A9.94 9.94 0 0 0 2 12c0 1.6.38 3.11 1.07 4.51l3.37-2.6z"></path>
+              <path fill="#FBBC05" d="M12 5.98c1.46 0 2.78.5 3.82 1.49l2.86-2.86C16.96 2.98 14.7 2 12 2 8.1 2 4.72 4.17 3.07 7.49l3.37 2.6c.78-2.36 2.97-4.11 5.56-4.11z"></path>
+            </svg>
+          </span>
+          <span>Continue with Google</span>
+        </button>
+      </div>
+
+      <!-- ── REGISTER PANEL ────────────────────────────────────── -->
+      <div id="authRegisterPanel" class="auth-panel" role="tabpanel" aria-labelledby="tabRegister" hidden>
+        <p class="auth-page-switch">Already have an account?
+          <a href="#" data-auth-tab-link="login">Sign In</a>
+        </p>
+        <form class="auth-page-form" id="registerFormPage" novalidate>
+          <input type="hidden" name="returnTo" id="registerReturnTo">
+          <label>
+            <span>Email Address</span>
+            <input type="email" name="email" autocomplete="email" required>
+            <small class="auth-inline-error" data-error-for="email"></small>
+          </label>
+          <label>
+            <span>Birthday</span>
+            <input type="date" name="birthday" autocomplete="bday">
+            <small class="auth-inline-error" data-error-for="birthday"></small>
+          </label>
+          <label>
+            <span>Password</span>
+            <span class="password-input-wrap">
+              <input type="password" name="password" autocomplete="new-password" required>
+              <button type="button" class="password-toggle" data-toggle-password>Show</button>
+            </span>
+            <small class="auth-inline-error" data-error-for="password"></small>
+          </label>
+          <label>
+            <span>Confirm Password</span>
+            <span class="password-input-wrap">
+              <input type="password" name="confirmPassword" autocomplete="new-password" required>
+              <button type="button" class="password-toggle" data-toggle-password>Show</button>
+            </span>
+            <small class="auth-inline-error" data-error-for="confirmPassword"></small>
+          </label>
+          <label>
+            <span>Business Type</span>
+            <select name="businessType" required>
+              <option value="">Select business type...</option>
+              <option value="Academic or University Laboratory">Academic or University Laboratory</option>
+              <option value="Biotechnology Company">Biotechnology Company</option>
+              <option value="Pharmaceutical Company">Pharmaceutical Company</option>
+              <option value="Contract Research Organization">Contract Research Organization</option>
+              <option value="Independent Research Organization">Independent Research Organization</option>
+              <option value="Other Qualified Research Business">Other Qualified Research Business</option>
+            </select>
+            <small class="auth-inline-error" data-error-for="businessType"></small>
+          </label>
+          <p class="auth-page-helper">Your personal data will be used to support your experience throughout this website and for other purposes described in our <a href="privacy-policy.html">Privacy Policy</a>.</p>
+          <p class="auth-page-message" id="registerPageMessage" aria-live="polite"></p>
+          <div class="auth-page-actions">
+            <button type="submit" class="btn primary">Register</button>
+          </div>
+        </form>
+        <div class="auth-page-divider" id="registerGoogleDivider" hidden><span>or</span></div>
+        <button type="button" class="google-auth-btn" id="registerGoogleBtn" hidden>
+          <span class="google-auth-icon">
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+              <path fill="#EA4335" d="M12 10.2v3.9h5.4c-.24 1.25-.95 2.3-2.02 3.01l3.26 2.53c1.9-1.75 2.99-4.33 2.99-7.39 0-.71-.06-1.39-.2-2.05H12z"></path>
+              <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.63-2.43l-3.26-2.53c-.9.61-2.05.98-3.37.98-2.59 0-4.78-1.75-5.56-4.11l-3.37 2.6C4.72 19.83 8.1 22 12 22z"></path>
+              <path fill="#4A90E2" d="M6.44 13.91A5.98 5.98 0 0 1 6.12 12c0-.66.12-1.31.32-1.91l-3.37-2.6A9.94 9.94 0 0 0 2 12c0 1.6.38 3.11 1.07 4.51l3.37-2.6z"></path>
+              <path fill="#FBBC05" d="M12 5.98c1.46 0 2.78.5 3.82 1.49l2.86-2.86C16.96 2.98 14.7 2 12 2 8.1 2 4.72 4.17 3.07 7.49l3.37 2.6c.78-2.36 2.97-4.11 5.56-4.11z"></path>
+            </svg>
+          </span>
+          <span>Continue with Google</span>
+        </button>
+      </div>
+
+    </section>
+
+    <p style="text-align:center;font-size:12px;color:#94a3b8;margin-top:18px;">
+      For research use only &mdash; Not for human consumption
+    </p>
+  </main>
+
+  <script src="auth-page.js"></script>
+</body>
+</html>

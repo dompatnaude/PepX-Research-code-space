@@ -289,4 +289,62 @@
   initRegister(returnTo);
   initForgotPassword();
   initResetPassword();
+
+  // Unified auth page (auth.html) — tab switching between login and register
+  if (authPage === 'auth') {
+    initAuthTabs();
+  }
+
+  function setAuthView(view) {
+    var loginPanel = document.getElementById('authLoginPanel');
+    var registerPanel = document.getElementById('authRegisterPanel');
+    var loginTab = document.querySelector('[data-auth-tab="login"]');
+    var registerTab = document.querySelector('[data-auth-tab="register"]');
+    var isRegister = view === 'register';
+
+    if (loginPanel) loginPanel.hidden = isRegister;
+    if (registerPanel) registerPanel.hidden = !isRegister;
+    if (loginTab) {
+      loginTab.classList.toggle('active', !isRegister);
+      loginTab.setAttribute('aria-selected', String(!isRegister));
+    }
+    if (registerTab) {
+      registerTab.classList.toggle('active', isRegister);
+      registerTab.setAttribute('aria-selected', String(isRegister));
+    }
+  }
+
+  function initAuthTabs() {
+    // Honour ?view=register on initial load
+    var view = qs('view') || 'login';
+    setAuthView(view);
+
+    // Tab buttons
+    document.querySelectorAll('[data-auth-tab]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var target = btn.getAttribute('data-auth-tab');
+        setAuthView(target);
+        // Update URL query so a page refresh stays on the right tab
+        try {
+          var url = new URL(window.location.href);
+          url.searchParams.set('view', target);
+          window.history.replaceState({}, '', url.toString());
+        } catch (e) {}
+      });
+    });
+
+    // "Don't have an account? Register" / "Already have an account? Login" links
+    document.querySelectorAll('[data-auth-tab-link]').forEach(function (link) {
+      link.addEventListener('click', function (e) {
+        e.preventDefault();
+        var target = link.getAttribute('data-auth-tab-link');
+        setAuthView(target);
+        try {
+          var url = new URL(window.location.href);
+          url.searchParams.set('view', target);
+          window.history.replaceState({}, '', url.toString());
+        } catch (e) {}
+      });
+    });
+  }
 })();

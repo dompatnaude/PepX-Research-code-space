@@ -42,15 +42,16 @@ const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
 const PUBLIC_HTML_PATHS = new Set([
   '/',
   '/index.html',
+  '/auth.html',
   '/login.html',
   '/register.html',
   '/forgot-password.html',
   '/reset-password.html',
   '/privacy-policy.html',
-  '/terms-of-service.html',
-  '/coas.html'
+  '/terms-of-service.html'
 ]);
 const AUTH_HTML_PATHS = new Set([
+  '/auth.html',
   '/login.html',
   '/register.html',
   '/forgot-password.html',
@@ -58,6 +59,7 @@ const AUTH_HTML_PATHS = new Set([
 ]);
 const PAGE_ALIASES = {
   '/home': '/index.html',
+  '/auth': '/auth.html',
   '/login': '/login.html',
   '/register': '/register.html',
   '/forgot-password': '/forgot-password.html',
@@ -93,10 +95,10 @@ function sanitizeReturnTo(value, fallback) {
 }
 
 function buildLoginRedirectTarget(req) {
-  const safeReturnTo = sanitizeReturnTo(req.originalUrl, '/shop.html');
+  const safeReturnTo = sanitizeReturnTo(req.originalUrl, '/index.html');
   const params = new URLSearchParams();
   params.set('returnTo', safeReturnTo);
-  return '/login.html?' + params.toString();
+  return '/auth.html?' + params.toString();
 }
 
 function applyPersistentSession(req) {
@@ -860,7 +862,7 @@ app.use('/api/admin', createAdminVariantsRouter(requireAuth));
 app.use('/api/admin', createAdminPromosRouter(requireAuth));
 app.use('/api/admin', createAdminCoasRouter(requireAuth));
 app.use("/api/admin", createAdminRouter(requireAuth));
-app.use('/api/coas', createCoasRouter());
+app.use('/api/coas', requireApiAuth, createCoasRouter());
 
 app.use('/api/*', (req, res) => {
   return res.status(404).json({ error: 'API endpoint not found' });
