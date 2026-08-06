@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Certificates of Analysis | PepX Research Chemicals</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* COA-page-only overrides — does not affect shop or other pages */
+    .coa-card{display:flex;flex-direction:column;background:#fff;border:1px solid #e2eaf7;border-radius:14px;overflow:hidden;transition:box-shadow .15s,border-color .15s;}
+    .coa-card:hover{box-shadow:0 4px 18px rgba(15,23,42,.1);border-color:#c4d4f0;}
+    .coa-card-img{position:relative;width:100%;padding-top:75%;background:#f4f6fa;overflow:hidden;}
+    .coa-card-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:.5rem;}
+    .coa-card-img .coa-pdf-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:#64748b;}
+    .coa-pdf-icon{width:48px;height:48px;opacity:.55;}
+    .coa-card-body{padding:1rem 1rem .9rem;display:flex;flex-direction:column;gap:.3rem;flex:1;}
+    .coa-product-name{font-size:1rem;font-weight:700;color:#0f172a;line-height:1.25;margin:0;}
+    .coa-variant{font-size:.82rem;color:#475069;font-weight:600;}
+    .coa-meta{font-size:.8rem;color:#64748b;margin-top:.2rem;display:flex;flex-direction:column;gap:.15rem;}
+    .coa-meta span{display:flex;gap:.3rem;}
+    .coa-meta .label{font-weight:600;color:#475069;}
+    .coa-card-actions{padding:.8rem 1rem;border-top:1px solid #e8edf5;display:flex;}
+    .coa-card-actions a{flex:1;text-align:center;}
+    .coa-empty{text-align:center;padding:4rem 1rem;color:#64748b;}
+    .coa-empty h3{font-size:1.2rem;margin:0 0 .5rem;}
+    .coa-empty p{margin:.25rem 0;}
+    .coa-empty button{margin-top:1rem;}
+    .coa-badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .55rem;border-radius:999px;font-size:.72rem;font-weight:700;letter-spacing:.03em;}
+    .coa-badge.pdf{background:#fee2e2;color:#991b1b;}
+    .coa-badge.image{background:#dbeafe;color:#1e40af;}
+    .coa-badge-wrap{position:absolute;top:.55rem;left:.55rem;z-index:1;}
+
+    /* COA detail modal */
+    .coa-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:1.5rem;z-index:9999;overflow-y:auto;}
+    .coa-modal-card{width:min(800px,100%);background:#fff;border-radius:14px;border:1px solid #d8deea;box-shadow:0 20px 60px rgba(15,23,42,.22);overflow:hidden;}
+    .coa-modal-head{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.2rem;border-bottom:1px solid #e8ecf4;}
+    .coa-modal-body{display:grid;grid-template-columns:1.2fr 1fr;gap:1.2rem;padding:1.2rem;}
+    .coa-modal-preview{border-radius:10px;overflow:hidden;border:1px solid #e2eaf7;background:#f4f6fa;display:flex;align-items:center;justify-content:center;min-height:280px;}
+    .coa-modal-preview img{max-width:100%;max-height:400px;object-fit:contain;}
+    .coa-modal-preview iframe{width:100%;height:400px;border:none;}
+    .coa-modal-preview .coa-pdf-placeholder{display:flex;flex-direction:column;align-items:center;gap:.6rem;padding:2rem;color:#64748b;}
+    .coa-modal-meta{display:flex;flex-direction:column;gap:.5rem;}
+    .coa-modal-meta h2{margin:0 0 .3rem;font-size:1.15rem;color:#0f172a;}
+    .coa-detail-row{display:grid;grid-template-columns:6.5rem 1fr;gap:.25rem .5rem;font-size:.88rem;border-bottom:1px solid #f0f4fa;padding:.35rem 0;}
+    .coa-detail-row:last-child{border-bottom:none;}
+    .coa-detail-row .k{font-weight:700;color:#475069;}
+    .coa-modal-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.75rem;}
+    .coa-back-link{display:inline-flex;align-items:center;gap:.3rem;color:#3f51d6;font-size:.9rem;font-weight:600;text-decoration:none;margin-bottom:.6rem;}
+    .coa-back-link:hover{text-decoration:underline;}
+    @media (max-width:640px){
+      .coa-modal-body{grid-template-columns:1fr;}
+    }
+
+    /* PDF preview inside card */
+    .coa-pdf-preview{position:absolute;inset:0;overflow:hidden;background:#f4f6fa;display:flex;align-items:center;justify-content:center;}
+    .coa-pdf-rendered{width:100%;height:100%;object-fit:contain;display:block;}
+    .coa-pdf-load-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;width:100%;height:100%;color:#94a3b8;}
+    .coa-pdf-spinner{width:22px;height:22px;border:3px solid #e2eaf7;border-top-color:#3f51d6;border-radius:50%;animation:coa-spin .7s linear infinite;flex-shrink:0;}
+    @keyframes coa-spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="notice-bar">For research use only, Not for human consumption.</div>
+  <header><div class="container nav">
+    <a href="index.html" class="logo" aria-label="PepX Research Chemicals"><img src="assets/logo-pepx-navbar.png" alt="PepX Research Chemicals" class="logo-image"></a>
+    <nav class="menu" id="site-menu">
+      <a href="index.html">Home</a>
+      <div class="menu-item"><a href="shop.html" class="menu-link">Shop <span class="menu-caret">&#9660;</span></a><div class="menu-dropdown"><a href="shop.html?category=all">All Products</a><a href="shop.html?category=Recovery">Recovery</a><a href="shop.html?category=Metabolic">Metabolic</a><a href="shop.html?category=Repair">Repair</a><a href="shop.html?category=Growth">Growth</a><a href="shop.html?category=Cellular">Cellular</a><a href="shop.html?category=Neuro">Neuro</a></div></div>
+      <a href="coas.html" aria-current="page">COAs</a>
+      <a href="account.html">My Account</a>
+      <a href="index.html#faq">FAQ</a>
+      <a href="index.html#about">About</a>
+      <a href="mailto:pepxaminos@gmail.com?subject=PepX%20Research%20Inquiry">Contact</a>
+    </nav>
+    <div class="icons">
+      <button type="button" id="mobileMenuToggle" class="icon-btn mobile-nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+      </button>
+    </div>
+  </div></header>
+
+  <main class="container page-shop">
+    <section class="shop-banner" aria-label="COA page banner">
+      <h1>Certificates of Analysis</h1>
+      <p>Browse available third-party laboratory reports by product and batch.</p>
+    </section>
+
+    <section class="section section-shop">
+      <div class="shop-layout">
+        <aside class="shop-categories" aria-label="Filter COAs">
+          <h3>Filter</h3>
+          <div id="coaProductFilter" class="pill-list pill-list-vertical">
+            <button type="button" class="pill active" data-product="">All Products</button>
+          </div>
+        </aside>
+
+        <div class="shop-results">
+          <div class="shop-tools">
+            <div class="shop-search-panel">
+              <label for="coaSearch">Search COAs</label>
+              <input type="text" id="coaSearch" class="shop-search-input" placeholder="Search by product, batch, or lab name">
+            </div>
+          </div>
+
+          <div id="coaStatusMsg" role="status" aria-live="polite" class="muted" style="font-size:.9rem;margin-bottom:.5rem;"></div>
+          <div class="grid grid-shop" id="coaGrid" aria-label="COA cards"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer><div class="container">
+    <div class="copy">&copy; 2026 PepX Research Chemicals. For research use only. Not for human consumption.</div>
+    <div class="policy-links" aria-label="Footer Policies">
+      <a class="policy-btn" href="shipping-policy.html">Shipping Policy</a>
+      <a class="policy-btn" href="privacy-policy.html">Privacy Policy</a>
+      <a class="policy-btn" href="refund-policy.html">Refund Policy</a>
+      <a class="policy-btn" href="terms-conditions.html">Terms &amp; Conditions</a>
+      <a class="policy-btn" href="terms-of-service.html">Terms of Service</a>
+    </div>
+  </div></footer>
+
+  <!-- COA detail modal -->
+  <div class="coa-modal-backdrop hidden" id="coaModal" role="dialog" aria-modal="true" aria-labelledby="coaModalTitle">
+    <div class="coa-modal-card">
+      <div class="coa-modal-head">
+        <h2 id="coaModalTitle" style="margin:0;font-size:1.05rem;">Certificate of Analysis</h2>
+        <button type="button" id="coaModalClose" class="link-btn" aria-label="Close">Close &times;</button>
+      </div>
+      <div class="coa-modal-body" id="coaModalBody">
+        <div class="coa-modal-preview" id="coaModalPreview"></div>
+        <div class="coa-modal-meta" id="coaModalMeta"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <!-- PDF.js for first-page preview rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+  <script>
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+  <script src="coas.js"></script>
+</body>
+</html>

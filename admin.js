@@ -20,6 +20,12 @@
     promoSummary: null,
     editingPromoId: null,
     orderDetail: null,
+    coas: [],
+    coaSearch: '',
+    coaStatusFilter: '',
+    editingCoaId: null,
+    coaProducts: [],
+    coaVariants: [],
     shipping: {
       shipmentId: null,
       selectedRateId: null,
@@ -64,9 +70,11 @@
   function syncModalBodyLock() {
     var productWrap = $('productModalWrap');
     var promoWrap = $('promoModalWrap');
+    var coaWrap = $('coaModalWrap');
     var productOpen = !!(productWrap && !productWrap.classList.contains('hidden'));
     var promoOpen = !!(promoWrap && !promoWrap.classList.contains('hidden'));
-    document.body.classList.toggle('modal-open', productOpen || promoOpen);
+    var coaOpen = !!(coaWrap && !coaWrap.classList.contains('hidden'));
+    document.body.classList.toggle('modal-open', productOpen || promoOpen || coaOpen);
   }
 
   // Thin API wrapper. Sends cookies; throws Error with .status on non-2xx.
@@ -1097,7 +1105,7 @@
   }
 
   function switchTab(tab) {
-    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos') {
+    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos' || tab === 'coas') {
       state.tab = tab;
     } else {
       state.tab = 'home';
@@ -1112,12 +1120,15 @@
     if ($('ordersSection')) $('ordersSection').classList.toggle('hidden', state.tab !== 'orders');
     if ($('productsSection')) $('productsSection').classList.toggle('hidden', state.tab !== 'products');
     if ($('promosSection')) $('promosSection').classList.toggle('hidden', state.tab !== 'promos');
+    if ($('coasSection')) $('coasSection').classList.toggle('hidden', state.tab !== 'coas');
     if (state.tab === 'home') {
       loadSummary();
     } else if (state.tab === 'products') {
       loadProducts();
     } else if (state.tab === 'promos') {
       loadPromos();
+    } else if (state.tab === 'coas') {
+      loadCoas();
     } else {
       loadOrders();
     }
@@ -1499,6 +1510,335 @@
       .catch(function (err) { toast(err.message || 'Failed to update status'); });
   }
 
+  // ---- COA admin functions -----------------------------------------
+
+  function coaStatusBadge(status) {
+    var map = { draft: 'gray', published: 'green', archived: 'amber' };
+    var cls = map[status] || 'gray';
+    return '<span class="badge ' + cls + '">' + esc(String(status || 'draft')) + '</span>';
+  }
+
+  function loadCoas() {
+    var params = new URLSearchParams();
+    if (state.coaSearch) params.set('search', state.coaSearch);
+    if (state.coaStatusFilter) params.set('status', state.coaStatusFilter);
+    api('/api/admin/coas?' + params.toString())
+      .then(function (data) {
+        state.coas = (data && data.coas) || [];
+        renderCoasTable();
+      })
+      .catch(function (err) {
+        var body = $('coasBody');
+        if (body) body.innerHTML = '<tr><td colspan="11" class="muted">Failed to load COAs</td></tr>';
+      });
+  }
+
+  function renderCoasTable() {
+    var body = $('coasBody');
+    if (!body) return;
+    if (!state.coas.length) {
+      body.innerHTML = '<tr><td colspan="11" class="muted">No COAs found.</td></tr>';
+      return;
+    }
+    body.innerHTML = state.coas.map(function (c) {
+      var fileType = c.fileMimeType
+        ? (c.fileMimeType.includes('pdf') ? 'PDF' : 'Image')
+        : (c.hasFile ? 'File' : '\u2014');
+      return '<tr>'
+        + '<td>' + esc(c.productName || '') + '</td>'
+        + '<td>' + esc(c.variantName || '\u2014') + '</td>'
+        + '<td>' + esc(c.batchNumber || '\u2014') + '</td>'
+        + '<td>' + esc(c.labName || '\u2014') + '</td>'
+        + '<td>' + esc(c.testDate ? String(c.testDate).split('T')[0] : '\u2014') + '</td>'
+        + '<td>' + esc(c.reportDate ? String(c.reportDate).split('T')[0] : '\u2014') + '</td>'
+        + '<td>' + esc(fileType) + '</td>'
+        + '<td>' + coaStatusBadge(c.status) + '</td>'
+        + '<td>' + esc(c.publishedAt ? String(c.publishedAt).split('T')[0] : '\u2014') + '</td>'
+        + '<td>' + esc(c.updatedAt ? String(c.updatedAt).split('T')[0] : '\u2014') + '</td>'
+        + '<td style="white-space:nowrap">'
+        + '<button class="link-btn" data-coa-edit="' + c.id + '">Edit</button>'
+        + (c.status === 'draft'
+            ? ' <button class="link-btn" data-coa-publish="' + c.id + '">Publish</button>'
+            : '')
+        + (c.status === 'published'
+            ? ' <button class="link-btn" data-coa-unpublish="' + c.id + '">Unpublish</button>'
+            : '')
+        + (c.status !== 'archived'
+            ? ' <button class="link-btn" style="color:#8a5b12" data-coa-archive="' + c.id + '">Archive</button>'
+            : '')
+        + (c.status !== 'published'
+            ? ' <button class="link-btn" style="color:#a12626" data-coa-delete="' + c.id + '">Delete</button>'
+            : '')
+        + '</td>'
+        + '</tr>';
+    }).join('');
+
+    Array.prototype.forEach.call(body.querySelectorAll('[data-coa-edit]'), function (btn) {
+      btn.addEventListener('click', function () { openCoaModal(parseInt(btn.getAttribute('data-coa-edit'), 10)); });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-coa-publish]'), function (btn) {
+      btn.addEventListener('click', function () { coaPublish(parseInt(btn.getAttribute('data-coa-publish'), 10)); });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-coa-unpublish]'), function (btn) {
+      btn.addEventListener('click', function () { coaUnpublish(parseInt(btn.getAttribute('data-coa-unpublish'), 10)); });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-coa-archive]'), function (btn) {
+      btn.addEventListener('click', function () { coaArchive(parseInt(btn.getAttribute('data-coa-archive'), 10)); });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-coa-delete]'), function (btn) {
+      btn.addEventListener('click', function () { coaDelete(parseInt(btn.getAttribute('data-coa-delete'), 10)); });
+    });
+  }
+
+  function openCoaModal(id) {
+    state.editingCoaId = id || null;
+    var wrap = $('coaModalWrap');
+    var titleEl = $('coaModalTitle');
+    var form = $('coaForm');
+    if (!wrap || !form) return;
+
+    // Show modal immediately so the user sees it open
+    wrap.classList.remove('hidden');
+    syncModalBodyLock();
+
+    // Reset form fields
+    form.reset();
+    var idField = $('coaIdField');
+    if (idField) idField.value = id || '';
+    var fileNameEl = $('coaFileName');
+    if (fileNameEl) fileNameEl.textContent = 'No file chosen';
+    var filePreview = $('coaFilePreview');
+    if (filePreview) filePreview.innerHTML = '';
+    var currentFileWrap = $('coaCurrentFileWrap');
+    if (currentFileWrap) currentFileWrap.style.display = 'none';
+
+    if (titleEl) titleEl.textContent = id ? 'Edit COA' : 'Add COA';
+
+    // Disable select with loading placeholder immediately — no race condition
+    var sel = $('coaProductVariantSelect');
+    var errEl = $('coaProductLoadError');
+    if (sel) {
+      sel.innerHTML = '<option value="">Loading products\u2026</option>';
+      sel.disabled = true;
+    }
+    if (errEl) errEl.style.display = 'none';
+
+    // Step 1: get product list — reuse state.products if the Products tab already loaded them,
+    // otherwise call the same endpoint the Products tab uses: GET /api/admin/products
+    var productsPromise = (state.products && state.products.length)
+      ? Promise.resolve(state.products)
+      : api('/api/admin/products').then(function (data) { return (data && data.products) || []; });
+
+    productsPromise
+      .then(function (allProducts) {
+        // Only include active products in the dropdown
+        var products = allProducts.filter(function (p) { return p.active !== false; });
+
+        if (!products.length) {
+          if (sel) {
+            sel.innerHTML = '<option value="">No products available</option>';
+            sel.disabled = true;
+          }
+          return Promise.resolve(null);
+        }
+
+        // Step 2: load variants for every product in parallel using the same endpoint
+        // the Products tab uses: GET /api/admin/products/:id/variants
+        return Promise.all(
+          products.map(function (p) {
+            return api('/api/admin/products/' + p.id + '/variants')
+              .then(function (vData) {
+                return {
+                  id: p.id,
+                  name: p.name,
+                  variants: ((vData && vData.variants) || []).filter(function (v) { return v.active !== false; })
+                };
+              })
+              .catch(function () {
+                // If variants fail for one product, still show the product without variants
+                return { id: p.id, name: p.name, variants: [] };
+              });
+          })
+        );
+      })
+      .then(function (productsWithVariants) {
+        if (!productsWithVariants) return;
+
+        state.coaProducts = productsWithVariants;
+
+        if (!sel) return;
+
+        // Build flat option list: plain product option OR optgroup with variant options
+        var options = ['<option value="">Select product\u2026</option>'];
+        productsWithVariants.forEach(function (p) {
+          if (!p.variants.length) {
+            // No variants — product alone is the selectable item
+            options.push('<option value="' + p.id + '">' + esc(p.name) + '</option>');
+          } else {
+            // Variants present — group them under the product name
+            options.push('<optgroup label="' + esc(p.name) + '">');
+            p.variants.forEach(function (v) {
+              options.push(
+                '<option value="' + p.id + ':' + v.id + '">'
+                + esc(p.name) + ' \u2014 ' + esc(v.name)
+                + '</option>'
+              );
+            });
+            options.push('</optgroup>');
+          }
+        });
+        sel.innerHTML = options.join('');
+        sel.disabled = false;
+
+        // Step 3 (edit mode): load the existing COA and preselect its product/variant
+        if (!id) return null;
+
+        return api('/api/admin/coas/' + id).then(function (coaData) {
+          var coa = coaData && coaData.coa;
+          if (!coa) return;
+
+          var pField = $('coaProductIdField');
+          if (pField) pField.value = coa.productId || '';
+          var vField = $('coaVariantIdField');
+          if (vField) vField.value = coa.variantId || '';
+
+          // Reconstruct the combined select value and preselect it
+          if (sel) {
+            var target = coa.variantId
+              ? (coa.productId + ':' + coa.variantId)
+              : String(coa.productId || '');
+            sel.value = target;
+          }
+
+          if (form.elements.batch_number) form.elements.batch_number.value = coa.batchNumber || '';
+          if (form.elements.lab_name) form.elements.lab_name.value = coa.labName || '';
+          if (form.elements.test_type) form.elements.test_type.value = coa.testType || '';
+          if (form.elements.test_date) form.elements.test_date.value = coa.testDate ? String(coa.testDate).split('T')[0] : '';
+          if (form.elements.report_date) form.elements.report_date.value = coa.reportDate ? String(coa.reportDate).split('T')[0] : '';
+          if (form.elements.title) form.elements.title.value = coa.title || '';
+          if (form.elements.notes) form.elements.notes.value = coa.notes || '';
+          if (coa.hasFile && coa.fileName) {
+            if (currentFileWrap) currentFileWrap.style.display = '';
+            var nameEl = $('coaCurrentFileName');
+            if (nameEl) nameEl.textContent = coa.fileName;
+            var linkEl = $('coaCurrentFileLink');
+            if (linkEl) linkEl.href = '/api/admin/coas/' + id + '/file';
+          }
+        });
+      })
+      .catch(function (err) {
+        if (sel) {
+          sel.innerHTML = '<option value="">Failed to load products</option>';
+          sel.disabled = true;
+        }
+        if (errEl) {
+          errEl.textContent = (err && err.message) || 'Could not load the product list. Please close and try again.';
+          errEl.style.display = 'block';
+        }
+      });
+  }
+
+  function closeCoaModal() {
+    var wrap = $('coaModalWrap');
+    if (wrap) wrap.classList.add('hidden');
+    state.editingCoaId = null;
+    syncModalBodyLock();
+  }
+
+  function saveCoaForm(evt) {
+    evt.preventDefault();
+    var form = $('coaForm');
+    if (!form) return;
+
+    // Parse combined "productId" or "productId:variantId" from the single select
+    var pvSel = $('coaProductVariantSelect');
+    var pvVal = (pvSel && pvSel.value) ? pvSel.value.trim() : '';
+    var parts = pvVal.split(':');
+    var productId = parseInt(parts[0], 10) || 0;
+    var variantId = parseInt(parts[1], 10) || null;
+
+    if (!productId) { toast('Please select a product'); return; }
+
+    // Keep hidden fields in sync so native form validation is happy
+    var pField = $('coaProductIdField');
+    if (pField) pField.value = productId;
+    var vField = $('coaVariantIdField');
+    if (vField) vField.value = variantId || '';
+
+    var payload = {
+      product_id: productId,
+      variant_id: variantId,
+      batch_number: (form.elements.batch_number && form.elements.batch_number.value.trim()) || null,
+      lab_name: (form.elements.lab_name && form.elements.lab_name.value.trim()) || null,
+      test_type: (form.elements.test_type && form.elements.test_type.value.trim()) || null,
+      test_date: (form.elements.test_date && form.elements.test_date.value) || null,
+      report_date: (form.elements.report_date && form.elements.report_date.value) || null,
+      title: (form.elements.title && form.elements.title.value.trim()) || null,
+      notes: (form.elements.notes && form.elements.notes.value.trim()) || null
+    };
+
+    var isEdit = !!state.editingCoaId;
+    var metaPromise = isEdit
+      ? api('/api/admin/coas/' + state.editingCoaId, { method: 'PUT', body: JSON.stringify(payload) })
+      : api('/api/admin/coas', { method: 'POST', body: JSON.stringify(payload) });
+
+    var saveBtn = $('coaModalSave');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving\u2026'; }
+
+    metaPromise
+      .then(function (data) {
+        var coaId = isEdit ? state.editingCoaId : data.id;
+
+        // Upload file if one was selected
+        var fileInput = $('coaFileInput');
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+          var fd = new FormData();
+          fd.append('file', fileInput.files[0]);
+          return api('/api/admin/coas/' + coaId + '/file', { method: 'POST', body: fd });
+        }
+        return null;
+      })
+      .then(function () {
+        toast(isEdit ? 'COA updated' : 'COA draft created');
+        closeCoaModal();
+        loadCoas();
+      })
+      .catch(function (err) { toast(err.message || 'Failed to save COA'); })
+      .finally(function () {
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Draft'; }
+      });
+  }
+
+  function coaPublish(id) {
+    if (!confirm('Publish this COA? It will become visible to the public.')) return;
+    api('/api/admin/coas/' + id + '/publish', { method: 'POST' })
+      .then(function () { toast('COA published'); loadCoas(); })
+      .catch(function (err) { toast(err.message || 'Failed to publish COA'); });
+  }
+
+  function coaUnpublish(id) {
+    if (!confirm('Unpublish this COA? It will be hidden from the public.')) return;
+    api('/api/admin/coas/' + id + '/unpublish', { method: 'POST' })
+      .then(function () { toast('COA unpublished'); loadCoas(); })
+      .catch(function (err) { toast(err.message || 'Failed to unpublish COA'); });
+  }
+
+  function coaArchive(id) {
+    if (!confirm('Archive this COA? It will no longer be visible publicly.')) return;
+    api('/api/admin/coas/' + id + '/archive', { method: 'POST' })
+      .then(function () { toast('COA archived'); loadCoas(); })
+      .catch(function (err) { toast(err.message || 'Failed to archive COA'); });
+  }
+
+  function coaDelete(id) {
+    if (!confirm('Permanently delete this COA record? This cannot be undone.')) return;
+    api('/api/admin/coas/' + id, { method: 'DELETE' })
+      .then(function () { toast('COA deleted'); loadCoas(); })
+      .catch(function (err) { toast(err.message || 'Failed to delete COA'); });
+  }
+
+  // -----------------------------------------------------------------
+
   function wire() {
     var search = $('adminSearch');
     var timer = null;
@@ -1630,6 +1970,67 @@
     if (promoModalWrap) {
       promoModalWrap.addEventListener('click', function (evt) {
         if (evt.target === promoModalWrap) closePromoModal();
+      });
+    }
+
+    // COA tab wiring
+    var coaAdminSearch = $('coaAdminSearch');
+    if (coaAdminSearch) {
+      var coaSearchTimer = null;
+      coaAdminSearch.addEventListener('input', function () {
+        clearTimeout(coaSearchTimer);
+        coaSearchTimer = setTimeout(function () {
+          state.coaSearch = coaAdminSearch.value.trim();
+          loadCoas();
+        }, 300);
+      });
+    }
+
+    var coaStatusFilters = $('coaStatusFilters');
+    if (coaStatusFilters) {
+      Array.prototype.forEach.call(coaStatusFilters.querySelectorAll('button[data-filter]'), function (btn) {
+        btn.addEventListener('click', function () {
+          Array.prototype.forEach.call(coaStatusFilters.querySelectorAll('button[data-filter]'), function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          state.coaStatusFilter = btn.getAttribute('data-filter') || '';
+          loadCoas();
+        });
+      });
+    }
+
+    var addCoaBtn = $('btnAddCoa');
+    if (addCoaBtn) addCoaBtn.addEventListener('click', function () { openCoaModal(null); });
+
+    var coaClose = $('coaModalClose');
+    if (coaClose) coaClose.addEventListener('click', closeCoaModal);
+    var coaCancel = $('coaModalCancel');
+    if (coaCancel) coaCancel.addEventListener('click', closeCoaModal);
+
+    var coaForm = $('coaForm');
+    if (coaForm) coaForm.addEventListener('submit', saveCoaForm);
+
+    var coaFileInput = $('coaFileInput');
+    if (coaFileInput) {
+      coaFileInput.addEventListener('change', function () {
+        var nameEl = $('coaFileName');
+        var previewEl = $('coaFilePreview');
+        var file = coaFileInput.files && coaFileInput.files[0];
+        if (nameEl) nameEl.textContent = file ? file.name : 'No file chosen';
+        if (previewEl) {
+          if (file && file.type.startsWith('image/')) {
+            var url = URL.createObjectURL(file);
+            previewEl.innerHTML = '<img src="' + url + '" alt="Preview" style="max-height:120px;max-width:100%;object-fit:contain;border-radius:6px;border:1px solid #e2eaf7;">';
+          } else {
+            previewEl.innerHTML = '';
+          }
+        }
+      });
+    }
+
+    var coaModalWrap = $('coaModalWrap');
+    if (coaModalWrap) {
+      coaModalWrap.addEventListener('click', function (evt) {
+        if (evt.target === coaModalWrap) closeCoaModal();
       });
     }
   }

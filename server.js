@@ -7,6 +7,8 @@ const createAdminProductsRouter = require('./routes/admin-products');
 const createAdminVariantsRouter = require('./routes/admin-variants');
 const createAdminPromosRouter = require('./routes/admin-promos');
 const createEasyPostWebhookRouter = require('./routes/easypost-webhooks');
+const createCoasRouter = require('./routes/coas');
+const createAdminCoasRouter = require('./routes/admin-coas');
 const { transferGuestCart } = require("./routes/cart");
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
@@ -35,9 +37,83 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-me';
+const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
+const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
+const PUBLIC_HTML_PATHS = new Set([
+  '/',
+  '/index.html',
+  '/login.html',
+  '/register.html',
+  '/forgot-password.html',
+  '/reset-password.html',
+  '/privacy-policy.html',
+  '/terms-of-service.html',
+  '/coas.html'
+]);
+const AUTH_HTML_PATHS = new Set([
+  '/login.html',
+  '/register.html',
+  '/forgot-password.html',
+  '/reset-password.html'
+]);
+const PAGE_ALIASES = {
+  '/home': '/index.html',
+  '/login': '/login.html',
+  '/register': '/register.html',
+  '/forgot-password': '/forgot-password.html',
+  '/reset-password': '/reset-password.html',
+  '/shop': '/shop.html',
+  '/account': '/account.html',
+  '/checkout': '/checkout.html',
+  '/coas': '/coas.html',
+  '/privacy-policy': '/privacy-policy.html',
+  '/terms-of-service': '/terms-of-service.html'
+};
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function deriveDisplayNameFromEmail(email) {
+  const localPart = normalizeEmail(email).split('@')[0] || 'Researcher';
+  return localPart
+    .replace(/[._-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (ch) => ch.toUpperCase()) || 'Researcher';
+}
+
+function toNullableDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  return raw;
+}
+
+function sanitizeReturnTo(value, fallback) {
+  return sanitizeReturnPath(value) || fallback;
+}
+
+function buildLoginRedirectTarget(req) {
+  const safeReturnTo = sanitizeReturnTo(req.originalUrl, '/shop.html');
+  const params = new URLSearchParams();
+  params.set('returnTo', safeReturnTo);
+  return '/login.html?' + params.toString();
+}
+
+function applyPersistentSession(req) {
+  if (!req || !req.session || !req.session.cookie) return;
+  req.session.cookie.maxAge = SESSION_MAX_AGE_MS;
+}
+
+function saveSession(req) {
+  return new Promise((resolve, reject) => {
+    if (!req || !req.session || typeof req.session.save !== 'function') {
+      return resolve();
+    }
+    req.session.save((err) => {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
 }
 
 function toPublicUser(user) {
@@ -58,9 +134,13 @@ function mapUserRow(row) {
     name: row.name,
     email: row.email,
     institution: row.institution,
+    birthday: row.birthday || null,
+    businessType: row.business_type || '',
     provider: row.provider,
     passwordHash: row.password_hash || '',
     googleId: row.google_id || '',
+    resetTokenHash: row.reset_token_hash || null,
+    resetTokenExpiresAt: row.reset_token_expires_at || null,
     createdAt: row.created_at || null,
     role: row.role || 'customer'
   };
@@ -108,8 +188,8 @@ async function saveOrUpdateUser(nextUser) {
     await pool.query(
       `
       UPDATE users
-      SET name = $1, email = $2, institution = $3, provider = $4, password_hash = $5, google_id = $6, role = $7, updated_at = NOW()
-      WHERE id = $8;
+      SET name = $1, email = $2, institution = $3, provider = $4, password_hash = $5, google_id = $6, role = $7, birthday = $8, business_type = $9, updated_at = NOW()
+      WHERE id = $10;
       `,
       [
         nextUser.name,
@@ -119,6 +199,8 @@ async function saveOrUpdateUser(nextUser) {
         nextUser.passwordHash || null,
         nextUser.googleId || null,
         nextUser.role || 'customer',
+        toNullableDate(nextUser.birthday),
+        String(nextUser.businessType || '').trim() || null,
         nextUser.id,
       ]
     );
@@ -127,8 +209,8 @@ async function saveOrUpdateUser(nextUser) {
 
   await pool.query(
     `
-    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role, birthday, business_type)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
     `,
     [
       nextUser.id,
@@ -139,8 +221,43 @@ async function saveOrUpdateUser(nextUser) {
       nextUser.passwordHash || null,
       nextUser.googleId || null,
       nextUser.role || 'customer',
+      toNullableDate(nextUser.birthday),
+      String(nextUser.businessType || '').trim() || null,
     ]
   );
+}
+
+async function hydrateAuthenticatedUser(req) {
+  if (req.user && req.user.id) {
+    applyPersistentSession(req);
+    return req.user;
+  }
+
+  if (!(req.session && req.session.userId)) {
+    return null;
+  }
+
+  const sessionUser = await findUserById(req.session.userId);
+  if (!sessionUser) {
+    req.session.destroy(() => {});
+    return null;
+  }
+
+  req.user = sessionUser;
+  applyPersistentSession(req);
+  return sessionUser;
+}
+
+async function requireApiAuth(req, res, next) {
+  try {
+    const user = await hydrateAuthenticatedUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    return next();
+  } catch (error) {
+    return next(error);
+  }
 }
 
 async function findAddressByUserId(userId) {
@@ -290,11 +407,12 @@ app.use(
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
+    rolling: true,
     cookie: {
       httpOnly: true,
       secure: sessionCookieSecure,
       sameSite: 'lax',
-      maxAge: 1000 * 60 * 60 * 24 * 7
+      maxAge: SESSION_MAX_AGE_MS
     }
   })
 );
@@ -352,47 +470,58 @@ if (googleConfigured) {
 
 async function requireAuth(req, res, next) {
   try {
-    if (!req.user && !req.session.userId) {
+    const user = await hydrateAuthenticatedUser(req);
+    if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-
-    if (!req.user && req.session.userId) {
-      const sessionUser = await findUserById(req.session.userId);
-      if (!sessionUser) {
-        req.session.destroy(() => {});
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-      req.user = sessionUser;
-    }
-
     return next();
   } catch (error) {
     return next(error);
   }
 }
 
-app.post('/api/auth/signup', async (req, res) => {
-  const { name, email, password, institution } = req.body || {};
-  const normalizedEmail = normalizeEmail(email);
+app.get('/api/auth/config', (req, res) => {
+  return res.json({ googleConfigured });
+});
 
-  if (!name || !normalizedEmail || !password || !institution) {
-    return res.status(400).json({ error: 'All fields are required.' });
+app.post('/api/auth/signup', async (req, res) => {
+  const {
+    name,
+    email,
+    password,
+    confirmPassword,
+    institution,
+    businessType,
+    birthday
+  } = req.body || {};
+  const normalizedEmail = normalizeEmail(email);
+  const selectedBusinessType = String(businessType || institution || '').trim();
+  const displayName = String(name || '').trim() || deriveDisplayNameFromEmail(normalizedEmail);
+
+  if (!normalizedEmail || !password || !selectedBusinessType) {
+    return res.status(400).json({ error: 'Please complete all required registration fields.' });
   }
 
   if (String(password).length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters.' });
   }
 
+  if (confirmPassword != null && String(password) !== String(confirmPassword)) {
+    return res.status(400).json({ error: 'Passwords do not match.' });
+  }
+
   if (await findUserByEmail(normalizedEmail)) {
-    return res.status(409).json({ error: 'An account with this email already exists.' });
+    return res.status(400).json({ error: 'Unable to create account with the provided details.' });
   }
 
   const passwordHash = await bcrypt.hash(String(password), 12);
   const user = {
     id: crypto.randomUUID(),
-    name: String(name).trim(),
+    name: displayName,
     email: normalizedEmail,
-    institution: String(institution).trim(),
+    institution: selectedBusinessType,
+    businessType: selectedBusinessType,
+    birthday: toNullableDate(birthday),
     provider: 'Email',
     passwordHash,
     googleId: ''
@@ -400,7 +529,9 @@ app.post('/api/auth/signup', async (req, res) => {
 
   await saveOrUpdateUser(user);
   req.session.userId = user.id;
-      await transferGuestCart(req.sessionID, user.id);
+  applyPersistentSession(req);
+  await saveSession(req);
+  await transferGuestCart(req.sessionID, user.id);
 
   return res.status(201).json({ user: toPublicUser(user) });
 });
@@ -420,14 +551,99 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   req.session.userId = user.id;
-      await transferGuestCart(req.sessionID, user.id);
+  applyPersistentSession(req);
+  await saveSession(req);
+  await transferGuestCart(req.sessionID, user.id);
   return res.json({ user: toPublicUser(user) });
+});
+
+app.post('/api/auth/request-password-reset', async (req, res) => {
+  const normalizedEmail = normalizeEmail(req.body && req.body.email);
+  const genericResponse = {
+    ok: true,
+    message: 'If an account matches that email, password reset instructions have been prepared.'
+  };
+
+  if (!normalizedEmail) {
+    return res.json(genericResponse);
+  }
+
+  const user = await findUserByEmail(normalizedEmail);
+  if (!user) {
+    return res.json(genericResponse);
+  }
+
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+
+  await pool.query(
+    'UPDATE users SET reset_token_hash = $1, reset_token_expires_at = $2, updated_at = NOW() WHERE id = $3',
+    [tokenHash, expiresAt.toISOString(), user.id]
+  );
+
+  const debugResetPath = '/reset-password.html?token=' + encodeURIComponent(rawToken);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('Password reset link for %s: %s', normalizedEmail, debugResetPath);
+    return res.json({ ...genericResponse, debugResetPath });
+  }
+
+  return res.json(genericResponse);
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const token = String((req.body && req.body.token) || '').trim();
+  const password = String((req.body && req.body.password) || '');
+  const confirmPassword = String((req.body && req.body.confirmPassword) || '');
+
+  if (!token) {
+    return res.status(400).json({ error: 'Reset token is required.' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+  if (password !== confirmPassword) {
+    return res.status(400).json({ error: 'Passwords do not match.' });
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const result = await pool.query(
+    `SELECT *
+       FROM users
+      WHERE reset_token_hash = $1
+        AND reset_token_expires_at IS NOT NULL
+        AND reset_token_expires_at > NOW()
+      LIMIT 1`,
+    [tokenHash]
+  );
+
+  if (!result.rows.length) {
+    return res.status(400).json({ error: 'This password reset link is invalid or has expired.' });
+  }
+
+  const user = mapUserRow(result.rows[0]);
+  const passwordHash = await bcrypt.hash(password, 12);
+  await pool.query(
+    `UPDATE users
+        SET password_hash = $1,
+            reset_token_hash = NULL,
+            reset_token_expires_at = NULL,
+            updated_at = NOW()
+      WHERE id = $2`,
+    [passwordHash, user.id]
+  );
+
+  return res.json({ ok: true, message: 'Your password has been updated. You can now sign in.' });
 });
 
 app.post('/api/auth/logout', (req, res) => {
   req.logout(() => {
     req.session.destroy(() => {
-      res.clearCookie('pepx.sid');
+      res.clearCookie('pepx.sid', {
+        httpOnly: true,
+        secure: sessionCookieSecure,
+        sameSite: 'lax'
+      });
       res.json({ ok: true });
     });
   });
@@ -435,14 +651,9 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/session', async (req, res) => {
   try {
-    if (req.user) {
-      return res.json({ user: toPublicUser(req.user) });
-    }
-    if (req.session.userId) {
-      const user = await findUserById(req.session.userId);
-      if (user) {
-        return res.json({ user: toPublicUser(user) });
-      }
+    const user = await hydrateAuthenticatedUser(req);
+    if (user) {
+      return res.json({ user: toPublicUser(user) });
     }
     return res.json({ user: null });
   } catch (error) {
@@ -513,21 +724,9 @@ app.get('/api/auth/protected', requireAuth, (req, res) => {
   return res.json({ user: toPublicUser(req.user) });
 });
 
-app.get('/api/account/overview', async (req, res) => {
+app.get('/api/account/overview', requireApiAuth, async (req, res) => {
   try {
-    let sessionUser = req.user || null;
-    if (!sessionUser && req.session.userId) {
-      sessionUser = await findUserById(req.session.userId);
-    }
-
-    if (!sessionUser) {
-      return res.json({
-        profile: null,
-        orders: []
-      });
-    }
-
-    const user = await findUserById(sessionUser.id);
+    const user = await findUserById(req.user.id);
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -653,22 +852,87 @@ app.post('/api/account/orders', function (req, res, next) {
   }
 });
 
-app.use("/api/products", productsRouter);
-app.use("/api/cart", createCartRouter(requireAuth));
-app.use("/api/orders", createOrdersRouter(requireAuth));
+app.use("/api/products", requireApiAuth, productsRouter);
+app.use("/api/cart", requireApiAuth, createCartRouter(requireAuth));
+app.use("/api/orders", requireApiAuth, createOrdersRouter(requireAuth));
 app.use('/api/admin/products', createAdminProductsRouter(requireAuth));
 app.use('/api/admin', createAdminVariantsRouter(requireAuth));
 app.use('/api/admin', createAdminPromosRouter(requireAuth));
+app.use('/api/admin', createAdminCoasRouter(requireAuth));
 app.use("/api/admin", createAdminRouter(requireAuth));
+app.use('/api/coas', createCoasRouter());
 
 app.use('/api/*', (req, res) => {
   return res.status(404).json({ error: 'API endpoint not found' });
 });
 
+app.get(Object.keys(PAGE_ALIASES), (req, res) => {
+  const targetPath = PAGE_ALIASES[req.path] || '/index.html';
+  const queryIndex = req.originalUrl.indexOf('?');
+  const query = queryIndex >= 0 ? req.originalUrl.slice(queryIndex) : '';
+  return res.redirect(targetPath + query);
+});
+
+app.get(['/', '/index.html'], async (req, res, next) => {
+  try {
+    const user = await hydrateAuthenticatedUser(req);
+    const fileName = user ? 'index.html' : 'public-index.html';
+    return res.sendFile(path.join(__dirname, fileName));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.use(async (req, res, next) => {
+  try {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      return next();
+    }
+
+    if (req.path === '/script.js' && !(await hydrateAuthenticatedUser(req))) {
+      return res.status(404).end();
+    }
+
+    if (req.path.startsWith('/assets/products/') && !(await hydrateAuthenticatedUser(req))) {
+      return res.status(404).end();
+    }
+
+    if (!req.path.endsWith('.html')) {
+      return next();
+    }
+
+    if (AUTH_HTML_PATHS.has(req.path)) {
+      if (await hydrateAuthenticatedUser(req)) {
+        const returnTo = sanitizeReturnTo(req.query && req.query.returnTo, '/shop.html');
+        return res.redirect(returnTo);
+      }
+      return next();
+    }
+
+    if (PUBLIC_HTML_PATHS.has(req.path)) {
+      return next();
+    }
+
+    if (!(await hydrateAuthenticatedUser(req))) {
+      return res.redirect(buildLoginRedirectTarget(req));
+    }
+
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.use(express.static(path.join(__dirname)));
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+app.get('*', async (req, res, next) => {
+  try {
+    const user = await hydrateAuthenticatedUser(req);
+    const fileName = user ? 'index.html' : 'public-index.html';
+    return res.sendFile(path.join(__dirname, fileName));
+  } catch (error) {
+    return next(error);
+  }
 });
 
 async function startServer() {

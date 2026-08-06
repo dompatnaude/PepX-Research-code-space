@@ -177,6 +177,7 @@
         <button type="button" data-tab="orders">Orders</button>
         <button type="button" data-tab="products">Products</button>
         <button type="button" data-tab="promos">Discount Codes</button>
+        <button type="button" data-tab="coas">COAs</button>
       </div>
 
       <section id="homeSection">
@@ -269,6 +270,31 @@
         </table>
 
         <div id="promoAnalytics" class="admin-panel hidden"></div>
+      </div>
+
+      <div id="coasSection" class="hidden">
+        <div class="admin-bar admin-bar-between">
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+            <input type="search" id="coaAdminSearch" placeholder="Search product, batch, lab&hellip;">
+            <div class="admin-filters" id="coaStatusFilters">
+              <button type="button" data-filter="" class="active">All</button>
+              <button type="button" data-filter="draft">Draft</button>
+              <button type="button" data-filter="published">Published</button>
+              <button type="button" data-filter="archived">Archived</button>
+            </div>
+          </div>
+          <button type="button" class="btn-sm" id="btnAddCoa">Add COA</button>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr>
+              <th>Product</th><th>Variant</th><th>Batch</th><th>Lab</th>
+              <th>Test Date</th><th>Report Date</th><th>File</th>
+              <th>Status</th><th>Published</th><th>Updated</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="coasBody"><tr><td colspan="11" class="muted">Loading&hellip;</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -411,6 +437,71 @@
         <div class="modal-actions">
           <button class="btn-sm secondary" type="button" id="promoModalCancel">Cancel</button>
           <button class="btn-sm" type="submit" id="promoModalSave">Save Discount Code</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COA create/edit modal -->
+  <div class="modal-backdrop hidden" id="coaModalWrap" role="dialog" aria-modal="true" aria-labelledby="coaModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="coaModalTitle" style="margin:0;">Add COA</h3>
+        <button class="link-btn" type="button" id="coaModalClose">Close</button>
+      </div>
+      <form id="coaForm" enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="form-grid">
+            <label class="form-field full">Product / Variant <span style="color:#a12626">*</span>
+              <select name="product_variant" id="coaProductVariantSelect" required>
+                <option value="">Loading products&hellip;</option>
+              </select>
+              <span id="coaProductLoadError" class="muted" style="display:none;color:#a12626;font-size:.82rem;margin-top:.25rem;"></span>
+            </label>
+            <input type="hidden" name="product_id" id="coaProductIdField">
+            <input type="hidden" name="variant_id" id="coaVariantIdField">
+            <label class="form-field">Batch number
+              <input type="text" name="batch_number" maxlength="100" placeholder="e.g. B2024-001">
+            </label>
+            <label class="form-field">Lab name
+              <input type="text" name="lab_name" maxlength="255" placeholder="e.g. Eurofins">
+            </label>
+            <label class="form-field">Test type
+              <input type="text" name="test_type" maxlength="100" placeholder="e.g. HPLC, Mass Spec">
+            </label>
+            <label class="form-field">Test date
+              <input type="date" name="test_date">
+            </label>
+            <label class="form-field">Report date
+              <input type="date" name="report_date">
+            </label>
+            <label class="form-field">Public title
+              <input type="text" name="title" maxlength="255" placeholder="Optional display title">
+            </label>
+            <label class="form-field full">Notes
+              <textarea name="notes" rows="3" maxlength="10000" placeholder="Internal notes (not shown publicly)"></textarea>
+            </label>
+            <div class="form-field full">
+              <span><strong>Report file</strong> <span class="muted">(PDF, PNG, JPG &mdash; max 25 MB)</span></span>
+              <div id="coaFileArea" style="margin-top:.4rem;">
+                <label style="display:inline-block;cursor:pointer;">
+                  <span class="btn-sm secondary" style="display:inline-block;">Choose file</span>
+                  <input type="file" id="coaFileInput" name="file" accept=".pdf,.png,.jpg,.jpeg" style="position:absolute;width:1px;height:1px;opacity:0;">
+                </label>
+                <span id="coaFileName" class="muted" style="margin-left:.5rem;font-size:.85rem;">No file chosen</span>
+                <div id="coaFilePreview" style="margin-top:.5rem;"></div>
+              </div>
+            </div>
+            <div class="form-field full" id="coaCurrentFileWrap" style="display:none;">
+              <span class="muted" style="font-size:.84rem;">Current file: <span id="coaCurrentFileName"></span></span>
+              <a id="coaCurrentFileLink" href="#" target="_blank" rel="noopener" class="link-btn" style="margin-left:.4rem;font-size:.84rem;">Preview</a>
+            </div>
+          </div>
+          <input type="hidden" name="coa_id" id="coaIdField">
+        </div>
+        <div class="modal-actions">
+          <button class="btn-sm secondary" type="button" id="coaModalCancel">Cancel</button>
+          <button class="btn-sm" type="submit" id="coaModalSave">Save Draft</button>
         </div>
       </form>
     </div>
