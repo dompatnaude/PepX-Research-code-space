@@ -152,7 +152,8 @@
 
       var fd = new FormData(form);
       var email = String(fd.get('email') || '').trim();
-      var birthday = String(fd.get('birthday') || '').trim();
+      var ageConfirmed = form.querySelector('[name="ageConfirmed"]');
+      var ageConfirmedChecked = !!(ageConfirmed && ageConfirmed.checked);
       var password = String(fd.get('password') || '');
       var confirmPassword = String(fd.get('confirmPassword') || '');
       var businessType = String(fd.get('businessType') || '').trim();
@@ -174,14 +175,18 @@
         setFieldError(form, 'businessType', 'Select a business type.');
         hasError = true;
       }
+      if (!ageConfirmedChecked) {
+        setFieldError(form, 'ageConfirmed', 'You must confirm that you are 21 years of age or older.');
+        hasError = true;
+      }
       if (hasError) return;
 
       request('/api/auth/signup', {
         method: 'POST',
         body: JSON.stringify({
           email: email,
-          birthday: birthday || null,
           password: password,
+          ageConfirmed: true,
           confirmPassword: confirmPassword,
           businessType: businessType
         })

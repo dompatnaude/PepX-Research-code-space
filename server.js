@@ -40,8 +40,6 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
 const PASSWORD_RESET_TTL_MS = 1000 * 60 * 60;
 const PUBLIC_HTML_PATHS = new Set([
-  '/',
-  '/index.html',
   '/login.html',
   '/register.html',
   '/forgot-password.html',
@@ -142,7 +140,9 @@ function mapUserRow(row) {
     resetTokenHash: row.reset_token_hash || null,
     resetTokenExpiresAt: row.reset_token_expires_at || null,
     createdAt: row.created_at || null,
-    role: row.role || 'customer'
+    role: row.role || 'customer',
+    ageConfirmed: row.age_confirmed_21_plus === true,
+    ageConfirmedAt: row.age_confirmed_at || null
   };
 }
 
@@ -188,8 +188,8 @@ async function saveOrUpdateUser(nextUser) {
     await pool.query(
       `
       UPDATE users
-      SET name = $1, email = $2, institution = $3, provider = $4, password_hash = $5, google_id = $6, role = $7, birthday = $8, business_type = $9, updated_at = NOW()
-      WHERE id = $10;
+      SET name = $1, email = $2, institution = $3, provider = $4, password_hash = $5, google_id = $6, role = $7, birthday = $8, business_type = $9, age_confirmed_21_plus = COALESCE($10, age_confirmed_21_plus), age_confirmed_at = COALESCE($11, age_confirmed_at), updated_at = NOW()
+      WHERE id = $12;
       `,
       [
         nextUser.name,
@@ -201,6 +201,8 @@ async function saveOrUpdateUser(nextUser) {
         nextUser.role || 'customer',
         toNullableDate(nextUser.birthday),
         String(nextUser.businessType || '').trim() || null,
+        nextUser.ageConfirmed === true ? true : null,
+        nextUser.ageConfirmedAt || null,
         nextUser.id,
       ]
     );
@@ -209,8 +211,8 @@ async function saveOrUpdateUser(nextUser) {
 
   await pool.query(
     `
-    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role, birthday, business_type)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role, birthday, business_type, age_confirmed_21_plus, age_confirmed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
     `,
     [
       nextUser.id,
@@ -223,6 +225,8 @@ async function saveOrUpdateUser(nextUser) {
       nextUser.role || 'customer',
       toNullableDate(nextUser.birthday),
       String(nextUser.businessType || '').trim() || null,
+        nextUser.ageConfirmed === true,
+        nextUser.ageConfirmedAt || null,
     ]
   );
 }
@@ -492,14 +496,19 @@ app.post('/api/auth/signup', async (req, res) => {
     confirmPassword,
     institution,
     businessType,
-    birthday
+    ageConfirmed
   } = req.body || {};
   const normalizedEmail = normalizeEmail(email);
   const selectedBusinessType = String(businessType || institution || '').trim();
   const displayName = String(name || '').trim() || deriveDisplayNameFromEmail(normalizedEmail);
+  const ageConfirmedFlag = ageConfirmed === true || ageConfirmed === 'true' || ageConfirmed === 'on' || ageConfirmed === '1' || ageConfirmed === 1;
 
   if (!normalizedEmail || !password || !selectedBusinessType) {
     return res.status(400).json({ error: 'Please complete all required registration fields.' });
+  }
+
+  if (!ageConfirmedFlag) {
+    return res.status(400).json({ error: 'You must confirm that you are 21 years of age or older.' });
   }
 
   if (String(password).length < 8) {
@@ -521,7 +530,8 @@ app.post('/api/auth/signup', async (req, res) => {
     email: normalizedEmail,
     institution: selectedBusinessType,
     businessType: selectedBusinessType,
-    birthday: toNullableDate(birthday),
+    ageConfirmed: true,
+    ageConfirmedAt: new Date(),
     provider: 'Email',
     passwordHash,
     googleId: ''
@@ -876,8 +886,10 @@ app.get(Object.keys(PAGE_ALIASES), (req, res) => {
 app.get(['/', '/index.html'], async (req, res, next) => {
   try {
     const user = await hydrateAuthenticatedUser(req);
-    const fileName = user ? 'index.html' : 'public-index.html';
-    return res.sendFile(path.join(__dirname, fileName));
+    if (!user) {
+      return res.redirect(buildLoginRedirectTarget(req));
+    }
+    return res.sendFile(path.join(__dirname, 'index.html'));
   } catch (error) {
     return next(error);
   }
@@ -928,8 +940,10 @@ app.use(express.static(path.join(__dirname)));
 app.get('*', async (req, res, next) => {
   try {
     const user = await hydrateAuthenticatedUser(req);
-    const fileName = user ? 'index.html' : 'public-index.html';
-    return res.sendFile(path.join(__dirname, fileName));
+    if (!user) {
+      return res.redirect(buildLoginRedirectTarget(req));
+    }
+    return res.sendFile(path.join(__dirname, 'index.html'));
   } catch (error) {
     return next(error);
   }

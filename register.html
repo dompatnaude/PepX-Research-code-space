@@ -30,10 +30,10 @@
           <input type="email" name="email" autocomplete="email" required>
           <small class="auth-inline-error" data-error-for="email"></small>
         </label>
-        <label>
-          <span>Birthday</span>
-          <input type="date" name="birthday" autocomplete="bday">
-          <small class="auth-inline-error" data-error-for="birthday"></small>
+        <label class="auth-age-confirm">
+          <input type="checkbox" name="ageConfirmed" id="registerAgeConfirm" value="true" required>
+          <span>I confirm that I am 21 years of age or older.</span>
+          <small class="auth-inline-error" data-error-for="ageConfirmed"></small>
         </label>
         <label>
           <span>Password</span>
