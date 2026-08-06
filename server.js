@@ -29,6 +29,7 @@ const { sanitizeReturnPath, withAuthQuery } = require('./services/oauth-redirect
 const { ensureBootstrapAdmin } = require('./services/admin-bootstrap');
 const { loadProjectEnv } = require('./services/runtime-config');
 const { resolveGoogleCallbackUrl } = require('./services/google-config');
+const { isAgeConfirmed, asyncHandler } = require('./services/auth-validation');
 
 loadProjectEnv({ cwd: __dirname });
 require('dotenv').config();
@@ -46,7 +47,6 @@ const PUBLIC_HTML_PATHS = new Set([
   '/reset-password.html',
   '/privacy-policy.html',
   '/terms-of-service.html',
-  '/coas.html'
 ]);
 const AUTH_HTML_PATHS = new Set([
   '/login.html',
@@ -488,7 +488,7 @@ app.get('/api/auth/config', (req, res) => {
   return res.json({ googleConfigured });
 });
 
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', asyncHandler(async (req, res) => {
   const {
     name,
     email,
@@ -501,7 +501,7 @@ app.post('/api/auth/signup', async (req, res) => {
   const normalizedEmail = normalizeEmail(email);
   const selectedBusinessType = String(businessType || institution || '').trim();
   const displayName = String(name || '').trim() || deriveDisplayNameFromEmail(normalizedEmail);
-  const ageConfirmedFlag = ageConfirmed === true || ageConfirmed === 'true' || ageConfirmed === 'on' || ageConfirmed === '1' || ageConfirmed === 1;
+  const ageConfirmedFlag = isAgeConfirmed(ageConfirmed);
 
   if (!normalizedEmail || !password || !selectedBusinessType) {
     return res.status(400).json({ error: 'Please complete all required registration fields.' });
@@ -544,9 +544,9 @@ app.post('/api/auth/signup', async (req, res) => {
   await transferGuestCart(req.sessionID, user.id);
 
   return res.status(201).json({ user: toPublicUser(user) });
-});
+}));
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
   const normalizedEmail = normalizeEmail(email);
 
@@ -565,9 +565,9 @@ app.post('/api/auth/login', async (req, res) => {
   await saveSession(req);
   await transferGuestCart(req.sessionID, user.id);
   return res.json({ user: toPublicUser(user) });
-});
+}));
 
-app.post('/api/auth/request-password-reset', async (req, res) => {
+app.post('/api/auth/request-password-reset', asyncHandler(async (req, res) => {
   const normalizedEmail = normalizeEmail(req.body && req.body.email);
   const genericResponse = {
     ok: true,
@@ -599,9 +599,9 @@ app.post('/api/auth/request-password-reset', async (req, res) => {
   }
 
   return res.json(genericResponse);
-});
+}));
 
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', asyncHandler(async (req, res) => {
   const token = String((req.body && req.body.token) || '').trim();
   const password = String((req.body && req.body.password) || '');
   const confirmPassword = String((req.body && req.body.confirmPassword) || '');
@@ -644,17 +644,23 @@ app.post('/api/auth/reset-password', async (req, res) => {
   );
 
   return res.json({ ok: true, message: 'Your password has been updated. You can now sign in.' });
-});
+}));
 
-app.post('/api/auth/logout', (req, res) => {
-  req.logout(() => {
-    req.session.destroy(() => {
+app.post('/api/auth/logout', (req, res, next) => {
+  req.logout((logoutErr) => {
+    if (logoutErr) {
+      return next(logoutErr);
+    }
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        return next(destroyErr);
+      }
       res.clearCookie('pepx.sid', {
         httpOnly: true,
         secure: sessionCookieSecure,
         sameSite: 'lax'
       });
-      res.json({ ok: true });
+      return res.json({ ok: true });
     });
   });
 });
@@ -870,7 +876,7 @@ app.use('/api/admin', createAdminVariantsRouter(requireAuth));
 app.use('/api/admin', createAdminPromosRouter(requireAuth));
 app.use('/api/admin', createAdminCoasRouter(requireAuth));
 app.use("/api/admin", createAdminRouter(requireAuth));
-app.use('/api/coas', createCoasRouter());
+app.use('/api/coas', requireApiAuth, createCoasRouter());
 
 app.use('/api/*', (req, res) => {
   return res.status(404).json({ error: 'API endpoint not found' });
@@ -947,6 +953,23 @@ app.get('*', async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
+});
+
+// Centralized error handler. Catches errors forwarded by asyncHandler and
+// route `next(err)` calls so a failed DB/session operation returns a safe
+// response instead of crashing the process. Must be registered last.
+app.use((err, req, res, next) => {
+  // Log full context server-side for diagnosis (never sent to the client).
+  console.error('[unhandled route error]', req.method, req.originalUrl, err && err.stack ? err.stack : err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const wantsJson = req.path.startsWith('/api/') ||
+    (req.get('accept') || '').includes('application/json');
+  if (wantsJson) {
+    return res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
+  }
+  return res.status(500).send('An unexpected error occurred. Please try again.');
 });
 
 async function startServer() {
