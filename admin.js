@@ -97,7 +97,7 @@
         }
         if (!res.ok) {
           var err = new Error(data.error || ('Request failed (' + res.status + ')'));
-          err.status = res.status; throw err;
+          err.status = res.status; err.code = data.code; err.details = data.details; throw err;
         }
         if (data && typeof data === 'object') {
           data._status = res.status;
@@ -122,12 +122,13 @@
     var normalized = label.toLowerCase();
 
     if (normalized === 'processing' || normalized === 'paid' || normalized === 'available') cls = 'blue';
-    else if (normalized === 'shipped' || normalized === 'pending') cls = 'amber';
+    else if (normalized === 'shipped' || normalized === 'pending' || normalized === 'awaiting_payment') cls = 'amber';
     else if (normalized === 'completed' || normalized === 'delivered') cls = 'green';
     else if (normalized === 'cancelled' || normalized === 'canceled' || normalized === 'missing') cls = 'red';
 
     if (!label) label = 'Unknown';
     else if (normalized === 'pending_payment') label = 'Pending payment';
+    else if (normalized === 'awaiting_payment') label = 'Awaiting payment';
     else if (normalized === 'processing') label = 'Processing';
     else if (normalized === 'paid') label = 'Paid';
     else if (normalized === 'shipped') label = 'Shipped';
@@ -1271,16 +1272,23 @@
       + '<tbody>' + itemsRows + '</tbody></table>'
       + '<div class="admin-grid" style="margin-top:1rem;">'
       + '<div><h3>Payment summary</h3>'
+      + '<div class="kv"><span>Method</span><strong>' + esc(order.payment_method || 'Not recorded') + '</strong></div>'
+      + '<div class="kv"><span>Payment status</span><strong>' + statusBadge(d.payment_status) + '</strong></div>'
+      + (d.paid_at ? '<div class="kv"><span>Paid at</span><strong>' + esc(fmtDate(d.paid_at)) + '</strong></div>' : '')
       + '<div class="kv"><span>Subtotal</span><strong>' + money(d.totals && d.totals.subtotal_before_discount != null ? d.totals.subtotal_before_discount : d.totals && d.totals.subtotal) + '</strong></div>'
       + '<div class="kv"><span>Discount</span><strong>-' + money(d.totals && d.totals.discount_amount) + '</strong></div>'
-      + '<div class="kv"><span>Shipping</span><strong>' + money(d.totals && d.totals.shipping_cost) + '</strong></div>'
+      + '<div class="kv"><span>Shipping</span><strong>' + (Number(d.totals && d.totals.shipping_cost) === 0 ? '<span class="badge green">FREE</span>' : money(d.totals && d.totals.shipping_cost)) + '</strong></div>'
       + '<div class="kv"><span>Total</span><strong>' + money(d.totals && d.totals.total) + '</strong></div>'
+      + (order.payment_method === 'zelle' && d.payment_status !== 'paid'
+          ? '<div class="zelle-admin-send"><span class="label">Zelle ID:</span> <strong>pxresearch</strong> &nbsp; <span class="label">Amount:</span> <strong>' + money(d.totals && d.totals.total) + '</strong> &nbsp; <span class="label">Memo:</span> <strong>' + esc(order.order_number) + '</strong></div>'
+          : '')
       + '</div>'
       + '<div><h3>Tracking</h3>'
-      + '<div>Carrier: ' + esc((displayShipment && displayShipment.carrier) || '\u2014') + '</div>'
+      + (order.shipping_service ? '<div class="kv"><span>Customer\'s chosen service</span><strong>' + esc(order.shipping_service) + '</strong></div>' : '')
+      + '<div>Carrier: ' + esc((displayShipment && displayShipment.carrier) || order.carrier || '\u2014') + '</div>'
       + '<div>Tracking #: ' + esc((displayShipment && displayShipment.trackingNumber) || '\u2014') + '</div>'
       + '<div>Label: ' + ((displayShipment && displayShipment.labelUrl) ? '<a href="' + esc(displayShipment.labelUrl) + '" target="_blank" rel="noopener">view label</a>' : '<span class="muted">none</span>') + '</div>'
-      + '<div class="chip-row"><span class="chip">' + esc(d.customer_status && d.customer_status.label || 'In progress') + '</span><span class="chip">' + esc(d.fulfillment_status || 'unfulfilled') + '</span><span class="chip">' + esc(d.payment_status || 'pending') + '</span></div>'
+      + '<div class="chip-row"><span class="chip">' + esc(d.customer_status && d.customer_status.label || 'In progress') + '</span><span class="chip">' + esc(d.fulfillment_status || 'unfulfilled') + '</span><span class="chip">' + esc(d.payment_status || 'awaiting_payment') + '</span></div>'
       + '</div>'
       + '</div>'
       + '<div class="shipping-shell">'
@@ -1330,12 +1338,18 @@
       + '<div class="admin-actions">'
       + '<button id="btnProcessing">Mark Processing</button>'
       + '<button id="btnShipped">Mark Shipped</button>'
+      + (order.payment_method === 'zelle' && d.payment_status !== 'paid'
+          ? '<button id="btnConfirmZelle" class="zelle-confirm-btn">Mark Zelle Payment Received</button>'
+          : '')
       + '</div>';
     panel.classList.remove('hidden');
 
     $('detailClose').addEventListener('click', function () { panel.classList.add('hidden'); });
     $('btnProcessing').addEventListener('click', function () { setStatus('processing'); });
     $('btnShipped').addEventListener('click', function () { setStatus('shipped'); });
+    if ($('btnConfirmZelle')) {
+      $('btnConfirmZelle').addEventListener('click', function () { confirmZellePayment(order.order_number); });
+    }
     $('btnGetShippingRates').addEventListener('click', function () { requestShippingRates(false); });
     $('btnRefreshRates').addEventListener('click', function () { requestShippingRates(false); });
     if ($('btnPurchaseShippingLabel')) {
@@ -1407,16 +1421,30 @@
         state.shipping.shipmentId = result && result.shipment && result.shipment.providerShipmentId ? result.shipment.providerShipmentId : null;
         state.shipping.rates = (result && result.rates) || [];
         state.shipping.selectedRateId = '';
-        state.shipping.addressVerification = result && result.addressVerification ? result.addressVerification : null;
+        state.shipping.addressVerification = (result && result.rates && result.rates.length) ? null : (result && result.addressVerification ? result.addressVerification : null);
         state.shipping.info = state.shipping.addressVerification && state.shipping.addressVerification.needsConfirmation
           ? 'Address verification requires confirmation before rates can be used.'
           : 'Rates loaded successfully.';
+        // Auto-select the rate matching the customer's chosen shipping service.
+        var orderService = state.orderDetail && state.orderDetail.order && state.orderDetail.order.shipping_service;
+        if (orderService) {
+          var match = state.shipping.rates.find(function (r) {
+            var s = String(r.service || '').toLowerCase().replace(/[\s_-]/g, '');
+            var canonical = String(r.carrier || '').toUpperCase() === 'USPS'
+              ? (s.includes('groundadvantage') ? 'USPS Ground Advantage'
+                : (s.includes('prioritymailexpress') || (s.includes('express') && s.includes('priority')) || s === 'express') ? 'USPS Priority Mail Express'
+                : s.includes('priority') ? 'USPS Priority Mail' : null)
+              : null;
+            return canonical === orderService;
+          });
+          if (match) state.shipping.selectedRateId = match.rateId;
+        }
         renderDetail(state.orderDetail);
       })
       .catch(function (err) {
         state.shipping.loadingRates = false;
         if (err.status === 409 && err.code === 'address-verification-confirmation-required' && err.details) {
-          state.shipping.addressVerification = err.details;
+          state.shipping.addressVerification = Object.assign({}, err.details, { needsConfirmation: true });
           state.shipping.rates = [];
           state.shipping.selectedRateId = '';
           state.shipping.info = 'Address verification requires confirmation before rates can be retrieved.';
@@ -1508,6 +1536,24 @@
       .then(function () { toast('Status \u2192 ' + status); return openOrder(state.currentId); })
       .then(loadOrders)
       .catch(function (err) { toast(err.message || 'Failed to update status'); });
+  }
+
+  function confirmZellePayment(orderNumber) {
+    var orderId = state.currentId;
+    if (!orderId) return;
+    var confirmed = window.confirm(
+      'Confirm Zelle Payment\n\n'
+      + 'Confirm that you have personally verified the Zelle payment for Order ' + String(orderNumber || orderId) + ' in your Zelle/bank account.\n\n'
+      + 'Press OK to mark this order as paid and move it to Processing.'
+    );
+    if (!confirmed) return;
+    api('/api/admin/orders/' + orderId + '/confirm-zelle-payment', { method: 'POST', body: '{}' })
+      .then(function () {
+        toast('Zelle payment confirmed \u2014 order moved to Processing');
+        return openOrder(orderId);
+      })
+      .then(loadOrders)
+      .catch(function (err) { toast(err.message || 'Failed to confirm Zelle payment'); });
   }
 
   // ---- COA admin functions -----------------------------------------

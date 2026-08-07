@@ -8,6 +8,14 @@
       "args": ["run", "dev"],
       "isBackground": true,
       "problemMatcher": []
+    },
+    {
+      "label": "Run Migrations",
+      "type": "shell",
+      "command": "node",
+      "args": ["scripts/migrate.js"],
+      "isBackground": false,
+      "problemMatcher": []
     }
   ]
 }

@@ -45,9 +45,16 @@ var checkoutState = {
   shippingCost: 0,
   appliedPromoCode: null,
   appliedPromo: null,
-  promoValidating: false
+  promoValidating: false,
+  selectedRate: null,          // { rateId, carrier, service, canonicalService, price, deliveryDays }
+  easypostShipmentId: null,
+  shippingRates: [],
+  shippingRatesLoading: false,
+  shippingRatesError: null,
+  lastRatedAddress: null
 };
-var FREE_SHIPPING_THRESHOLD = 300;
+var FREE_SHIPPING_THRESHOLD = 150;
+var FLAT_SHIPPING_RATE = 9.95;
 var cartItemPendingMap = Object.create(null);
 var lastAnnouncedTotalsText = '';
 var miniCartFocusReturnEl = null;
@@ -1454,14 +1461,21 @@ function updateFreeShippingProgress(subtotal){
   var progress = FREE_SHIPPING_THRESHOLD > 0 ? Math.min(1, safeSubtotal / FREE_SHIPPING_THRESHOLD) : 1;
   if(checkoutPanel){ checkoutPanel.style.display = FREE_SHIPPING_THRESHOLD > 0 ? '' : 'none'; }
   if(FREE_SHIPPING_THRESHOLD <= 0) return;
-  var message = remaining > 0
-    ? ('Add ' + formatMoney(remaining) + ' more to qualify for free shipping')
-    : 'You qualify for free shipping';
+  var qualified = remaining <= 0;
+  var message = qualified
+    ? '\uD83C\uDF89 Your order qualifies for FREE Shipping!'
+    : ('\uD83D\uDE9A You\'re only ' + formatMoney(remaining) + ' away from FREE Shipping!');
 
   if(messageEl){ messageEl.textContent = message; }
-  if(barEl){ barEl.style.width = (progress * 100).toFixed(2) + '%'; }
+  if(barEl){
+    barEl.style.width = (progress * 100).toFixed(2) + '%';
+    barEl.parentElement.classList.toggle('is-qualified', qualified);
+  }
   if(checkoutMessageEl){ checkoutMessageEl.textContent = message; }
-  if(checkoutBarEl){ checkoutBarEl.style.width = (progress * 100).toFixed(2) + '%'; }
+  if(checkoutBarEl){
+    checkoutBarEl.style.width = (progress * 100).toFixed(2) + '%';
+    checkoutBarEl.parentElement.classList.toggle('is-qualified', qualified);
+  }
 }
 
 function handleMiniCartKeydown(e){
@@ -1564,6 +1578,13 @@ function renderCart(){
   }
 
   var effectiveSubtotal = Math.max(0, total - promoDiscount);
+  // Recompute shipping cost on every cart update so it always reflects the current subtotal.
+  if(checkoutState.selectedRate && items.length > 0){
+    var isGroundAdv = checkoutState.selectedRate.canonicalService === 'USPS Ground Advantage';
+    checkoutState.shippingCost = (effectiveSubtotal >= FREE_SHIPPING_THRESHOLD && isGroundAdv) ? 0 : Number(checkoutState.selectedRate.price || 0);
+  } else {
+    checkoutState.shippingCost = items.length > 0 ? (effectiveSubtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_RATE) : 0;
+  }
   var finalTotal = effectiveSubtotal + Number(checkoutState.shippingCost || 0);
   updateFreeShippingProgress(effectiveSubtotal);
 
@@ -1585,7 +1606,13 @@ function renderCart(){
     }
   }
   var checkoutShippingEl = document.getElementById('checkoutShipping');
-  if(checkoutShippingEl){ checkoutShippingEl.textContent = formatMoney(Number(checkoutState.shippingCost || 0)); }
+  if(checkoutShippingEl){
+    if(items.length > 0 && Number(checkoutState.shippingCost || 0) === 0){
+      checkoutShippingEl.innerHTML = '<span class="shipping-free-badge">FREE</span>';
+    } else {
+      checkoutShippingEl.textContent = formatMoney(Number(checkoutState.shippingCost || 0));
+    }
+  }
   var savingsEl = document.getElementById('cartSavings');
   var savedAmount = Math.max(0, fullTotal - total);
   if(savingsEl){
@@ -1753,6 +1780,8 @@ function authApi(path, options){
       if(!res.ok){
         var error = new Error(data.error || 'Request failed');
         error.status = res.status;
+        error.code = data.code;
+        error.details = data.details;
         throw error;
       }
       return data;
@@ -2396,13 +2425,14 @@ function initAccountPage(){
             (Number(discountAmount || 0) > 0
               ? ('<p><span>Discount' + (promoCode ? ' (' + escapeHtml(promoCode) + ')' : '') + '</span><strong>-' + formatMoney(discountAmount) + '</strong></p>')
               : '') +
-            '<p><span>Shipping</span><strong>' + formatMoney(shippingCost) + '</strong></p>' +
+            '<p><span>Shipping</span><strong>' + (Number(shippingCost) === 0 ? '<span class="account-shipping-free">FREE</span>' : formatMoney(shippingCost)) + '</strong></p>' +
             '<p class="grand"><span>Total</span><strong>' + formatMoney(total) + '</strong></p>' +
           '</div>' +
         '</div>' +
         '<aside class="account-order-side">' +
           '<div class="account-order-detail-block">' +
             '<h4>Shipping</h4>' +
+            (order.shipping_service ? '<p><strong>Method:</strong> ' + escapeHtml(order.shipping_service) + '</p>' : '') +
             '<p><strong>Address:</strong> ' + escapeHtml(shippingLine || '-') + '</p>' +
             '<p><strong>Phone:</strong> ' + escapeHtml(order.shipping_phone || '-') + '</p>' +
             '<p><strong>Tracking:</strong> ' + escapeHtml(tracking || 'Not assigned yet') + '</p>' +
@@ -2412,8 +2442,17 @@ function initAccountPage(){
           '</div>' +
           '<div class="account-order-detail-block">' +
             '<h4>Payment</h4>' +
-            '<p><strong>Method:</strong> ' + escapeHtml(paymentMethod) + '</p>' +
+            '<p><strong>Method:</strong> ' + escapeHtml(paymentMethod === 'zelle' ? 'Zelle' : paymentMethod) + '</p>' +
             '<p><strong>Status:</strong> ' + escapeHtml(paymentStatus) + '</p>' +
+            (paymentMethod === 'zelle' && paymentStatus !== 'Paid'
+              ? '<div class="account-zelle-instructions">' +
+                  '<p class="account-zelle-title"><strong>Complete Your Zelle Payment</strong></p>' +
+                  '<p><strong>Send To:</strong> pxresearch</p>' +
+                  '<p><strong>Amount Due:</strong> ' + escapeHtml(formatMoney(total)) + '</p>' +
+                  '<p><strong>Memo:</strong> ' + escapeHtml(String(order.order_number || '')) + '</p>' +
+                  '<p class="account-zelle-warn">Your order will remain pending until we verify your Zelle payment. Please verify the recipient before sending.</p>' +
+                '</div>'
+              : '') +
           '</div>' +
         '</aside>' +
       '</div>' +
@@ -3008,6 +3047,265 @@ function initCheckoutPage(){
   checkoutState.promoValidating = false;
   renderCart();
 
+  // Toggle Zelle instructions panel when the Zelle payment option is selected.
+  (function initZelleToggle(){
+    var paymentRadios = document.querySelectorAll('input[name="payment_method"]');
+    var zellePanel = document.getElementById('zelleInstructions');
+    if(!zellePanel || !paymentRadios.length) return;
+
+    function updateZellePanel(){
+      var selected = document.querySelector('input[name="payment_method"]:checked');
+      var isZelle = selected && selected.value === 'zelle';
+      zellePanel.style.display = isZelle ? '' : 'none';
+    }
+
+    Array.prototype.forEach.call(paymentRadios, function(radio){
+      radio.addEventListener('change', updateZellePanel);
+    });
+
+    zellePanel.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-copy]');
+      if(!btn) return;
+      var text = btn.getAttribute('data-copy');
+      if(!text) return;
+      if(navigator.clipboard){ navigator.clipboard.writeText(text).catch(function(){}); }
+      else { try { var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); } catch(err){} }
+      var orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function(){ btn.textContent = orig; }, 1500);
+    });
+
+    updateZellePanel();
+  }());
+
+  // ---- Shipping rate loading -----------------------------------------------
+  var shippingRateDebounceTimer = null;
+
+  function getAddressSnapshot(){
+    return [
+      String((document.getElementById('shipping_zip') || {}).value || '').trim(),
+      String((document.getElementById('shipping_state') || {}).value || '').trim(),
+      String((document.getElementById('shipping_city') || {}).value || '').trim(),
+      String((document.getElementById('shipping_address') || {}).value || '').trim(),
+      String((document.getElementById('shipping_country') || {}).value || '').trim()
+    ].join('|');
+  }
+
+  function isAddressReadyForRating(){
+    var zip = String((document.getElementById('shipping_zip') || {}).value || '').trim();
+    var state = String((document.getElementById('shipping_state') || {}).value || '').trim();
+    return zip.length >= 5 && state.length >= 2;
+  }
+
+  function setShippingRatesUI(mode, message){
+    var loadingEl = document.getElementById('shippingRatesLoading');
+    var errorEl = document.getElementById('shippingRatesError');
+    var promptEl = document.getElementById('shippingRatesPrompt');
+    var listEl = document.getElementById('shippingRatesList');
+    var errMsg = document.getElementById('shippingRatesErrorMsg');
+    var suggestionEl = document.getElementById('shippingAddressSuggestion');
+    if(loadingEl) loadingEl.style.display = mode === 'loading' ? '' : 'none';
+    if(errorEl) errorEl.style.display = mode === 'error' ? '' : 'none';
+    if(promptEl) promptEl.style.display = mode === 'prompt' ? '' : 'none';
+    if(listEl) listEl.style.display = mode === 'list' ? '' : 'none';
+    if(suggestionEl) suggestionEl.style.display = mode === 'suggestion' ? '' : 'none';
+    if(errMsg && message) errMsg.textContent = message;
+  }
+
+  function formatSuggestionAddress(a){
+    if(!a) return '';
+    var parts = [];
+    if(a.street1) parts.push(escapeHtml(a.street1));
+    if(a.street2) parts.push(escapeHtml(a.street2));
+    var cityLine = [a.city, a.state].filter(Boolean).join(', ');
+    if(a.zip) cityLine = (cityLine ? cityLine + ' ' : '') + a.zip;
+    if(cityLine) parts.push(escapeHtml(cityLine));
+    if(a.country) parts.push(escapeHtml(a.country));
+    return parts.join('<br>');
+  }
+
+  function renderAddressSuggestion(details){
+    var origEl = document.getElementById('suggestionOriginalAddress');
+    var sugEl = document.getElementById('suggestionSuggestedAddress');
+    if(origEl) origEl.innerHTML = formatSuggestionAddress(details && details.originalAddress);
+    if(sugEl) sugEl.innerHTML = formatSuggestionAddress(details && details.suggestedAddress);
+    var useBtn = document.getElementById('useSuggestedAddress');
+    var keepBtn = document.getElementById('keepOriginalAddress');
+    if(useBtn && !useBtn.dataset.bound){
+      useBtn.dataset.bound = '1';
+      useBtn.addEventListener('click', function(){
+        var d = checkoutState.addressSuggestion;
+        if(d && d.suggestedAddress){ applySuggestedAddress(d.suggestedAddress); }
+        loadShippingRates(true);
+      });
+    }
+    if(keepBtn && !keepBtn.dataset.bound){
+      keepBtn.dataset.bound = '1';
+      keepBtn.addEventListener('click', function(){
+        loadShippingRates(true);
+      });
+    }
+  }
+
+  function applySuggestedAddress(a){
+    if(!a) return;
+    function setVal(id, val){ var el = document.getElementById(id); if(el && val != null && val !== ''){ el.value = val; } }
+    setVal('shipping_address', a.street1);
+    setVal('shipping_city', a.city);
+    setVal('shipping_state', a.state);
+    setVal('shipping_zip', a.zip);
+    checkoutState.lastRatedAddress = null;
+  }
+
+  function renderShippingRates(rates, shipmentId, effectiveSubtotal){
+    var listEl = document.getElementById('shippingRatesList');
+    if(!listEl) return;
+    if(!rates || !rates.length){
+      setShippingRatesUI('error', 'No USPS shipping rates are available for your address. Please verify the ZIP code.');
+      return;
+    }
+    listEl.innerHTML = rates.map(function(rate){
+      var isGroundAdv = rate.canonicalService === 'USPS Ground Advantage';
+      var qualifiesFree = isGroundAdv && effectiveSubtotal >= FREE_SHIPPING_THRESHOLD;
+      var priceDisplay = qualifiesFree
+        ? '<span class="shipping-rate-free">FREE</span><span class="shipping-rate-price-orig"> (normally ' + formatMoney(rate.price) + ')</span>'
+        : '<span class="shipping-rate-price">' + formatMoney(rate.price) + '</span>';
+      var freeNote = qualifiesFree ? '<span class="shipping-rate-free-note">FREE Ground Advantage on orders $' + FREE_SHIPPING_THRESHOLD.toFixed(2) + '+</span>' : '';
+      var upgradeNote = !isGroundAdv && effectiveSubtotal >= FREE_SHIPPING_THRESHOLD
+        ? '<span class="shipping-rate-upgrade-note">Paid upgrade — Ground Advantage is FREE with your order</span>'
+        : '';
+      var eta = rate.deliveryDays != null
+        ? '<span class="shipping-rate-eta">Est. ' + rate.deliveryDays + ' business day' + (rate.deliveryDays === 1 ? '' : 's') + '</span>'
+        : '';
+      var selected = checkoutState.selectedRate && checkoutState.selectedRate.rateId === rate.rateId;
+      return '<label class="shipping-rate-card' + (selected ? ' selected' : '') + '">'
+        + '<input type="radio" name="shipping_rate" value="' + escapeHtml(rate.rateId) + '"' + (selected ? ' checked' : '') + ' aria-label="' + escapeHtml(rate.canonicalService) + '">'
+        + '<div class="shipping-rate-details">'
+        + '<span class="shipping-rate-name">' + escapeHtml(rate.canonicalService) + '</span>'
+        + priceDisplay
+        + freeNote
+        + upgradeNote
+        + eta
+        + '</div>'
+        + '</label>';
+    }).join('');
+
+    listEl.querySelectorAll('input[name="shipping_rate"]').forEach(function(radio){
+      radio.addEventListener('change', function(){
+        if(!radio.checked) return;
+        var rate = rates.find(function(r){ return r.rateId === radio.value; });
+        if(!rate) return;
+        checkoutState.selectedRate = rate;
+        checkoutState.easypostShipmentId = shipmentId;
+        // Re-render to reflect selection and recompute total
+        renderShippingRates(checkoutState.shippingRates, checkoutState.easypostShipmentId, computeEffectiveSubtotal());
+        renderCart();
+      });
+    });
+
+    setShippingRatesUI('list');
+  }
+
+  function computeEffectiveSubtotal(){
+    var items = (cartData && Array.isArray(cartData.items)) ? cartData.items : [];
+    var total = 0;
+    items.forEach(function(item){
+      total += getQuantityPricing(Number(item.price || 0), item.quantity).discountedTotal;
+    });
+    var promoDiscount = 0;
+    if(checkoutState.appliedPromo && Number(checkoutState.appliedPromo.discount || 0) > 0){
+      promoDiscount = Number(checkoutState.appliedPromo.discount || 0);
+    }
+    return Math.max(0, total - promoDiscount);
+  }
+
+  function loadShippingRates(confirmVerifiedAddress){
+    if(!isAddressReadyForRating()) return;
+    var snapshot = getAddressSnapshot();
+    if(!confirmVerifiedAddress && snapshot === checkoutState.lastRatedAddress && checkoutState.shippingRates.length && !checkoutState.shippingRatesError) return;
+
+    checkoutState.shippingRatesLoading = true;
+    checkoutState.shippingRatesError = null;
+    setShippingRatesUI('loading');
+
+    var zip = String((document.getElementById('shipping_zip') || {}).value || '').trim();
+    var state = String((document.getElementById('shipping_state') || {}).value || '').trim();
+    var city = String((document.getElementById('shipping_city') || {}).value || '').trim();
+    var address = String((document.getElementById('shipping_address') || {}).value || '').trim();
+    var country = String((document.getElementById('shipping_country') || {}).value || '').trim() || 'US';
+    var name = String((document.getElementById('shipping_first_name') || {}).value || '').trim() + ' ' + String((document.getElementById('shipping_last_name') || {}).value || '').trim();
+    var phone = String((document.getElementById('shipping_phone') || {}).value || '').trim();
+
+    authApi('/api/checkout/shipping/rates', {
+      method: 'POST',
+      body: JSON.stringify({ zip: zip, state: state, city: city, address: address, country: country, name: name.trim(), phone: phone, confirmVerifiedAddress: !!confirmVerifiedAddress })
+    }).then(function(data){
+      checkoutState.shippingRatesLoading = false;
+      checkoutState.lastRatedAddress = snapshot;
+        checkoutState.addressSuggestion = null;
+      checkoutState.shippingRates = data.rates || [];
+      checkoutState.easypostShipmentId = data.shipmentId || null;
+
+      // Auto-select Ground Advantage (first/cheapest) by default.
+      if(checkoutState.shippingRates.length && !checkoutState.selectedRate){
+        checkoutState.selectedRate = checkoutState.shippingRates[0];
+      }
+
+      renderShippingRates(checkoutState.shippingRates, checkoutState.easypostShipmentId, computeEffectiveSubtotal());
+      renderCart();
+          }).catch(function(err){
+        checkoutState.shippingRatesLoading = false;
+        checkoutState.shippingRates = [];
+        checkoutState.selectedRate = null;
+        if(err && err.code === 'address-verification-confirmation-required' && err.details){
+          checkoutState.addressSuggestion = err.details;
+          checkoutState.shippingRatesError = null;
+          renderAddressSuggestion(err.details);
+          setShippingRatesUI('suggestion');
+          renderCart();
+          return;
+        }
+        checkoutState.addressSuggestion = null;
+        if(err && err.code === 'address-verification-failed'){
+          checkoutState.shippingRatesError = "We couldn't verify this address. Please review the address and try again.";
+        } else {
+          checkoutState.shippingRatesError = (err && err.message) || 'Unable to calculate shipping rates. Please check your address and try again.';
+        }
+        setShippingRatesUI('error', checkoutState.shippingRatesError);
+        renderCart();
+      });
+  }
+
+  function scheduleRateLoad(){
+    clearTimeout(shippingRateDebounceTimer);
+    shippingRateDebounceTimer = setTimeout(function(){
+      var snap = getAddressSnapshot();
+      if(snap !== checkoutState.lastRatedAddress || checkoutState.shippingRatesError){
+        // Invalidate old selection when address changes.
+        if(snap !== checkoutState.lastRatedAddress){
+          checkoutState.selectedRate = null;
+          checkoutState.shippingRates = [];
+          checkoutState.easypostShipmentId = null;
+          renderCart();
+        }
+        if(isAddressReadyForRating()) loadShippingRates();
+        else setShippingRatesUI('prompt');
+      }
+    }, 600);
+  }
+
+  var retryBtn = document.getElementById('retryShippingRates');
+  if(retryBtn){ retryBtn.addEventListener('click', function(){ checkoutState.lastRatedAddress = null; loadShippingRates(); }); }
+
+  ['shipping_zip','shipping_state','shipping_city','shipping_address','shipping_country'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el){ el.addEventListener('input', scheduleRateLoad); el.addEventListener('change', scheduleRateLoad); }
+  });
+
+  // Load rates if address fields are already filled (e.g., prefilled from profile).
+  if(isAddressReadyForRating()){ loadShippingRates(); } else { setShippingRatesUI('prompt'); }
+  // ---- End shipping rate loading -------------------------------------------
+
   if(promoBtn && promoInput){
     promoInput.addEventListener('input', function(){
       if (!checkoutState.appliedPromoCode) return;
@@ -3052,6 +3350,10 @@ function initCheckoutPage(){
         }
         announceCartLive('Discount code applied: ' + checkoutState.appliedPromoCode + '.');
         renderCart();
+        // Re-render rates to reflect updated free-shipping eligibility.
+        if(checkoutState.shippingRates.length){
+          renderShippingRates(checkoutState.shippingRates, checkoutState.easypostShipmentId, computeEffectiveSubtotal());
+        }
       }).catch(function(err){
         checkoutState.appliedPromoCode = null;
         checkoutState.appliedPromo = null;
@@ -3110,6 +3412,13 @@ function initCheckoutPage(){
       return;
     }
 
+    if(!checkoutState.selectedRate || !checkoutState.easypostShipmentId){
+      setCheckoutMessage('Please select a shipping method before placing your order.', true);
+      var methodCard = document.getElementById('shippingMethodCard');
+      if(methodCard){ methodCard.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      return;
+    }
+
     var firstName = String((document.getElementById('shipping_first_name') || {}).value || '').trim();
     var lastName = String((document.getElementById('shipping_last_name') || {}).value || '').trim();
     var paymentMethodEl = document.querySelector('input[name="payment_method"]:checked');
@@ -3122,9 +3431,10 @@ function initCheckoutPage(){
       shipping_zip: String((document.getElementById('shipping_zip') || {}).value || '').trim(),
       shipping_country: String((document.getElementById('shipping_country') || {}).value || '').trim(),
       shipping_phone: String((document.getElementById('shipping_phone') || {}).value || '').trim(),
-      payment_method: paymentMethodEl ? paymentMethodEl.value : 'card',
+      payment_method: paymentMethodEl ? paymentMethodEl.value : 'zelle',
       promo_code: checkoutState.appliedPromoCode || null,
-      shipping_cost: Number(checkoutState.shippingCost || 0)
+      easypost_shipment_id: checkoutState.easypostShipmentId,
+      easypost_rate_id: checkoutState.selectedRate.rateId
     };
 
     setCheckoutMessage('', false);
@@ -3140,7 +3450,10 @@ function initCheckoutPage(){
       closeCart();
       showToast('Order confirmed \u2014 ' + (order.order_number || ''));
       announceCartLive('Order confirmed. Redirecting to order confirmation.');
-      var qs = 'order_id=' + encodeURIComponent(order.order_id) + '&order_number=' + encodeURIComponent(order.order_number || '');
+      var qs = 'order_id=' + encodeURIComponent(order.order_id)
+        + '&order_number=' + encodeURIComponent(order.order_number || '')
+        + (order.payment_method ? '&payment_method=' + encodeURIComponent(order.payment_method) : '')
+        + (order.shipping_service ? '&shipping_service=' + encodeURIComponent(order.shipping_service) : '');
       window.location.href = 'order-confirmation.html?' + qs;
     }).catch(function(err){
       if(err && err.status === 401){

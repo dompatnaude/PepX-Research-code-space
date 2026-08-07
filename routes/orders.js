@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../db/connection");
 const { money, validatePromoCode } = require("../services/promo-service");
+const { getEasyPostClient, classifyUspsService } = require("../services/easypost");
 
 function getQuantityDiscountRate(quantity) {
   const qty = Number(quantity) || 0;
@@ -229,6 +230,8 @@ function createOrdersRouter(requireAuth) {
           ORDER BY id ASC`,
         [order.id]
       );
+      const zelleMethod = order.payment_method === 'zelle';
+      const zellePaid = order.payment_status === 'paid';
       res.json({
         order,
         items: itemsRes.rows,
@@ -242,7 +245,9 @@ function createOrdersRouter(requireAuth) {
         },
         payment: {
           method: order.payment_method || null,
-          status: order.status === "pending_payment" ? "Pending" : "Paid"
+          status: zelleMethod
+            ? (zellePaid ? 'Paid' : 'Awaiting Zelle Payment')
+            : (order.status === "pending_payment" ? "Pending" : "Paid")
         },
         shipping: {
           tracking_number: order.tracking_number || null,
@@ -321,7 +326,6 @@ async function createOrder(req, res) {
 
     const pricing = priceCartItems(items, inventory.variantById);
     const subtotalBeforeDiscount = money(pricing.subtotal);
-    const shippingCost = money(body.shipping_cost || 0);
 
     let promoCodeId = null;
     let promoCode = null;
@@ -342,10 +346,47 @@ async function createOrder(req, res) {
       subtotalAfterDiscount = money(promoResult.subtotal_after_discount);
     }
 
+    // Compute shipping server-side; never trust the browser-submitted value.
+    const FREE_SHIPPING_THRESHOLD = 150;
+    const easypostShipmentId = String(body.easypost_shipment_id || '').trim();
+    const easypostRateId = String(body.easypost_rate_id || '').trim();
+
+    if (!easypostShipmentId || !easypostRateId) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Please select a shipping method before placing your order." });
+    }
+
+    // Verify rate price with EasyPost — browser cannot manipulate the cost.
+    let epClient;
+    let verifiedRate;
+    try {
+      epClient = getEasyPostClient({ env: process.env });
+      const epShipment = await epClient.Shipment.retrieve(easypostShipmentId);
+      verifiedRate = Array.isArray(epShipment.rates)
+        ? epShipment.rates.find((r) => String(r.id || '') === easypostRateId)
+        : null;
+    } catch (epErr) {
+      await client.query("ROLLBACK");
+      return res.status(502).json({ error: "Could not verify shipping rate. Please reload and try again." });
+    }
+
+    if (!verifiedRate) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Selected shipping rate is no longer valid. Please select a new shipping method." });
+    }
+
+    const canonicalService = classifyUspsService(verifiedRate.carrier, verifiedRate.service);
+    const isGroundAdvantage = canonicalService === 'USPS Ground Advantage';
+    const freeShipApplies = subtotalAfterDiscount >= FREE_SHIPPING_THRESHOLD && isGroundAdvantage;
+    const shippingCost = money(freeShipApplies ? 0 : Number(verifiedRate.rate || 0));
+    const shippingService = canonicalService || verifiedRate.service || null;
+    const shippingDeliveryDays = verifiedRate.delivery_days != null ? Number(verifiedRate.delivery_days) : null;
+
     const total = money(subtotalAfterDiscount + shippingCost);
     const shippingCountry = String(body.shipping_country || "").trim() || null;
     const shippingPhone = String(body.shipping_phone || "").trim() || null;
     const paymentMethod = String(body.payment_method || "").trim() || null;
+    const paymentStatus = paymentMethod === 'zelle' ? 'awaiting_payment' : null;
 
     const tempOrderNumber = `TMP-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const insertRes = await client.query(
@@ -368,9 +409,14 @@ async function createOrder(req, res) {
           promo_code,
           promo_code_id,
           discount_amount,
-          subtotal_before_discount
+          subtotal_before_discount,
+          payment_status,
+          shipping_service,
+          shipping_rate_id,
+          shipping_provider_shipment_id,
+          shipping_delivery_days
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
         RETURNING id`,
       [
         tempOrderNumber,
@@ -392,6 +438,11 @@ async function createOrder(req, res) {
         promoCodeId,
         discountAmount,
         subtotalBeforeDiscount,
+        paymentStatus,
+        shippingService,
+        easypostRateId,
+        easypostShipmentId,
+        shippingDeliveryDays,
       ]
     );
 
@@ -482,6 +533,9 @@ async function createOrder(req, res) {
       order_id: order.id,
       order_number: order.order_number,
       status: order.status,
+      payment_method: paymentMethod,
+      payment_status: paymentStatus,
+      shipping_service: shippingService,
       totals: {
         subtotal: subtotalAfterDiscount,
         subtotal_before_discount: subtotalBeforeDiscount,

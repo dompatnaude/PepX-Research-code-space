@@ -296,6 +296,29 @@ function buildShipmentCreateParams({ toAddress, fromAddress, packageInfo }) {
   };
 }
 
+// Maps EasyPost carrier+service strings to canonical checkout display names.
+function classifyUspsService(carrier, service) {
+  if (String(carrier || '').toUpperCase() !== 'USPS') return null;
+  const s = String(service || '').toLowerCase().replace(/[\s_-]/g, '');
+  if (s.includes('groundadvantage')) return 'USPS Ground Advantage';
+  if (s.includes('prioritymailexpress') || (s.includes('express') && s.includes('priority'))) return 'USPS Priority Mail Express';
+  if (s === 'express') return 'USPS Priority Mail Express';
+  if (s.includes('priority')) return 'USPS Priority Mail';
+  return null;
+}
+
+// Default package dimensions for checkout rate requests (overridable via env).
+function getCheckoutPackage(env) {
+  const src = env || process.env;
+  return {
+    pounds: Number(src.CHECKOUT_SHIP_POUNDS) >= 0 ? Number(src.CHECKOUT_SHIP_POUNDS) : 0,
+    ounces: Number(src.CHECKOUT_SHIP_OUNCES) > 0 ? Number(src.CHECKOUT_SHIP_OUNCES) : 8,
+    length: Number(src.CHECKOUT_SHIP_LENGTH) > 0 ? Number(src.CHECKOUT_SHIP_LENGTH) : 8,
+    width: Number(src.CHECKOUT_SHIP_WIDTH) > 0 ? Number(src.CHECKOUT_SHIP_WIDTH) : 5,
+    height: Number(src.CHECKOUT_SHIP_HEIGHT) > 0 ? Number(src.CHECKOUT_SHIP_HEIGHT) : 3
+  };
+}
+
 module.exports = {
   getEasyPostClient,
   getEasyPostApiKey,
@@ -313,5 +336,7 @@ module.exports = {
   validatePackageInput,
   formatAddressForComparison,
   buildShipmentCreateParams,
-  missingConfigError
+  missingConfigError,
+  classifyUspsService,
+  getCheckoutPackage
 };

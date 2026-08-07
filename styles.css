@@ -438,6 +438,55 @@ nav.menu a:hover{color:var(--blue);}
 .checkout-payment-option input{margin-top:3px;accent-color:var(--blue);}
 .checkout-payment-option strong{display:block;font-size:14px;line-height:1.25;}
 .checkout-payment-option small{display:block;font-size:12px;color:#64748b;margin-top:4px;line-height:1.4;}
+.checkout-payment-option--disabled{opacity:0.5;cursor:not-allowed;}
+.checkout-payment-option--disabled input{cursor:not-allowed;}
+.checkout-coming-soon{font-size:10px;font-weight:600;letter-spacing:.04em;background:#e2e8f0;color:#64748b;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle;text-transform:uppercase;}
+/* Zelle checkout panel */
+.zelle-instructions{border:1px solid #dbe3f2;border-radius:12px;padding:16px;background:#f0f7ff;margin-top:2px;}
+
+/* Shipping method cards */
+.shipping-rates-list{display:grid;gap:10px;}
+.shipping-rate-card{display:flex;gap:12px;align-items:flex-start;border:1px solid #dbe3f2;border-radius:12px;padding:14px;background:#f9fbff;cursor:pointer;transition:border-color .15s,background .15s;}
+.shipping-rate-card:hover{border-color:#2f62ad;background:#f0f7ff;}
+.shipping-rate-card.selected{border-color:#1c4379;background:#eff6ff;box-shadow:0 0 0 2px #bfdbfe;}
+.shipping-rate-card input[type="radio"]{margin-top:3px;accent-color:var(--blue);flex-shrink:0;}
+.shipping-rate-details{display:grid;gap:3px;min-width:0;}
+.shipping-rate-name{font-size:14px;font-weight:700;color:#1e293b;}
+.shipping-rate-price{font-size:14px;font-weight:600;color:#374151;}
+.shipping-rate-free{font-size:14px;font-weight:700;color:#15803d;}
+.shipping-rate-price-orig{font-size:12px;color:#64748b;margin-left:2px;}
+.shipping-rate-eta{font-size:12px;color:#64748b;margin-top:1px;}
+.shipping-rate-free-note{font-size:11px;font-weight:600;color:#15803d;background:#dcfce7;border-radius:4px;padding:1px 6px;display:inline-block;margin-top:2px;}
+.shipping-rate-upgrade-note{font-size:11px;color:#92400e;background:#fef3c7;border-radius:4px;padding:1px 6px;display:inline-block;margin-top:2px;}
+.shipping-rates-state{padding:10px 0;}
+.shipping-rates-loading-text{font-size:13px;color:#64748b;font-style:italic;}
+.shipping-rates-error-state p{font-size:13px;color:#b91c1c;margin-bottom:8px;}
+.shipping-rates-prompt-text{font-size:13px;color:#64748b;}
+@media(max-width:600px){.shipping-rate-card{padding:12px 10px;gap:10px;}}
+.zelle-instructions-title{font-size:15px;font-weight:700;margin:0 0 10px;color:#1e3a5f;}
+.zelle-steps{padding-left:20px;display:grid;gap:8px;font-size:13px;color:#374151;line-height:1.55;}
+.zelle-id-row{display:inline-flex;align-items:center;gap:8px;margin-top:4px;}
+.zelle-copy-btn{font-size:11px;padding:2px 8px;border:1px solid #3b82f6;border-radius:6px;background:#eff6ff;color:#1d4ed8;cursor:pointer;white-space:nowrap;}
+.zelle-copy-btn:hover{background:#dbeafe;}
+.zelle-warning{font-size:12px;color:#92400e;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;margin-top:10px;line-height:1.5;}
+.zelle-pre-order-note{font-size:12px;color:#374151;margin-top:8px;font-style:italic;}
+/* Zelle order confirmation panel */
+.zelle-conf-panel{border:2px solid #3b82f6;border-radius:14px;padding:24px;background:#eff6ff;margin-top:24px;}
+.zelle-conf-heading{font-size:20px;font-weight:700;color:#1e3a5f;margin:0 0 8px;}
+.zelle-conf-sub{font-size:14px;color:#374151;margin:0 0 18px;}
+.zelle-conf-grid{display:grid;gap:10px;margin-bottom:18px;}
+.zelle-conf-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px;background:#fff;border:1px solid #bfdbfe;border-radius:10px;}
+.zelle-conf-label{font-size:12px;font-weight:600;color:#64748b;min-width:140px;}
+.zelle-conf-value{display:flex;align-items:center;gap:8px;font-size:15px;}
+.zelle-conf-instruction{font-size:14px;color:#1e3a5f;margin-bottom:12px;line-height:1.6;}
+/* Zelle admin panel */
+.zelle-admin-send{font-size:13px;background:#fef9c3;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;margin-top:10px;}
+.zelle-confirm-btn{background:#f59e0b;color:#fff;border:none;padding:8px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;}
+.zelle-confirm-btn:hover{background:#d97706;}
+/* Zelle account order detail */
+.account-zelle-instructions{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;margin-top:12px;font-size:13px;display:grid;gap:6px;line-height:1.55;}
+.account-zelle-title{font-size:14px;margin-bottom:4px;}
+.account-zelle-warn{font-size:12px;color:#92400e;background:#fef3c7;border-radius:6px;padding:6px 10px;margin-top:4px;}
 .checkout-note{font-size:12px;color:#64748b;line-height:1.4;min-height:16px;}
 .checkout-note.error{color:#b91c1c;}
 .checkout-trust h3{font-size:17px;margin-bottom:8px;}
@@ -1388,7 +1437,11 @@ body.cart-open{overflow:hidden;}
 .checkout-free-ship{border:1px solid #d9e3f5;background:#f8fbff;border-radius:12px;padding:10px 12px;}
 .checkout-free-ship p{font-size:13px;font-weight:700;color:#1c4379;line-height:1.35;}
 .checkout-free-ship-track{margin-top:8px;height:8px;border-radius:999px;background:#dce7f6;overflow:hidden;}
-.checkout-free-ship-track span{display:block;width:0;height:100%;background:linear-gradient(90deg,#1c4379,#2f62ad);transition:width .25s ease;}
+.checkout-free-ship-track span{display:block;width:0;height:100%;background:linear-gradient(90deg,#1c4379,#2f62ad);transition:width .4s cubic-bezier(.4,0,.2,1);}
+.checkout-free-ship-track.is-qualified span{background:linear-gradient(90deg,#16a34a,#22c55e);}
+.checkout-free-ship-track.is-qualified{background:#dcfce7;}
+.shipping-free-badge{display:inline-block;font-size:13px;font-weight:700;color:#15803d;background:#dcfce7;border:1px solid #86efac;border-radius:6px;padding:1px 8px;letter-spacing:.02em;}
+.account-shipping-free{font-weight:700;color:#15803d;}
 .checkout-summary-items{max-height:46vh;}
 .checkout-summary-item{padding:14px 0;grid-template-columns:64px minmax(0,1fr) auto;gap:12px;align-items:start;}
 .checkout-summary-item .thumb{width:64px;height:64px;border-radius:12px;}
@@ -1436,7 +1489,9 @@ body.cart-open{overflow:hidden;}
 .mini-cart-progress{margin:14px 22px 0;border:1px solid #d7e3f4;background:#f8fbff;border-radius:12px;padding:10px 12px;}
 .mini-cart-progress p{font-size:13px;font-weight:700;color:#1c4379;line-height:1.3;}
 .mini-cart-progress-track{margin-top:8px;height:8px;border-radius:999px;background:#dce7f6;overflow:hidden;}
-.mini-cart-progress-track span{display:block;width:0;height:100%;background:linear-gradient(90deg,#1c4379,#2f62ad);transition:width .25s ease;}
+.mini-cart-progress-track span{display:block;width:0;height:100%;background:linear-gradient(90deg,#1c4379,#2f62ad);transition:width .4s cubic-bezier(.4,0,.2,1);}
+.mini-cart-progress-track.is-qualified span{background:linear-gradient(90deg,#16a34a,#22c55e);}
+.mini-cart-progress-track.is-qualified{background:#dcfce7;}
 .drawer-body{padding:12px 22px 16px;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;}
 .cart-item{border-bottom:1px solid #edf2f8;}
 .cart-item .thumb{width:56px;height:56px;border-radius:12px;background-size:cover;background-position:center;border:1px solid #e2e8f0;}
@@ -1494,7 +1549,7 @@ body.cart-open{overflow:hidden;}
 
 @media (prefers-reduced-motion: reduce){
 	.checkout-free-ship-track span,
-	.mini-cart-progress-track span{transition:none;}
+	.mini-cart-progress-track span{transition:width .4s cubic-bezier(.4,0,.2,1);}
 }
 
 body.dark-mode .checkout-free-ship{background:#10213d;border-color:#26497f;}
@@ -1507,3 +1562,15 @@ body.dark-mode .cart-overlay{background:rgba(2,6,23,.7);}
 body.dark-mode .checkout-empty-icon{background:#13284b;color:#cfe0ff;}
 body.dark-mode .checkout-promo-applied{background:#10213d;border-color:#294d87;}
 body.dark-mode .checkout-promo-applied span{color:#d3e5ff;}
+
+.address-suggestion{padding:14px 0;}
+.address-suggestion-head{margin-bottom:12px;}
+.address-verified-badge{display:inline-block;font-size:12px;font-weight:700;color:#15803d;background:#dcfce7;border:1px solid #bbf7d0;border-radius:999px;padding:4px 12px;margin-bottom:8px;}
+.address-suggestion-lead{font-size:13px;color:#374151;margin:6px 0 0;}
+.address-suggestion-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+.address-suggestion-card{border:1px solid #dbe3f2;border-radius:12px;padding:14px;background:#f9fbff;}
+.address-suggestion-card.is-suggested{border-color:#15803d;background:#f0fdf4;}
+.address-suggestion-card h4{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin:0 0 8px;}
+.address-suggestion-body{font-style:normal;font-size:14px;line-height:1.5;color:#1e293b;}
+.address-suggestion-actions{display:flex;flex-wrap:wrap;gap:10px;}
+@media(max-width:600px){.address-suggestion-cols{grid-template-columns:1fr;}}

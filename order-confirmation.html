@@ -23,12 +23,15 @@
       <div class="drawer-foot">
         <div class="tot"><span>Order Number</span><span id="confOrderNumber">&mdash;</span></div>
         <div class="tot"><span>Status</span><span id="confStatus">&mdash;</span></div>
+        <div id="confShippingServiceRow" style="display:none;" class="tot"><span>Shipping Method</span><span id="confShippingService">&mdash;</span></div>
         <div class="tot"><span>Subtotal</span><span id="confSubtotal">$0.00</span></div>
-        <div class="tot" id="confDiscountRow" style="display:none;"><span>Discount</span><span id="confDiscount">-$0.00</span></div>
+        <div id="confDiscountRow" style="display:none;"><span>Discount</span><span id="confDiscount">-$0.00</span></div>
         <div class="tot"><span>Shipping</span><span id="confShipping">$0.00</span></div>
         <div class="tot"><span>Total</span><span id="confTotal">$0.00</span></div>
         <a class="btn primary co" href="shop.html">Continue Shopping</a>
       </div>
+
+      <div id="zelleConfirmPanel" class="zelle-conf-panel" style="display:none;"></div>
     </section>
   </main>
 
@@ -51,11 +54,49 @@
     function esc(s){ return String(s==null?'':s).replace(/[&<>\"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]; }); }
     function getParam(name){ return new URLSearchParams(window.location.search).get(name); }
     function api(path){ if(typeof authApi === 'function'){ return authApi(path, { method:'GET' }); } return fetch(path, { credentials:'include' }).then(function(r){ return r.json(); }); }
+
+    function copyText(text, btn){
+      if(navigator.clipboard){ navigator.clipboard.writeText(text).catch(function(){}); }
+      else { try { var t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); document.body.removeChild(t); } catch(e){} }
+      var orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function(){ btn.textContent = orig; }, 1500);
+    }
+
+    function renderZellePanel(orderNumber, total){
+      var panel = document.getElementById('zelleConfirmPanel');
+      if(!panel) return;
+      var totalStr = money(total);
+      panel.innerHTML =
+        '<h2 class="zelle-conf-heading">Complete Your Zelle Payment</h2>'
+        + '<p class="zelle-conf-sub">Your order has been received. <strong>Your order will remain pending until we verify your Zelle payment.</strong></p>'
+        + '<div class="zelle-conf-grid">'
+        + '<div class="zelle-conf-row"><span class="zelle-conf-label">Send To (Zelle ID)</span><span class="zelle-conf-value"><strong>pxresearch</strong> <button type="button" class="zelle-copy-btn" onclick="copyText(\'pxresearch\',this)">Copy</button></span></div>'
+        + '<div class="zelle-conf-row"><span class="zelle-conf-label">Amount</span><span class="zelle-conf-value"><strong>' + esc(totalStr) + '</strong> <button type="button" class="zelle-copy-btn" onclick="copyText(\'' + esc(String(total)) + '\',this)">Copy</button></span></div>'
+        + '<div class="zelle-conf-row"><span class="zelle-conf-label">Memo (Order Number)</span><span class="zelle-conf-value"><strong>' + esc(orderNumber) + '</strong> <button type="button" class="zelle-copy-btn" onclick="copyText(\'' + esc(orderNumber) + '\',this)">Copy</button></span></div>'
+        + '</div>'
+        + '<p class="zelle-conf-instruction">Open your bank app, go to Zelle, and send exactly <strong>' + esc(totalStr) + '</strong> to <strong>pxresearch</strong> with the memo <strong>' + esc(orderNumber) + '</strong>.</p>'
+        + '<p class="zelle-warning"><strong>Please verify the recipient before sending your payment.</strong> PepX Research is not responsible for payments sent to an incorrect Zelle recipient.</p>';
+      panel.style.display = '';
+    }
+
     document.addEventListener('DOMContentLoaded', function(){
       var orderId = getParam('order_id');
       var orderNumberQS = getParam('order_number');
+      var paymentMethodQS = getParam('payment_method');
+      var shippingServiceQS = getParam('shipping_service');
       var summaryEl = document.getElementById('orderSummary');
+      var confMsg = document.getElementById('confirmMsg');
       if(orderNumberQS){ document.getElementById('confOrderNumber').textContent = orderNumberQS; }
+      if(shippingServiceQS){
+        var ssRow = document.getElementById('confShippingServiceRow');
+        var ssEl = document.getElementById('confShippingService');
+        if(ssRow) ssRow.style.display = '';
+        if(ssEl) ssEl.textContent = shippingServiceQS;
+      }
+      if(paymentMethodQS === 'zelle' && confMsg){
+        confMsg.textContent = 'Your order has been received. Please complete your Zelle payment below.';
+      }
       if(!orderId){
         summaryEl.innerHTML = '<p class="cart-empty">No order reference provided.</p>';
         return;
@@ -64,8 +105,16 @@
         var order = data.order || {};
         var items = data.items || [];
         var totals = data.totals || {};
+        var isZelle = (order.payment_method === 'zelle') || (paymentMethodQS === 'zelle');
         document.getElementById('confOrderNumber').textContent = order.order_number || orderNumberQS || '\u2014';
-        document.getElementById('confStatus').textContent = data.status || order.status || '\u2014';
+        document.getElementById('confStatus').textContent = isZelle ? 'Awaiting Zelle Payment' : (data.status || order.status || '\u2014');
+        var svcName = order.shipping_service || shippingServiceQS || null;
+        if(svcName){
+          var ssRow2 = document.getElementById('confShippingServiceRow');
+          var ssEl2 = document.getElementById('confShippingService');
+          if(ssRow2) ssRow2.style.display = '';
+          if(ssEl2) ssEl2.textContent = svcName;
+        }
         var subtotalBeforeDiscount = totals.subtotal_before_discount != null ? totals.subtotal_before_discount : totals.subtotal;
         var discountAmount = Number(totals.discount_amount || 0);
         var promoCode = String(totals.promo_code || '').trim();
@@ -80,18 +129,21 @@
             discountRow.style.display = 'none';
           }
         }
-        document.getElementById('confShipping').textContent = money(totals.shipping_cost);
+        document.getElementById('confShipping').innerHTML = Number(totals.shipping_cost) === 0 ? '<span class="shipping-free-badge">FREE</span>' : money(totals.shipping_cost);
         document.getElementById('confTotal').textContent = money(totals.total);
         if(!items.length){
           summaryEl.innerHTML = '<p class="cart-empty">No items found for this order.</p>';
-          return;
+        } else {
+          summaryEl.innerHTML = items.map(function(it){
+            return '<div class="cart-item"><div class="thumb"></div><div class="info">'
+              + '<div class="nm">' + esc(it.name) + '</div>'
+              + '<div class="pr">' + money(it.price) + ' &times; ' + (Number(it.quantity)||0) + '</div>'
+              + '</div><div class="qty"><span>' + money(Number(it.price) * (Number(it.quantity)||0)) + '</span></div></div>';
+          }).join('');
         }
-        summaryEl.innerHTML = items.map(function(it){
-          return '<div class="cart-item"><div class="thumb"></div><div class="info">'
-            + '<div class="nm">' + esc(it.name) + '</div>'
-            + '<div class="pr">' + money(it.price) + ' &times; ' + (Number(it.quantity)||0) + '</div>'
-            + '</div><div class="qty"><span>' + money(Number(it.price) * (Number(it.quantity)||0)) + '</span></div></div>';
-        }).join('');
+        if(isZelle){
+          renderZellePanel(order.order_number || orderNumberQS || '', Number(totals.total || 0));
+        }
       }).catch(function(err){
         if(err && err.status === 401){
           summaryEl.innerHTML = '<p class="cart-empty">Please sign in to view this order.</p>';
@@ -101,7 +153,6 @@
         summaryEl.innerHTML = '<p class="cart-empty">' + esc((err && err.message) || 'Could not load order.') + '</p>';
       });
     });
-  })();
-  </script>
+  })();</script>
 </body>
 </html>

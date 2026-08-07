@@ -296,9 +296,9 @@ function createAdminRouter(requireAuth, deps) {
       const sql =
         'SELECT o.id, o.order_number, o.status, o.total, o.created_at, ' +
         'o.shipping_name, o.shipping_email, o.tracking_number, o.carrier, ' +
-        'o.shipping_label_url, o.shipped_at, ' +
+        'o.shipping_label_url, o.shipped_at, o.shipping_service, ' +
         '(SELECT COALESCE(SUM(oi.quantity), 0)::int FROM order_items oi WHERE oi.order_id = o.id) AS item_count, ' +
-        "CASE WHEN o.status = 'pending_payment' THEN 'pending' ELSE 'paid' END AS payment_status, " +
+        "COALESCE(o.payment_status, CASE WHEN o.status = 'pending_payment' THEN 'awaiting_payment' ELSE 'paid' END) AS payment_status, " +
         "CASE WHEN o.status = 'completed' THEN 'delivered' " +
         "WHEN o.shipped_at IS NOT NULL THEN 'shipped' " +
         "WHEN o.shipping_label_url IS NOT NULL THEN 'label_created' " +
@@ -399,6 +399,9 @@ function createAdminRouter(requireAuth, deps) {
           total: order.total
         },
         status: order.status,
+        payment_method: order.payment_method || null,
+        payment_status: order.payment_status || (order.status === 'pending_payment' ? 'awaiting_payment' : 'paid'),
+        paid_at: order.paid_at || null,
         tracking: {
           tracking_number: latestShipment && latestShipment.trackingNumber || order.tracking_number,
           carrier: latestShipment && latestShipment.carrier || order.carrier,
@@ -406,7 +409,6 @@ function createAdminRouter(requireAuth, deps) {
           shipping_label_created_at: latestShipment && latestShipment.purchasedAt || order.shipping_label_created_at,
           shipped_at: order.shipped_at
         },
-        payment_status: order.status === 'pending_payment' ? 'pending' : 'paid',
         fulfillment_status: order.status === 'completed'
           ? 'delivered'
           : (order.shipped_at ? 'shipped' : ((latestShipment && latestShipment.labelUrl) || order.shipping_label_url ? 'label_created' : 'unfulfilled')),
@@ -534,6 +536,41 @@ function createAdminRouter(requireAuth, deps) {
       }
       console.error(error);
       res.status(500).json({ error: 'Failed to void shipping label' });
+    }
+  });
+
+  router.post('/orders/:id/confirm-zelle-payment', gate, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(orderId)) {
+        return res.status(400).json({ error: 'Invalid order id' });
+      }
+      const orderRes = await db.query('SELECT id, payment_method, payment_status, status FROM orders WHERE id = $1', [orderId]);
+      if (!orderRes.rows.length) {
+        return res.status(404).json({ error: 'Order not found' });
+      }
+      const order = orderRes.rows[0];
+      if (order.payment_method !== 'zelle') {
+        return res.status(400).json({ error: 'Order is not a Zelle order' });
+      }
+      if (order.payment_status === 'paid') {
+        return res.status(409).json({ error: 'Zelle payment already confirmed' });
+      }
+      const result = await db.query(
+        `UPDATE orders
+            SET payment_status = 'paid',
+                paid_at = CURRENT_TIMESTAMP,
+                zelle_confirmed_by = $1,
+                status = 'processing',
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = $2
+          RETURNING id, order_number, payment_status, paid_at, status`,
+        [req.adminUserId, orderId]
+      );
+      return res.json(result.rows[0]);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Failed to confirm Zelle payment' });
     }
   });
 
