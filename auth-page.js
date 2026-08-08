@@ -122,6 +122,10 @@
         setFieldError(form, 'password', 'Password is required.');
         hasError = true;
       }
+      if (!ageConfirmed) {
+        setFieldError(form, 'ageConfirmed', 'You must confirm that you are 21 years of age or older.');
+        hasError = true;
+      }
       if (hasError) return;
 
       request('/api/auth/login', {
@@ -152,7 +156,8 @@
 
       var fd = new FormData(form);
       var email = String(fd.get('email') || '').trim();
-      var birthday = String(fd.get('birthday') || '').trim();
+      var ageConfirmedEl = form.querySelector('#registerAgeConfirm');
+      var ageConfirmed = ageConfirmedEl ? ageConfirmedEl.checked : false;
       var password = String(fd.get('password') || '');
       var confirmPassword = String(fd.get('confirmPassword') || '');
       var businessType = String(fd.get('businessType') || '').trim();
@@ -180,7 +185,7 @@
         method: 'POST',
         body: JSON.stringify({
           email: email,
-          birthday: birthday || null,
+          ageConfirmed: true,
           password: password,
           confirmPassword: confirmPassword,
           businessType: businessType
