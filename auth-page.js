@@ -122,10 +122,6 @@
         setFieldError(form, 'password', 'Password is required.');
         hasError = true;
       }
-      if (!ageConfirmed) {
-        setFieldError(form, 'ageConfirmed', 'You must confirm that you are 21 years of age or older.');
-        hasError = true;
-      }
       if (hasError) return;
 
       request('/api/auth/login', {
@@ -177,6 +173,10 @@
       }
       if (!businessType) {
         setFieldError(form, 'businessType', 'Select a business type.');
+        hasError = true;
+      }
+      if (!ageConfirmed) {
+        setFieldError(form, 'ageConfirmed', 'You must confirm that you are 21 years of age or older.');
         hasError = true;
       }
       if (hasError) return;
