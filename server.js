@@ -8,6 +8,7 @@ const createAdminVariantsRouter = require('./routes/admin-variants');
 const createAdminPromosRouter = require('./routes/admin-promos');
 const createEasyPostWebhookRouter = require('./routes/easypost-webhooks');
 const createCoasRouter = require('./routes/coas');
+const { createReviewsRouter, createAdminReviewsRouter } = require('./routes/reviews');
 const createAdminCoasRouter = require('./routes/admin-coas');
 const createCheckoutShippingRouter = require('./routes/checkout-shipping');
 const { transferGuestCart } = require("./routes/cart");
@@ -875,6 +876,8 @@ app.use('/api/admin', createAdminPromosRouter(requireAuth));
 app.use('/api/admin', createAdminCoasRouter(requireAuth));
 app.use("/api/admin", createAdminRouter(requireAuth));
 app.use('/api/coas', createCoasRouter());
+  app.use('/api/reviews', createReviewsRouter());
+  app.use('/api/admin', createAdminReviewsRouter(requireAuth));
 
 app.use('/api/*', (req, res) => {
   return res.status(404).json({ error: 'API endpoint not found' });

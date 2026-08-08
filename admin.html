@@ -178,6 +178,7 @@
         <button type="button" data-tab="products">Products</button>
         <button type="button" data-tab="promos">Discount Codes</button>
         <button type="button" data-tab="coas">COAs</button>
+        <button type="button" data-tab="reviews">Reviews</button>
       </div>
 
       <section id="homeSection">
@@ -299,6 +300,26 @@
     </div>
   </div>
 
+        <div id="reviewsSection" class="hidden">
+          <div class="admin-bar admin-bar-between">
+            <div>
+              <h2 class="admin-section-title">Customer Reviews</h2>
+              <div class="admin-subtle">Moderate customer-submitted reviews. Approve to publish on the homepage.</div>
+            </div>
+            <div class="admin-filters" id="reviewStatusFilters">
+              <button type="button" data-review-filter="pending" class="active">Pending</button>
+              <button type="button" data-review-filter="approved">Approved</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="admin-table">
+              <thead><tr>
+                <th>Date</th><th>Name</th><th>Email</th><th>Rating</th><th>Review</th><th>Status</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="reviewsBody"><tr><td colspan="7" class="muted">Loading&hellip;</td></tr></tbody>
+            </table>
+          </div>
+        </div>
   <div class="modal-backdrop hidden" id="productModalWrap" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
     <div class="modal-card">
       <div class="modal-head">

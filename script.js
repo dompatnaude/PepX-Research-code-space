@@ -2833,30 +2833,25 @@ function initAccountPage(){
 }
 
 // ---------- Reviews ----------
+// ---- Reviews (persistent, API-backed, admin-moderated) ----
+// Reviews are loaded from GET /api/reviews (approved only). New reviews are
+// submitted to POST /api/reviews and are NOT shown until an admin approves
+// them. The email address is never sent to the browser by the public API.
 var reviews = [];
-var HERO_REVIEW_FALLBACK = [
-  {rating:5, name:'Avery M.', email:'Research Lab', message:'Excellent consistency between lots. Purity and handling quality are exactly what our bench workflow requires.'},
-  {rating:5, name:'Logan R.', email:'Biotech Team', message:'Shipping and packaging have been reliable every time. Materials arrive cold, sealed, and ready for controlled use.'},
-  {rating:5, name:'Taylor C.', email:'University Group', message:'Documentation and quality control are strong. This has become our preferred source for repeat peptide studies.'},
-  {rating:4, name:'Jordan P.', email:'Independent Researcher', message:'Great communication and clear labeling. Products have integrated smoothly into our protocol validation work.'},
-  {rating:5, name:'Riley D.', email:'Clinical Research Unit', message:'Fast fulfillment and consistent product integrity. We appreciate the professional handling standards.'},
-  {rating:5, name:'Morgan L.', email:'Pharma R&D', message:'Reliable outcomes in our assays and very clean presentation. Exactly what we need from a research supplier.'}
-];
 
 function formatReviewDisplayName(name){
   var cleanName = (name || '').toString().trim();
   if(!cleanName) return 'Verified Researcher';
   var parts = cleanName.split(/\s+/);
-  return parts.length > 1 ? parts[0] + ' ' + parts[parts.length-1].charAt(0) + '.' : cleanName;
+  return parts.length > 1 ? parts[0] + ' ' + parts[parts.length-1].charAt(0).toUpperCase() + '.' : parts[0];
 }
 
 function getHeroCollageReviews(){
-  var source = reviews.length ? reviews.slice(0, 8) : HERO_REVIEW_FALLBACK.slice(0, 8);
-  return source.map(function(review){
+  return reviews.slice(0, 8).map(function(review){
     return {
       rating: Math.max(1, Math.min(5, parseInt(review.rating, 10) || 5)),
       name: formatReviewDisplayName(review.name),
-      message: (review.message || '').toString().trim() || 'High-quality materials and reliable service for repeatable research work.'
+      message: (review.review_text || '').toString().trim() || 'High-quality materials and reliable service for repeatable research work.'
     };
   });
 }
@@ -2865,9 +2860,10 @@ function renderHeroReviewCollage(){
   var root = document.getElementById('heroReviewCollage');
   if(!root) return;
   var entries = getHeroCollageReviews();
+  if(!entries.length){ root.innerHTML = ''; return; }
   var buildCards = function(items){
     return items.map(function(review){
-      var stars = '★'.repeat(review.rating) + '☆'.repeat(5-review.rating);
+      var stars = '\u2605'.repeat(review.rating) + '\u2606'.repeat(5-review.rating);
       return '<article class="hero-review-card"><div class="hero-review-stars">'+stars+'</div><p class="hero-review-text">"'+escapeHtml(review.message)+'"</p><div class="hero-review-author">'+escapeHtml(review.name)+'</div></article>';
     }).join('');
   };
@@ -2880,37 +2876,57 @@ function renderReviews(){
   var list = document.getElementById('reviewList');
   if(!list) return;
   if(!reviews.length){
-    list.innerHTML = '<div class="review-empty">No reviews yet. Be the first to leave one.</div>';
+    list.innerHTML = '<div class="review-empty">No reviews yet. Be the first to share your experience.</div>';
     return;
   }
   list.innerHTML = reviews.map(function(review){
-    var stars = '★'.repeat(review.rating) + '☆'.repeat(5-review.rating);
+    var rating = Math.max(1, Math.min(5, parseInt(review.rating, 10) || 5));
+    var stars = '\u2605'.repeat(rating) + '\u2606'.repeat(5-rating);
     var displayName = formatReviewDisplayName(review.name);
-    return '<div class="tcard"><div class="stars">'+stars+'</div><p>"'+review.message+'"</p><div class="who">'+displayName+'<span>'+review.email+'</span></div></div>';
+    return '<div class="tcard"><div class="stars">'+stars+'</div><p>"'+escapeHtml((review.review_text || '').toString())+'"</p><div class="who">'+escapeHtml(displayName)+'</div></div>';
   }).join('');
 }
 
-function addReview(form){
-  var data = new FormData(form);
-  var review = {
-    rating: parseInt(data.get('rating'), 10),
-    name: data.get('name').toString().trim(),
-    email: data.get('email').toString().trim(),
-    message: data.get('message').toString().trim()
-  };
-  if(!review.rating || !review.name || !review.email || !review.message){ return false; }
-  reviews.unshift(review);
-  renderReviews();
-  form.reset();
-  var picker = form.querySelector('.star-picker');
-  if(picker){
-    picker.querySelectorAll('.star-btn').forEach(function(btn){ btn.classList.remove('active'); });
-    picker.querySelector('input[name="rating"]').value = '';
-  }
-  return true;
+function fetchReviews(){
+  return fetch('/api/reviews', { headers: { 'Accept': 'application/json' } })
+    .then(function(res){ return res.ok ? res.json() : { reviews: [] }; })
+    .then(function(data){
+      reviews = (data && data.reviews) ? data.reviews : [];
+      renderReviews();
+    })
+    .catch(function(){ reviews = []; renderReviews(); });
 }
 
-
+// Submit a review to the server. Resolves to true on success. On success the
+// review is stored as unapproved and is NOT added to the public list.
+function addReview(form){
+  var data = new FormData(form);
+  var payload = {
+    rating: parseInt(data.get('rating'), 10),
+    name: (data.get('name') || '').toString().trim(),
+    email: (data.get('email') || '').toString().trim(),
+    review_text: (data.get('message') || '').toString().trim()
+  };
+  if(!payload.rating || payload.rating < 1 || payload.rating > 5 || !payload.name || !payload.email || !payload.review_text){
+    return Promise.resolve(false);
+  }
+  return fetch('/api/reviews', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(res){
+    if(!res.ok) return false;
+    // Reset form + star picker. Do NOT add to the public list (pending approval).
+    form.reset();
+    var picker = form.querySelector('.star-picker');
+    if(picker){
+      picker.querySelectorAll('.star-btn').forEach(function(btn){ btn.classList.remove('active'); });
+      var hidden = picker.querySelector('input[name="rating"]');
+      if(hidden) hidden.value = '';
+    }
+    return true;
+  }).catch(function(){ return false; });
+}
 function splitFullName(name){
   var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if(!parts.length){ return { first: '', last: '' }; }
@@ -3528,11 +3544,12 @@ window.addEventListener('DOMContentLoaded', function(){
     }
     reviewForm.addEventListener('submit', function(e){
       e.preventDefault();
-      var submitted = addReview(reviewForm);
-      showToast(submitted ? 'Review submitted' : 'Please complete rating, name, email, and review');
+      addReview(reviewForm).then(function(submitted){
+        showToast(submitted ? 'Thank you! Your review has been submitted and is awaiting approval.' : 'Please complete rating, name, email, and review');
+      });
     });
   }
-  renderReviews();
+  fetchReviews();
 
   // Header + cart controls
   var searchWrap = document.getElementById('searchWrap');

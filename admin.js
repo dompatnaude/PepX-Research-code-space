@@ -1106,7 +1106,7 @@
   }
 
   function switchTab(tab) {
-    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos' || tab === 'coas') {
+    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos' || tab === 'coas' || tab === 'reviews') {
       state.tab = tab;
     } else {
       state.tab = 'home';
@@ -1122,6 +1122,7 @@
     if ($('productsSection')) $('productsSection').classList.toggle('hidden', state.tab !== 'products');
     if ($('promosSection')) $('promosSection').classList.toggle('hidden', state.tab !== 'promos');
     if ($('coasSection')) $('coasSection').classList.toggle('hidden', state.tab !== 'coas');
+      if ($('reviewsSection')) $('reviewsSection').classList.toggle('hidden', state.tab !== 'reviews');
     if (state.tab === 'home') {
       loadSummary();
     } else if (state.tab === 'products') {
@@ -1130,6 +1131,8 @@
       loadPromos();
     } else if (state.tab === 'coas') {
       loadCoas();
+    } else if (state.tab === 'reviews') {
+      loadReviews();
     } else {
       loadOrders();
     }
@@ -2105,4 +2108,107 @@
       }
     }
   });
+  // ---- Customer review moderation ----------------------------------------
+  var reviewState = { filter: 'pending', bound: false };
+
+  function escapeReviewHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function reviewStars(rating) {
+    var r = Math.max(1, Math.min(5, parseInt(rating, 10) || 0));
+    return '\u2605'.repeat(r) + '\u2606'.repeat(5 - r);
+  }
+
+  function formatReviewDate(value) {
+    if (!value) return '';
+    var d = new Date(value);
+    return isNaN(d.getTime()) ? '' : d.toLocaleString();
+  }
+
+  function renderReviewsTable(rows) {
+    var body = $('reviewsBody');
+    if (!body) return;
+    if (!rows || !rows.length) {
+      var msg = reviewState.filter === 'approved'
+        ? 'No approved reviews yet.'
+        : 'No pending reviews.';
+      body.innerHTML = '<tr><td colspan="7" class="muted">' + msg + '</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(function (r) {
+      var approved = !!r.approved;
+      var statusLabel = approved ? 'Approved' : 'Pending';
+      var actions = '';
+      if (!approved) {
+        actions += '<button type="button" class="btn-sm" data-review-approve="' + r.id + '">Approve</button> ';
+      }
+      actions += '<button type="button" class="link-btn" data-review-delete="' + r.id + '">' + (approved ? 'Remove' : 'Reject') + '</button>';
+      return '<tr>' +
+        '<td>' + escapeReviewHtml(formatReviewDate(r.created_at)) + '</td>' +
+        '<td>' + escapeReviewHtml(r.name) + '</td>' +
+        '<td>' + escapeReviewHtml(r.email) + '</td>' +
+        '<td>' + reviewStars(r.rating) + '</td>' +
+        '<td>' + escapeReviewHtml(r.review_text) + '</td>' +
+        '<td>' + statusLabel + '</td>' +
+        '<td>' + actions + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function loadReviews() {
+    bindReviewControls();
+    var body = $('reviewsBody');
+    if (body) body.innerHTML = '<tr><td colspan="7" class="muted">Loading\u2026</td></tr>';
+    return api('/api/admin/reviews?status=' + encodeURIComponent(reviewState.filter))
+      .then(function (data) { renderReviewsTable((data && data.reviews) || []); })
+      .catch(function (err) {
+        if (body) body.innerHTML = '<tr><td colspan="7" class="muted">' + escapeReviewHtml(err.message || 'Failed to load reviews.') + '</td></tr>';
+      });
+  }
+
+  function approveReview(id) {
+    return api('/api/admin/reviews/' + id + '/approve', { method: 'PATCH' })
+      .then(function () { toast('Review approved'); return loadReviews(); })
+      .catch(function (err) { toast(err.message || 'Could not approve review'); });
+  }
+
+  function deleteReview(id) {
+    if (!window.confirm('Delete this review permanently? This cannot be undone.')) return;
+    return api('/api/admin/reviews/' + id, { method: 'DELETE' })
+      .then(function () { toast('Review deleted'); return loadReviews(); })
+      .catch(function (err) { toast(err.message || 'Could not delete review'); });
+  }
+
+  function bindReviewControls() {
+    if (reviewState.bound) return;
+    reviewState.bound = true;
+    var filters = $('reviewStatusFilters');
+    if (filters) {
+      Array.prototype.forEach.call(filters.querySelectorAll('button'), function (btn) {
+        btn.addEventListener('click', function () {
+          Array.prototype.forEach.call(filters.querySelectorAll('button'), function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          reviewState.filter = btn.getAttribute('data-review-filter') || 'pending';
+          loadReviews();
+        });
+      });
+    }
+    var body = $('reviewsBody');
+    if (body) {
+      body.addEventListener('click', function (e) {
+        var approveBtn = e.target.closest('[data-review-approve]');
+        if (approveBtn) { approveReview(parseInt(approveBtn.getAttribute('data-review-approve'), 10)); return; }
+        var deleteBtn = e.target.closest('[data-review-delete]');
+        if (deleteBtn) { deleteReview(parseInt(deleteBtn.getAttribute('data-review-delete'), 10)); return; }
+      });
+    }
+  }
+
+
 })();
