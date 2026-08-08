@@ -2888,6 +2888,11 @@ function fetchReviews(){
 
 // Submit a review to the server. Resolves to true on success. On success the
 // review is stored as unapproved and is NOT added to the public list.
+// Submit a review to the server. Returns a Promise resolving to a result object:
+//   { ok:true } on success (HTTP 2xx)
+//   { ok:false, reason:"validation" } when local fields are incomplete
+//   { ok:false, reason:"server", ... } on a non-2xx response or network error
+// It never navigates the page; the caller keeps the user on the homepage.
 function addReview(form){
   var data = new FormData(form);
   var payload = {
@@ -2897,24 +2902,31 @@ function addReview(form){
     review_text: (data.get('message') || '').toString().trim()
   };
   if(!payload.rating || payload.rating < 1 || payload.rating > 5 || !payload.name || !payload.email || !payload.review_text){
-    return Promise.resolve(false);
+    return Promise.resolve({ ok: false, reason: 'validation' });
   }
   return fetch('/api/reviews', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify(payload)
   }).then(function(res){
-    if(!res.ok) return false;
-    // Reset form + star picker. Do NOT add to the public list (pending approval).
-    form.reset();
-    var picker = form.querySelector('.star-picker');
-    if(picker){
-      picker.querySelectorAll('.star-btn').forEach(function(btn){ btn.classList.remove('active'); });
-      var hidden = picker.querySelector('input[name="rating"]');
-      if(hidden) hidden.value = '';
-    }
-    return true;
-  }).catch(function(){ return false; });
+    return res.json().catch(function(){ return {}; }).then(function(body){
+      if(!res.ok){
+        console.error('Review submission failed:', res.status, body);
+        return { ok: false, reason: 'server', status: res.status, message: (body && body.error) || '' };
+      }
+      form.reset();
+      var picker = form.querySelector('.star-picker');
+      if(picker){
+        picker.querySelectorAll('.star-btn').forEach(function(btn){ btn.classList.remove('active'); });
+        var hidden = picker.querySelector('input[name="rating"]');
+        if(hidden) hidden.value = '';
+      }
+      return { ok: true };
+    });
+  }).catch(function(err){
+    console.error('Review submission network error:', err);
+    return { ok: false, reason: 'server', status: 0, message: '' };
+  });
 }
 function splitFullName(name){
   var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
@@ -3533,10 +3545,37 @@ window.addEventListener('DOMContentLoaded', function(){
     }
     reviewForm.addEventListener('submit', function(e){
       e.preventDefault();
-      addReview(reviewForm).then(function(submitted){
-        showToast(submitted ? 'Thank you! Your review has been submitted and is awaiting approval.' : 'Please complete rating, name, email, and review');
-      });
+      try {
+        clearReviewError();
+        addReview(reviewForm).then(function(result){
+          if(result && result.ok){
+            showToast('Thank you! Your review has been submitted and is awaiting approval.');
+          } else if(result && result.reason === 'validation'){
+            showReviewError('Please add a star rating, your name, a valid email, and a review before submitting.');
+          } else {
+            showReviewError('Sorry, we could not submit your review right now. Please try again in a moment.');
+          }
+        }).catch(function(err){
+          console.error('Unexpected error handling review submission:', err);
+          showReviewError('Sorry, we could not submit your review right now. Please try again in a moment.');
+        });
+      } catch(err){
+        console.error('Unexpected error in review submit handler:', err);
+        showReviewError('Sorry, we could not submit your review right now. Please try again in a moment.');
+      }
     });
+    function showReviewError(msg){
+      var el = document.getElementById('reviewError');
+      if(!el) return;
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+    function clearReviewError(){
+      var el = document.getElementById('reviewError');
+      if(!el) return;
+      el.textContent = '';
+      el.style.display = 'none';
+    }
   }
   fetchReviews();
 
