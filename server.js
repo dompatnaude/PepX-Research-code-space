@@ -27,6 +27,7 @@ const {
   verifyPasswordLogin
 } = require('./services/google-auth');
 const { sanitizeReturnPath, withAuthQuery } = require('./services/oauth-redirect');
+const { isAgeConfirmed, asyncHandler } = require('./services/auth-validation');
 const { ensureBootstrapAdmin } = require('./services/admin-bootstrap');
 const { loadProjectEnv } = require('./services/runtime-config');
 const { resolveGoogleCallbackUrl } = require('./services/google-config');
@@ -189,8 +190,8 @@ async function saveOrUpdateUser(nextUser) {
     await pool.query(
       `
       UPDATE users
-      SET name = $1, email = $2, institution = $3, provider = $4, password_hash = $5, google_id = $6, role = $7, birthday = $8, business_type = $9, updated_at = NOW()
-      WHERE id = $10;
+      SET name = $1, email = $2, institution = $3, provider = $4, password_hash = $5, google_id = $6, role = $7, birthday = $8, business_type = $9, age_confirmed_21_plus = COALESCE($10, age_confirmed_21_plus), age_confirmed_at = COALESCE($11, age_confirmed_at), updated_at = NOW()
+      WHERE id = $12;
       `,
       [
         nextUser.name,
@@ -202,6 +203,8 @@ async function saveOrUpdateUser(nextUser) {
         nextUser.role || 'customer',
         toNullableDate(nextUser.birthday),
         String(nextUser.businessType || '').trim() || null,
+        nextUser.ageConfirmed === true ? true : null,
+        nextUser.ageConfirmedAt || null,
         nextUser.id,
       ]
     );
@@ -210,8 +213,8 @@ async function saveOrUpdateUser(nextUser) {
 
   await pool.query(
     `
-    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role, birthday, business_type)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+    INSERT INTO users (id, name, email, institution, provider, password_hash, google_id, role, birthday, business_type, age_confirmed_21_plus, age_confirmed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
     `,
     [
       nextUser.id,
@@ -224,6 +227,8 @@ async function saveOrUpdateUser(nextUser) {
       nextUser.role || 'customer',
       toNullableDate(nextUser.birthday),
       String(nextUser.businessType || '').trim() || null,
+    nextUser.ageConfirmed === true ? true : null,
+    nextUser.ageConfirmedAt || null,
     ]
   );
 }
@@ -493,7 +498,8 @@ app.post('/api/auth/signup', async (req, res) => {
     confirmPassword,
     institution,
     businessType,
-    birthday
+    birthday,
+    ageConfirmed
   } = req.body || {};
   const normalizedEmail = normalizeEmail(email);
   const selectedBusinessType = String(businessType || institution || '').trim();
@@ -501,6 +507,10 @@ app.post('/api/auth/signup', async (req, res) => {
 
   if (!normalizedEmail || !password || !selectedBusinessType) {
     return res.status(400).json({ error: 'Please complete all required registration fields.' });
+  }
+
+  if (!isAgeConfirmed(ageConfirmed)) {
+    return res.status(400).json({ error: 'You must confirm that you are 21 years of age or older.' });
   }
 
   if (String(password).length < 8) {
@@ -525,7 +535,9 @@ app.post('/api/auth/signup', async (req, res) => {
     birthday: toNullableDate(birthday),
     provider: 'Email',
     passwordHash,
-    googleId: ''
+    googleId: '',
+    ageConfirmed: true,
+    ageConfirmedAt: new Date()
   };
 
   await saveOrUpdateUser(user);
@@ -878,8 +890,10 @@ app.get(Object.keys(PAGE_ALIASES), (req, res) => {
 app.get(['/', '/index.html'], async (req, res, next) => {
   try {
     const user = await hydrateAuthenticatedUser(req);
-    const fileName = user ? 'index.html' : 'public-index.html';
-    return res.sendFile(path.join(__dirname, fileName));
+    if (!user) {
+      return res.redirect(buildLoginRedirectTarget(req));
+    }
+    return res.sendFile(path.join(__dirname, 'index.html'));
   } catch (error) {
     return next(error);
   }
@@ -930,11 +944,29 @@ app.use(express.static(path.join(__dirname)));
 app.get('*', async (req, res, next) => {
   try {
     const user = await hydrateAuthenticatedUser(req);
-    const fileName = user ? 'index.html' : 'public-index.html';
-    return res.sendFile(path.join(__dirname, fileName));
+    if (!user) {
+      return res.redirect(buildLoginRedirectTarget(req));
+    }
+    return res.sendFile(path.join(__dirname, 'index.html'));
   } catch (error) {
     return next(error);
   }
+});
+
+// Centralized error handler. Catches errors forwarded by asyncHandler and
+// route `next(err)` calls so a failed DB/session operation returns a safe
+// response instead of crashing the process. Must be registered last.
+app.use((err, req, res, next) => {
+  console.error('[unhandled route error]', req.method, req.originalUrl, err && err.stack ? err.stack : err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const wantsJson = req.path.startsWith('/api/') ||
+    (req.get('accept') || '').includes('application/json');
+  if (wantsJson) {
+    return res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
+  }
+  return res.status(500).send('An unexpected error occurred. Please try again.');
 });
 
 async function startServer() {

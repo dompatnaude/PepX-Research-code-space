@@ -33,7 +33,6 @@ var PRODUCTS = [
   {id:'tirzepitide_10', name:'Tirzepitide', tag:'METABOLIC SUPPORT', color:'#eef1fc;color:#2f43e0', category:'Metabolic', description:'Research-grade peptide reagent for controlled laboratory workflows.', price:100.00, dosages:['10mg'], image:'assets/products/IMG_7608.png'}
 ];
 var STORAGE_KEY = 'pepxCart';
-var GATE_ACCEPTED_KEY = 'pepxGateAccepted';
 var cart = {};
 var cartData = { items: [], total: 0 };
 var cartItemIndex = {};
@@ -2911,73 +2910,6 @@ function addReview(form){
   return true;
 }
 
-// ---------- Entry gate ----------
-function initGate(){
-  var overlay = document.getElementById('gate');
-  if(!overlay) return;
-
-  var hasAcceptedGate = false;
-  try {
-    hasAcceptedGate = window.localStorage.getItem(GATE_ACCEPTED_KEY) === 'true';
-  } catch (err) {
-    hasAcceptedGate = false;
-  }
-
-  if(hasAcceptedGate){
-    overlay.classList.add('hidden');
-    document.body.classList.remove('locked');
-    return;
-  }
-
-  document.body.classList.add('locked');
-  var r = document.getElementById('g-research');
-  var a = document.getElementById('g-age');
-  var i = document.getElementById('g-inst');
-  var e = document.getElementById('g-enter');
-  var h = document.getElementById('g-hint');
-  
-  if(!r || !a || !i || !e) return;
-  
-  function v(){
-    var hasResearch = r.checked;
-    var hasAge = a.checked;
-    var hasInstitution = !!String(i.value || '').trim();
-    var canEnter = hasResearch && hasAge && hasInstitution;
-    e.disabled = !canEnter;
-
-    if(!h) return;
-    if(canEnter){
-      h.textContent = 'All set. You can enter the site.';
-      return;
-    }
-    if(!hasResearch){
-      h.textContent = 'Please confirm research-use-only compliance.';
-      return;
-    }
-    if(!hasAge){
-      h.textContent = 'Please confirm you are 21 years of age or older.';
-      return;
-    }
-    h.textContent = 'Please select your institution type.';
-  }
-
-  // Mobile browsers can emit different events for checkboxes/select pickers.
-  ['change', 'input', 'click'].forEach(function(evt){
-    r.addEventListener(evt, v);
-    a.addEventListener(evt, v);
-    i.addEventListener(evt, v);
-  });
-  
-  e.addEventListener('click', function(){
-    try { window.localStorage.setItem(GATE_ACCEPTED_KEY, 'true'); } catch (err) {}
-    overlay.classList.add('hidden');
-    document.body.classList.remove('locked');
-  });
-  
-  var d = document.getElementById('g-decline');
-  if(d) d.addEventListener('click', function(){ window.location.href='https://www.google.com'; });
-  v();
-}
 
 function splitFullName(name){
   var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
@@ -3570,7 +3502,6 @@ window.addEventListener('DOMContentLoaded', function(){
   renderCart();
   renderProductDetailPage();
   initAccountPage();
-  initGate();
   initAuth();
       loadProductsFromAPI();
 
