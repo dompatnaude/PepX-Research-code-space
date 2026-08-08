@@ -2871,21 +2871,10 @@ function renderHeroReviewCollage(){
   root.innerHTML = '<div class="review-collage-track">'+cards+'</div>';
 }
 
-function renderReviews(){
-  renderHeroReviewCollage();
-  var list = document.getElementById('reviewList');
-  if(!list) return;
-  if(!reviews.length){
-    list.innerHTML = '<div class="review-empty">No reviews yet. Be the first to share your experience.</div>';
-    return;
+  function renderReviews(){
+    // Approved reviews are shown only in the top hero review collage/carousel.
+    renderHeroReviewCollage();
   }
-  list.innerHTML = reviews.map(function(review){
-    var rating = Math.max(1, Math.min(5, parseInt(review.rating, 10) || 5));
-    var stars = '\u2605'.repeat(rating) + '\u2606'.repeat(5-rating);
-    var displayName = formatReviewDisplayName(review.name);
-    return '<div class="tcard"><div class="stars">'+stars+'</div><p>"'+escapeHtml((review.review_text || '').toString())+'"</p><div class="who">'+escapeHtml(displayName)+'</div></div>';
-  }).join('');
-}
 
 function fetchReviews(){
   return fetch('/api/reviews', { headers: { 'Accept': 'application/json' } })
