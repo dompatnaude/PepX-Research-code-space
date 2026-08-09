@@ -3,8 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Register | PepX Research Chemicals</title>
+  <title>Register | PepX Research</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+  .pepx-gate-shell{max-width:1180px;margin:0 auto;padding:40px 24px 64px;display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:start;box-sizing:border-box}
+  .pepx-gate-hero{color:#1f2a44}
+  .pepx-gate-hero h2{font-size:30px;line-height:1.15;margin:0 0 12px;color:#1f2a44}
+  .pepx-gate-hero .pepx-gate-lead{font-size:16px;line-height:1.6;color:#3d4a63;margin:0 0 28px;max-width:52ch}
+  .pepx-gate-section{margin:0 0 26px}
+  .pepx-gate-section h3{font-size:19px;margin:0 0 8px;color:#22345c;display:flex;align-items:center;gap:8px}
+  .pepx-gate-section p{font-size:14.5px;line-height:1.6;color:#465269;margin:0}
+  .pepx-gate-media{margin:14px 0 0;height:150px;border-radius:12px;background:linear-gradient(135deg,#e8eef7 0%,#dbe6f5 100%);border:1px solid #d3ddec;display:flex;align-items:center;justify-content:center;color:#5f7095;font-size:13px;font-weight:600;letter-spacing:.02em;position:relative;overflow:hidden}
+  .pepx-gate-media::before{content:"";position:absolute;inset:0;background-image:radial-gradient(circle at 20% 30%,rgba(41,72,132,.10) 0 14px,transparent 15px),radial-gradient(circle at 70% 60%,rgba(41,72,132,.08) 0 22px,transparent 23px);}
+  .pepx-gate-media img{position:relative;z-index:1;width:100%;height:100%;object-fit:cover;display:block}
+  .pepx-gate-trust{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:8px}
+  .pepx-gate-card{background:#fff;border:1px solid #e2e8f2;border-radius:12px;padding:16px 14px;text-align:center;box-shadow:0 1px 3px rgba(24,40,72,.05)}
+  .pepx-gate-card .pepx-gate-ico{width:38px;height:38px;margin:0 auto 10px;border-radius:50%;background:#eef3fb;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .pepx-gate-card h4{margin:0 0 4px;font-size:14px;color:#22345c}
+  .pepx-gate-card p{margin:0;font-size:12.5px;line-height:1.45;color:#5a6780}
+  .pepx-gate-aside{position:sticky;top:24px}
+  @media (max-width:900px){.pepx-gate-shell{grid-template-columns:1fr;padding:24px 16px 48px}.pepx-gate-aside{position:static;order:-1}.pepx-gate-trust{grid-template-columns:1fr}.pepx-gate-hero h2{font-size:24px}}
+  </style>
 </head>
 <body class="auth-page" data-auth-page="register">
   <div class="public-announcement-bar">For laboratory research use only. Not for human consumption.</div>
@@ -14,68 +33,94 @@
       <a href="index.html">Home</a>
       <a href="mailto:pepxaminos@gmail.com?subject=PepX%20Research%20Inquiry">Contact Us</a>
     </nav>
-    <a href="login.html" class="public-account-link" aria-label="Login or Register">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M4 20c1.5-3.2 4.2-4.8 8-4.8s6.5 1.6 8 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
-    </a>
+    <a href="login.html" class="public-account-link" aria-label="Login or Register"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M4 20c1.5-3.2 4.2-4.8 8-4.8s6.5 1.6 8 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg></a>
   </div></header>
 
-  <main class="auth-page-shell">
-    <section class="auth-page-card" aria-label="Registration form">
-      <h1>Register</h1>
-      <p class="auth-page-switch">Do you already have an account? <a href="login.html">Sign In</a></p>
-      <form class="auth-page-form" id="registerFormPage" novalidate>
-        <input type="hidden" name="returnTo" id="registerReturnTo">
-        <label>
-          <span>Email Address</span>
-          <input type="email" name="email" autocomplete="email" required>
-          <small class="auth-inline-error" data-error-for="email"></small>
-        </label>
-        <label class="auth-checkbox">
-          <input type="checkbox" name="ageConfirmed" id="registerAgeConfirm" value="true" required>
-          <span>I confirm that I am 21 years of age or older.</span>
-          <small class="auth-inline-error" data-error-for="ageConfirmed"></small>
-        </label>
-        <label>
-          <span>Password</span>
-          <span class="password-input-wrap">
-            <input type="password" name="password" autocomplete="new-password" required>
-            <button type="button" class="password-toggle" data-toggle-password>Show</button>
-          </span>
-          <small class="auth-inline-error" data-error-for="password"></small>
-        </label>
-        <label>
-          <span>Confirm Password</span>
-          <span class="password-input-wrap">
-            <input type="password" name="confirmPassword" autocomplete="new-password" required>
-            <button type="button" class="password-toggle" data-toggle-password>Show</button>
-          </span>
-          <small class="auth-inline-error" data-error-for="confirmPassword"></small>
-        </label>
-        <label>
-          <span>Business Type</span>
-          <select name="businessType" required>
-            <option value="">Select business type...</option>
-            <option value="Academic or University Laboratory">Academic or University Laboratory</option>
-            <option value="Biotechnology Company">Biotechnology Company</option>
-            <option value="Pharmaceutical Company">Pharmaceutical Company</option>
-            <option value="Contract Research Organization">Contract Research Organization</option>
-            <option value="Independent Research Organization">Independent Research Organization</option>
-            <option value="Other Qualified Research Business">Other Qualified Research Business</option>
-          </select>
-          <small class="auth-inline-error" data-error-for="businessType"></small>
-        </label>
-        <p class="auth-page-helper">Your personal data will be used to support your experience throughout this website, to manage access to your account, and for other purposes described in our <a href="privacy-policy.html">Privacy Policy</a>.</p>
-        <p class="auth-page-message" id="registerPageMessage" aria-live="polite"></p>
-        <div class="auth-page-actions">
-          <button type="submit" class="btn primary">Register</button>
+  <main class="pepx-gate-shell">
+    <div class="pepx-gate-hero">
+      <h2>Create your PepX Research account</h2>
+      <p class="pepx-gate-lead">Register to order research-grade compounds. Accounts are for qualified researchers, and we are transparent about our standards from the very first step.</p>
+
+      <div class="pepx-gate-section">
+        <h3>The PepX Research Guarantee</h3>
+        <p>Every compound is intended strictly for laboratory research and is backed by our commitment to purity, accurate labeling, and verifiable documentation. If a product does not meet the specification on its certificate of analysis, we make it right.</p>
+      </div>
+
+      <div class="pepx-gate-section">
+        <h3>Third-Party Batch Testing</h3>
+        <p>Batches are analyzed by independent laboratories, and certificates of analysis are made available so you can confirm identity and purity before you run an experiment.</p>
+        <div class="pepx-gate-media" role="img" aria-label="Realistic laboratory batch testing image">
+          <img src="https://res.cloudinary.com/wwaizwmt/image/upload/davinci_give_me_a_realistic_photo_of_a_lab_testing_peptide_o74n2i.png" alt="Lab batch testing image">
         </div>
-      </form>
-      <div class="auth-page-divider" id="registerGoogleDivider" hidden><span>or</span></div>
-      <button type="button" class="google-auth-btn" id="registerGoogleBtn" hidden>
-        <span class="google-auth-icon"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path fill="#EA4335" d="M12 10.2v3.9h5.4c-.24 1.25-.95 2.3-2.02 3.01l3.26 2.53c1.9-1.75 2.99-4.33 2.99-7.39 0-.71-.06-1.39-.2-2.05H12z"></path><path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.63-2.43l-3.26-2.53c-.9.61-2.05.98-3.37.98-2.59 0-4.78-1.75-5.56-4.11l-3.37 2.6C4.72 19.83 8.1 22 12 22z"></path><path fill="#4A90E2" d="M6.44 13.91A5.98 5.98 0 0 1 6.12 12c0-.66.12-1.31.32-1.91l-3.37-2.6A9.94 9.94 0 0 0 2 12c0 1.6.38 3.11 1.07 4.51l3.37-2.6z"></path><path fill="#FBBC05" d="M12 5.98c1.46 0 2.78.5 3.82 1.49l2.86-2.86C16.96 2.98 14.7 2 12 2 8.1 2 4.72 4.17 3.07 7.49l3.37 2.6c.78-2.36 2.97-4.11 5.56-4.11z"></path></svg></span>
-        <span>Continue with Google</span>
-      </button>
-    </section>
+      </div>
+
+      <div class="pepx-gate-section">
+        <h3>Customer Service &amp; Research Experience</h3>
+        <p>Our team supports qualified researchers throughout the ordering process, from questions about specifications to order status, so your focus stays on the work.</p>
+      </div>
+
+      <div class="pepx-gate-trust">
+        <div class="pepx-gate-card"><div class="pepx-gate-ico" aria-hidden="true">&#9878;</div><h4>Verified Purity</h4><p>Independent analysis on every batch.</p></div>
+        <div class="pepx-gate-card"><div class="pepx-gate-ico" aria-hidden="true">&#128273;</div><h4>Secure Access</h4><p>Accounts limited to qualified researchers.</p></div>
+        <div class="pepx-gate-card"><div class="pepx-gate-ico" aria-hidden="true">&#128231;</div><h4>Responsive Support</h4><p>Real help throughout your order.</p></div>
+      </div>
+    </div>
+
+    <div class="pepx-gate-aside">
+      <section class="auth-page-card" aria-label="Registration form">
+        <h1>Register</h1>
+        <p class="auth-page-switch">Do you already have an account? <a href="login.html">Sign In</a></p>
+        <form class="auth-page-form" id="registerFormPage" novalidate>
+          <input type="hidden" name="returnTo" id="registerReturnTo">
+          <label>
+            <span>Email Address</span>
+            <input type="email" name="email" autocomplete="email" required>
+            <small class="auth-inline-error" data-error-for="email"></small>
+          </label>
+          <label class="auth-checkbox">
+            <input type="checkbox" name="ageConfirmed" id="registerAgeConfirm" value="true" required>
+            <span>I confirm that I am 21 years of age or older.</span>
+            <small class="auth-inline-error" data-error-for="ageConfirmed"></small>
+          </label>
+          <label>
+            <span>Password</span>
+            <span class="password-input-wrap">
+              <input type="password" name="password" autocomplete="new-password" required>
+              <button type="button" class="password-toggle" data-toggle-password>Show</button>
+            </span>
+            <small class="auth-inline-error" data-error-for="password"></small>
+          </label>
+          <label>
+            <span>Confirm Password</span>
+            <span class="password-input-wrap">
+              <input type="password" name="confirmPassword" autocomplete="new-password" required>
+              <button type="button" class="password-toggle" data-toggle-password>Show</button>
+            </span>
+            <small class="auth-inline-error" data-error-for="confirmPassword"></small>
+          </label>
+          <label>
+            <span>Business Type</span>
+            <select name="businessType" required>
+              <option value="">Select business type...</option>
+              <option value="Academic or University Laboratory">Academic or University Laboratory</option>
+              <option value="Independent Research Organization">Independent Research Organization</option>
+              <option value="Other Qualified Research Business">Other Qualified Research Business</option>
+            </select>
+            <small class="auth-inline-error" data-error-for="businessType"></small>
+          </label>
+          <p class="auth-page-helper">Your personal data will be used to support your experience throughout this website, to manage access to your account, and for other purposes described in our <a href="privacy-policy.html">Privacy Policy</a>.</p>
+          <p class="auth-page-message" id="registerPageMessage" aria-live="polite"></p>
+          <div class="auth-page-actions">
+            <button type="submit" class="btn primary">Register</button>
+          </div>
+        </form>
+        <div class="auth-page-divider" id="registerGoogleDivider" hidden><span>or</span></div>
+        <button type="button" class="google-auth-btn" id="registerGoogleBtn" hidden>
+          <span class="google-auth-icon"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path fill="#EA4335" d="M12 10.2v3.9h5.4c-.24 1.25-.95 2.3-2.02 3.01l3.26 2.53c1.9-1.75 2.99-4.33 2.99-7.39 0-.71-.06-1.39-.2-2.05H12z"></path><path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.63-2.43l-3.26-2.53c-.9-.61-2.05.98-3.37.98-2.6 0-4.78-1.75-5.56-4.11l-3.37 2.6c1.64 3.31 5.07 5.8z"></path><path fill="#4A90E2" d="M6.44 13.91A5.98 5.98 0 0 1 6.12 12c0-.66.12-1.31.32-1.91l-3.37-2.6A9.94 9.94 0 0 0 2 12c0 1.6.38 3.11 1.07 4.51l3.37-2.6z"></path><path fill="#FBBC05" d="M12 5.98c1.46 0 2.78.5 3.82 1.49l2.86-2.86C16.96 2.98 14.7 2 12 2 8.1 2 4.72 4.17 3.07 7.49l3.37 2.6c.78-2.36 2.97-4.11 5.56-4.11z"></path></svg></span>
+          <span>Continue with Google</span>
+        </button>
+      </section>
+    </div>
   </main>
 
   <footer><div class="container">
