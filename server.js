@@ -9,6 +9,8 @@ const createAdminPromosRouter = require('./routes/admin-promos');
 const createEasyPostWebhookRouter = require('./routes/easypost-webhooks');
 const createCoasRouter = require('./routes/coas');
 const { createReviewsRouter, createAdminReviewsRouter } = require('./routes/reviews');
+const createAdminCustomersRouter = require('./routes/admin-customers');
+const { isAccountDisabled } = require('./services/admin-customers');
 const createAdminCoasRouter = require('./routes/admin-coas');
 const createCheckoutShippingRouter = require('./routes/checkout-shipping');
 const { transferGuestCart } = require("./routes/cart");
@@ -145,7 +147,8 @@ function mapUserRow(row) {
     resetTokenHash: row.reset_token_hash || null,
     resetTokenExpiresAt: row.reset_token_expires_at || null,
     createdAt: row.created_at || null,
-    role: row.role || 'customer'
+    role: row.role || 'customer',
+    disabledAt: row.disabled_at || null
   };
 }
 
@@ -250,7 +253,12 @@ async function hydrateAuthenticatedUser(req) {
     return null;
   }
 
-  req.user = sessionUser;
+  if (isAccountDisabled(sessionUser)) {
+      req.session.destroy(() => {});
+      return null;
+    }
+
+    req.user = sessionUser;
   applyPersistentSession(req);
   return sessionUser;
 }
@@ -560,6 +568,9 @@ app.post('/api/auth/login', async (req, res) => {
 
   const user = await findUserByEmail(normalizedEmail);
   const matches = await verifyPasswordLogin(user, password, bcrypt.compare.bind(bcrypt));
+    if (isAccountDisabled(user)) {
+      return res.status(403).json({ error: 'This account has been disabled. Please contact support.' });
+    }
   if (!matches) {
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
@@ -878,6 +889,7 @@ app.use("/api/admin", createAdminRouter(requireAuth));
 app.use('/api/coas', createCoasRouter());
   app.use('/api/reviews', createReviewsRouter());
   app.use('/api/admin', createAdminReviewsRouter(requireAuth));
+  app.use('/api/admin', createAdminCustomersRouter(requireAuth));
 
 app.use('/api/*', (req, res) => {
   return res.status(404).json({ error: 'API endpoint not found' });

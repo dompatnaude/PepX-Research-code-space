@@ -728,7 +728,7 @@ footer .logo .logo-sub{transform:none;}
 .copy{padding-top:22px;font-size:13px;text-align:center;}
 
 /* Home footer layout */
-.footer-top{display:flex;justify-content:flex-start;align-items:flex-start;gap:42px;}
+.footer-top{display:flex;justify-content:flex-start;align-items:flex-start;gap:clamp(28px,4vw,56px);}
 .footer-brand-contact{display:flex;align-items:flex-start;gap:24px;}
 .footer-brand-contact .logo{order:1;margin-bottom:0;}
 .footer-contact{order:2;margin-left:40px;}
@@ -737,8 +737,9 @@ footer .logo .logo-sub{transform:none;}
 .footer-small a{color:#d8def8;}
 .footer-small a:hover{color:#fff;}
 .footer-contact address{font-style:normal;margin:0;}
-.footer-quick-links h4{font-weight:800;margin-bottom:12px;}
-.footer-quick-links{margin-left:clamp(72px,10vw,140px);}
+.footer-link-columns{display:flex;align-items:flex-start;gap:clamp(24px,3.5vw,44px);}
+.footer-quick-links h4,.footer-policies h4{font-weight:800;margin-bottom:12px;}
+.footer-quick-links{margin-left:0;}
 .footer-link-list{display:flex;flex-direction:column;gap:10px;}
 .footer-inline-link{font-size:13px;font-weight:700;color:#d8def8;transition:color .2s ease;}
 .footer-inline-link:hover{color:#fff;text-decoration:underline;}
@@ -771,10 +772,10 @@ footer .logo .logo-sub{transform:none;}
 }
 
 @media(max-width:900px){
-	.footer-top,.footer-brand-contact{flex-direction:column;gap:18px;}
+	.footer-top,.footer-brand-contact,.footer-link-columns{flex-direction:column;gap:18px;}
 	.footer-brand-contact .logo{order:1;}
 	.footer-contact{order:2;margin-left:0;}
-	.footer-quick-links{margin-left:0;}
+	.footer-link-columns{width:100%;}
 }
 
 @media(max-width:720px){
@@ -838,7 +839,7 @@ footer .logo .logo-sub{transform:none;}
 	footer{padding:42px 0 22px;}
 	.footer-top{gap:16px;}
 	.footer-brand-contact{gap:14px;}
-	.footer-contact h4,.footer-quick-links h4{margin-bottom:10px;font-size:15px;}
+	.footer-contact h4,.footer-quick-links h4,.footer-policies h4{margin-bottom:10px;font-size:15px;}
 	.footer-small,.footer-inline-link{font-size:12px;}
 	.footer-disclaimer{margin-top:18px;padding-top:14px;}
 	.footer-disclaimer p{font-size:11px;line-height:1.6;}

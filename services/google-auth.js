@@ -1,5 +1,7 @@
 'use strict';
 
+const { isAccountDisabled } = require('./admin-customers');
+
 class OAuthResolutionError extends Error {
   constructor(code, message) {
     super(message);
@@ -197,6 +199,9 @@ function saveSession(session) {
 async function completeGoogleLogin(req, user, transferGuestCart) {
   if (!req || !req.session || !user || !user.id) {
     throw new OAuthResolutionError('google-failed', 'Google login context is missing.');
+  }
+  if (isAccountDisabled(user)) {
+    throw new OAuthResolutionError('account-disabled', 'This account has been disabled. Please contact support.');
   }
 
   req.session.userId = user.id;

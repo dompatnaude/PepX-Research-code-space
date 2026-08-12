@@ -1106,7 +1106,7 @@
   }
 
   function switchTab(tab) {
-    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos' || tab === 'coas' || tab === 'reviews') {
+    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos' || tab === 'coas' || tab === 'reviews' || tab === 'customers') {
       state.tab = tab;
     } else {
       state.tab = 'home';
@@ -1123,6 +1123,7 @@
     if ($('promosSection')) $('promosSection').classList.toggle('hidden', state.tab !== 'promos');
     if ($('coasSection')) $('coasSection').classList.toggle('hidden', state.tab !== 'coas');
       if ($('reviewsSection')) $('reviewsSection').classList.toggle('hidden', state.tab !== 'reviews');
+    if ($('customersSection')) $('customersSection').classList.toggle('hidden', state.tab !== 'customers');
     if (state.tab === 'home') {
       loadSummary();
     } else if (state.tab === 'products') {
@@ -1133,6 +1134,8 @@
       loadCoas();
     } else if (state.tab === 'reviews') {
       loadReviews();
+    } else if (state.tab === 'customers') {
+      loadCustomers();
     } else {
       loadOrders();
     }
@@ -2208,6 +2211,196 @@
         if (deleteBtn) { deleteReview(parseInt(deleteBtn.getAttribute('data-review-delete'), 10)); return; }
       });
     }
+  }
+
+
+  // ===== Customers ========================================================
+  var customerState = { page: 1, pageCount: 1, search: '', filter: 'all', sort: 'newest' };
+
+  function loadCustomers() {
+    var body = $('customersBody');
+    if (!body) return;
+    var qs = 'search=' + encodeURIComponent(customerState.search)
+      + '&filter=' + encodeURIComponent(customerState.filter)
+      + '&sort=' + encodeURIComponent(customerState.sort)
+      + '&page=' + customerState.page + '&pageSize=25';
+    body.innerHTML = '<tr><td colspan="7" class="muted">Loading&hellip;</td></tr>';
+    api('/api/admin/customers?' + qs).then(function (data) {
+      customerState.pageCount = data.pageCount || 1;
+      var info = $('customersPageInfo');
+      if (info) info.textContent = 'Page ' + data.page + ' of ' + (data.pageCount || 1) + ' \u2022 ' + data.total + ' customers';
+      if (!data.customers.length) {
+        body.innerHTML = '<tr><td colspan="7" class="muted">No customers found.</td></tr>';
+        return;
+      }
+      body.innerHTML = data.customers.map(function (c) {
+        var badge = c.status === 'disabled'
+          ? '<span class="muted" style="color:#b42318;">Disabled</span>'
+          : '<span style="color:#067647;">Active</span>';
+        return '<tr data-customer="' + esc(c.id) + '" style="cursor:pointer;">'
+          + '<td>' + esc(c.name || '\u2014') + '</td>'
+          + '<td>' + esc(c.email || '') + '</td>'
+          + '<td>' + esc(fmtDate(c.createdAt)) + '</td>'
+          + '<td>' + esc(String(c.orderCount || 0)) + '</td>'
+          + '<td>' + money(c.lifetimeSpend) + '</td>'
+          + '<td>' + (c.lastOrder ? esc(fmtDate(c.lastOrder)) : '<span class="muted">\u2014</span>') + '</td>'
+          + '<td>' + badge + '</td>'
+          + '</tr>';
+      }).join('');
+    }).catch(function (err) {
+      body.innerHTML = '<tr><td colspan="7" class="muted">' + esc(err.message || 'Failed to load customers') + '</td></tr>';
+    });
+  }
+
+  function openCustomer(id) {
+    var wrap = $('customerDetailWrap');
+    if (!wrap) return;
+    wrap.classList.remove('hidden');
+    var body = $('customerDetailBody');
+    body.innerHTML = '<div class="muted">Loading&hellip;</div>';
+    api('/api/admin/customers/' + encodeURIComponent(id)).then(function (d) {
+      var c = d.customer, st = d.stats;
+      var authLabels = { google: 'Google', email_password: 'Email / Password', linked: 'Linked (Google + Password)', unknown: 'Unknown' };
+      var head = '<div class="admin-bar admin-bar-between"><div>'
+        + '<h3 style="margin:0;">' + esc(c.name || '\u2014') + '</h3>'
+        + '<div class="muted">' + esc(c.email || '') + '</div></div>'
+        + '<div>' + (c.status === 'disabled' ? '<span style="color:#b42318;font-weight:700;">Disabled</span>' : '<span style="color:#067647;font-weight:700;">Active</span>') + '</div></div>';
+      var cards = '<div class="admin-metrics" style="display:flex;gap:.75rem;flex-wrap:wrap;margin:.75rem 0;">'
+        + metricCard('Orders', String(st.orderCount))
+        + metricCard('Lifetime spend', money(st.lifetimeSpend))
+        + metricCard('Avg order', money(st.avgOrderValue))
+        + metricCard('Last order', st.lastOrder ? fmtDate(st.lastOrder) : '\u2014')
+        + '</div>';
+      var info = '<div class="muted" style="margin-bottom:.75rem;">'
+        + 'Account created ' + esc(fmtDate(c.createdAt))
+        + ' \u2022 Auth: ' + esc(authLabels[c.authMethod] || c.authMethod)
+        + '</div>';
+      var orders = '<h4>Order history</h4>' + (d.orders.length
+        ? '<div class="table-wrap"><table class="admin-table"><thead><tr><th>Order</th><th>Date</th><th>Status</th><th>Payment</th><th>Total</th><th>Tracking</th></tr></thead><tbody>'
+          + d.orders.map(function (o) {
+            return '<tr><td><a href="#" data-order="' + o.id + '">' + esc(o.orderNumber || ('#' + o.id)) + '</a></td>'
+              + '<td>' + esc(fmtDate(o.date)) + '</td>'
+              + '<td>' + statusBadge(o.status) + '</td>'
+              + '<td>' + statusBadge(o.paymentStatus || '') + '</td>'
+              + '<td>' + money(o.total) + '</td>'
+              + '<td>' + (o.trackingNumber ? esc(o.trackingNumber) : '<span class="muted">\u2014</span>') + '</td></tr>';
+          }).join('') + '</tbody></table></div>'
+        : '<div class="muted">No orders yet.</div>');
+      var addrs = '<h4>Shipping addresses</h4>' + (d.addresses.length
+        ? d.addresses.map(function (a) {
+            return '<div style="border:1px solid #e7ebf1;border-radius:8px;padding:.6rem;margin-bottom:.4rem;">'
+              + '<strong>' + esc(a.name || '') + '</strong><br>'
+              + esc(a.line1 || '') + (a.line2 ? ', ' + esc(a.line2) : '') + '<br>'
+              + esc(a.city || '') + ', ' + esc(a.state || '') + ' ' + esc(a.zip || '') + ' ' + esc(a.country || '')
+              + (a.phone ? '<br>' + esc(a.phone) : '')
+              + '<div class="muted" style="font-size:.8rem;margin-top:.3rem;">Used ' + a.timesUsed + '\u00d7 \u2022 last ' + esc(fmtDate(a.lastUsed)) + '</div>'
+              + '</div>';
+          }).join('')
+        : '<div class="muted">No shipping addresses on record.</div>');
+      body.innerHTML = head + cards + info + orders + addrs + renderNotes(c.id, d.notes) + renderActions(c);
+    }).catch(function (err) {
+      body.innerHTML = '<div class="muted">' + esc(err.message || 'Failed to load customer') + '</div>';
+    });
+  }
+
+  function metricCard(label, value) {
+    return '<div class="admin-panel" style="flex:1;min-width:120px;"><div class="muted">' + esc(label) + '</div><div><strong>' + esc(value) + '</strong></div></div>';
+  }
+
+  function renderNotes(customerId, notes) {
+    var list = (notes && notes.length)
+      ? notes.map(function (n) {
+          return '<div style="border:1px solid #e7ebf1;border-radius:8px;padding:.6rem;margin-bottom:.4rem;" data-note="' + n.id + '">'
+            + '<div>' + esc(n.note) + '</div>'
+            + '<div class="muted" style="font-size:.8rem;margin-top:.3rem;">' + esc(n.adminName || 'Admin') + ' \u2022 ' + esc(fmtDate(n.createdAt)) + ' '
+            + '<button type="button" class="link-btn" data-note-del="' + n.id + '">Delete</button></div>'
+            + '</div>';
+        }).join('')
+      : '<div class="muted">No internal notes.</div>';
+    return '<h4>Internal notes <span class="muted" style="font-weight:400;font-size:.8rem;">(admin only)</span></h4>'
+      + list
+      + '<div class="admin-bar" style="gap:.4rem;margin-top:.4rem;" data-customer="' + esc(customerId) + '">'
+      + '<input type="text" id="newNoteInput" placeholder="Add a note" style="flex:1;padding:.5rem;border:1px solid #cbd2dc;border-radius:8px;">'
+      + '<button type="button" class="admin-btn" id="addNoteBtn">Add note</button></div>';
+  }
+
+  function renderActions(c) {
+    var disableLabel = c.status === 'disabled' ? 'Re-enable account' : 'Disable account';
+    var resetBtn = c.canResetPassword
+      ? '<button type="button" class="admin-btn" id="resetPwBtn" data-customer="' + esc(c.id) + '">Send password reset email</button>'
+      : '<button type="button" class="admin-btn" disabled title="Google-only account">No password to reset</button>';
+    return '<h4>Account actions</h4><div class="admin-bar" style="gap:.5rem;flex-wrap:wrap;">'
+      + '<button type="button" class="admin-btn" id="toggleDisableBtn" data-customer="' + esc(c.id) + '" data-disabled="' + (c.status === 'disabled' ? '1' : '0') + '">' + disableLabel + '</button>'
+      + resetBtn + '</div>';
+  }
+
+  // Wire up interactions once DOM is ready.
+  function wireCustomers() {
+    var navBtn = document.querySelector('#adminTabs button[data-tab="customers"]');
+    if (navBtn) navBtn.addEventListener('click', function () { switchTab('customers'); });
+    var search = $('customerSearch');
+    if (search) search.addEventListener('input', debounceCust(function () { customerState.search = search.value; customerState.page = 1; loadCustomers(); }, 300));
+    var filter = $('customerFilter');
+    if (filter) filter.addEventListener('change', function () { customerState.filter = filter.value; customerState.page = 1; loadCustomers(); });
+    var sort = $('customerSort');
+    if (sort) sort.addEventListener('change', function () { customerState.sort = sort.value; customerState.page = 1; loadCustomers(); });
+    var prev = $('customersPrev');
+    if (prev) prev.addEventListener('click', function () { if (customerState.page > 1) { customerState.page--; loadCustomers(); } });
+    var next = $('customersNext');
+    if (next) next.addEventListener('click', function () { if (customerState.page < customerState.pageCount) { customerState.page++; loadCustomers(); } });
+    var cbody = $('customersBody');
+    if (cbody) cbody.addEventListener('click', function (e) {
+      var row = e.target.closest('[data-customer]');
+      if (row) openCustomer(row.getAttribute('data-customer'));
+    });
+    var detail = $('customerDetailBody');
+    if (detail) detail.addEventListener('click', function (e) {
+      var addBtn = e.target.closest('#addNoteBtn');
+      if (addBtn) { addNote(addBtn.parentNode.getAttribute('data-customer')); return; }
+      var delBtn = e.target.closest('[data-note-del]');
+      if (delBtn) { deleteNote(currentCustomerId, delBtn.getAttribute('data-note-del')); return; }
+      var dis = e.target.closest('#toggleDisableBtn');
+      if (dis) { toggleDisable(dis.getAttribute('data-customer'), dis.getAttribute('data-disabled') === '1'); return; }
+      var rst = e.target.closest('#resetPwBtn');
+      if (rst) { sendReset(rst.getAttribute('data-customer')); return; }
+      var ord = e.target.closest('[data-order]');
+      if (ord) { e.preventDefault(); openOrder(parseInt(ord.getAttribute('data-order'), 10)); }
+    });
+    var closeBtn = $('customerDetailClose');
+    if (closeBtn) closeBtn.addEventListener('click', function () { $('customerDetailWrap').classList.add('hidden'); });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireCustomers);
+  } else {
+    wireCustomers();
+  }
+
+  var currentCustomerId = null;
+  function debounceCust(fn, ms) { var t; return function () { clearTimeout(t); t = setTimeout(fn, ms); }; }
+
+  function addNote(id) {
+    currentCustomerId = id;
+    var input = $('newNoteInput');
+    var note = input ? input.value.trim() : '';
+    if (!note) return;
+    api('/api/admin/customers/' + encodeURIComponent(id) + '/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: note }) })
+      .then(function () { toast('Note added'); openCustomer(id); }).catch(function (err) { toast(err.message || 'Failed'); });
+  }
+  function deleteNote(id, noteId) {
+    if (!confirm('Delete this note?')) return;
+    api('/api/admin/customers/' + encodeURIComponent(id) + '/notes/' + noteId, { method: 'DELETE' })
+      .then(function () { toast('Note deleted'); openCustomer(id); }).catch(function (err) { toast(err.message || 'Failed'); });
+  }
+  function toggleDisable(id, currentlyDisabled) {
+    var msg = currentlyDisabled ? 'Re-enable this account?' : 'Disable this account? The customer will not be able to log in.';
+    if (!confirm(msg)) return;
+    api('/api/admin/customers/' + encodeURIComponent(id) + '/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ disabled: !currentlyDisabled }) })
+      .then(function () { toast('Account updated'); openCustomer(id); loadCustomers(); }).catch(function (err) { toast(err.message || 'Failed'); });
+  }
+  function sendReset(id) {
+    if (!confirm('Send a password reset email to this customer?')) return;
+    api('/api/admin/customers/' + encodeURIComponent(id) + '/password-reset', { method: 'POST' })
+      .then(function () { toast('Password reset email triggered'); }).catch(function (err) { toast(err.message || 'Failed'); });
   }
 
 

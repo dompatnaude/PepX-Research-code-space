@@ -179,6 +179,7 @@
         <button type="button" data-tab="promos">Discount Codes</button>
         <button type="button" data-tab="coas">COAs</button>
         <button type="button" data-tab="reviews">Reviews</button>
+        <button type="button" data-tab="customers">Customers</button>
       </div>
 
       <section id="homeSection">
@@ -320,7 +321,45 @@
             </table>
           </div>
         </div>
-  <div class="modal-backdrop hidden" id="productModalWrap" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+  <div id="customersSection" class="hidden">
+        <div class="admin-bar admin-bar-between">
+          <div>
+            <h2 class="admin-section-title">Customers</h2>
+            <div class="admin-subtitle">Every registered account, including Google and email/password sign-ups.</div>
+          </div>
+        </div>
+        <div class="admin-bar" style="gap:.5rem;flex-wrap:wrap;">
+          <input type="search" id="customerSearch" placeholder="Search name, email, or ID" style="flex:1;min-width:220px;padding:.5rem .7rem;border:1px solid #cbd2dc;border-radius:8px;">
+          <select id="customerFilter" style="padding:.5rem;border:1px solid #cbd2dc;border-radius:8px;">
+            <option value="all">All customers</option>
+            <option value="active">Active</option>
+            <option value="disabled">Disabled</option>
+            <option value="has_orders">Has orders</option>
+            <option value="no_orders">No orders</option>
+            <option value="google">Google account</option>
+            <option value="email">Email/password</option>
+          </select>
+          <select id="customerSort" style="padding:.5rem;border:1px solid #cbd2dc;border-radius:8px;">
+            <option value="newest">Newest accounts</option>
+            <option value="oldest">Oldest accounts</option>
+            <option value="top_spend">Highest lifetime spend</option>
+            <option value="most_orders">Most orders</option>
+            <option value="recent_order">Most recent order</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>Name</th><th>Email</th><th>Created</th><th>Orders</th><th>Lifetime spend</th><th>Last order</th><th>Status</th></tr></thead>
+            <tbody id="customersBody"><tr><td colspan="7" class="muted">Loading&hellip;</td></tr></tbody>
+          </table>
+        </div>
+        <div class="admin-bar admin-bar-between" id="customersPager" style="margin-top:.6rem;">
+          <button type="button" class="link-btn" id="customersPrev">Previous</button>
+          <span class="muted" id="customersPageInfo"></span>
+          <button type="button" class="link-btn" id="customersNext">Next</button>
+        </div>
+      </div>
+      <div class="modal-backdrop hidden" id="productModalWrap" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
     <div class="modal-card">
       <div class="modal-head">
         <h3 id="productModalTitle" style="margin:0;">Add Product</h3>
@@ -529,5 +568,14 @@
   </div>
 
   <script src="admin.js"></script>
-</body>
+    <div class="modal-backdrop hidden" id="customerDetailWrap" role="dialog" aria-modal="true">
+      <div class="modal-card" style="max-width:820px;width:92vw;max-height:88vh;overflow:auto;">
+        <div class="modal-head">
+          <h3 style="margin:0;">Customer</h3>
+          <button class="link-btn" type="button" id="customerDetailClose">Close</button>
+        </div>
+        <div class="modal-body" id="customerDetailBody"></div>
+      </div>
+    </div>
+  </body>
 </html>
