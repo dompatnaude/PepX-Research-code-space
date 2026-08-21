@@ -1055,7 +1055,7 @@ function renderProductDetailPage(){
     }
   }
 
-  document.title = product.name + ' | PepX Research Chemicals';
+  document.title = 'PepX Research';
   var displayName = product.name;
   if(product.id === 'klow_80'){
     if(titleEl) titleEl.innerHTML = 'KLOW<br><span style="font-size:0.6em;font-weight:normal;color:#666;">KPV10mg+BPC10mg+GHK-Cu50mg+TB500 10mg</span>';
