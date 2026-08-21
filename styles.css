@@ -1403,6 +1403,14 @@ footer{background:#1f2937;}
     max-width: 100%;
     justify-self: start;
   }
+	/* keep the quantity number solid black + fully opaque on mobile */
+	.product-detail-qty .qty-stepper input,
+	.product-modal-qty .qty-stepper input,
+	.qty-stepper input {
+		color: #000;
+		-webkit-text-fill-color: #000;
+		opacity: 1;
+	}
 }
 @media (pointer: coarse) {
   .qty-stepper {
@@ -1575,3 +1583,26 @@ body.dark-mode .checkout-promo-applied span{color:#d3e5ff;}
 .address-suggestion-body{font-style:normal;font-size:14px;line-height:1.5;color:#1e293b;}
 .address-suggestion-actions{display:flex;flex-wrap:wrap;gap:10px;}
 @media(max-width:600px){.address-suggestion-cols{grid-template-columns:1fr;}}
+
+/* GLP-3RT only: its source image is 1:1 while every other product image is ~19:10.
+   On mobile the card media box is 19/10 with object-fit:contain, so the square image
+   letterboxes and shows empty side gutters. Its own backdrop is a purely vertical
+   gradient (uniform left-to-right), so we repaint that exact gradient on the media box
+   behind the gutters: the card reads edge-to-edge with the whole vial still visible -
+   nothing cropped, scaled, stretched or repositioned. */
+@media (max-width: 720px) {
+	.product-card-media:has(img[alt^="GLP-3RT"]) {
+		background: linear-gradient(180deg,
+			#e6e5ea 0%,
+			#e9e7ed 10%,
+			#edebf1 20%,
+			#f4f3f7 30%,
+			#f7f7f9 40%,
+			#f7f7f9 50%,
+			#f9f9fb 62%,
+			#f9fafc 72%,
+			#f7f7f9 82%,
+			#f7f7f9 92%,
+			#f6f6f8 100%);
+	}
+}
