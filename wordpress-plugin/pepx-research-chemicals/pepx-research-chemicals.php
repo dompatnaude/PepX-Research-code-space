@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: PepX Research Chemicals Storefront
- * Description: Adds the PepX Research Chemicals catalog, product modal, search, cart, and review experience to WordPress.
+ * Plugin Name: PepX Research Storefront
+ * Description: Adds the PepX Research catalog, product modal, search, cart, and review experience to WordPress.
  * Version: 1.0.0
  * Author: Copilot
  */
@@ -27,7 +27,7 @@ class PepX_Research_Chemicals_Plugin {
         <div class="pepx-storefront">
             <div class="overlay" id="gate">
                 <div class="modal">
-                    <div class="ml"><span class="logo-mark" aria-label="PepX Research Chemicals"><span class="logo-word"><span class="logo-pep">pep</span><span class="logo-x">X</span></span><span class="logo-sub">research chemicals</span></span></div>
+                    <div class="ml"><span class="logo-mark" aria-label="PepX Research"><span class="logo-word"><span class="logo-pep">pep</span><span class="logo-x">X</span></span><span class="logo-sub">research</span></span></div>
                     <h2>Before You Enter</h2>
                     <p class="intro">Please confirm the following to access this site.</p>
                     <label class="check"><input type="checkbox" id="g-research"><span>I understand that all products are sold strictly <b>for laboratory and research purposes only</b> and are not for human or animal consumption.</span></label>
@@ -53,7 +53,7 @@ class PepX_Research_Chemicals_Plugin {
 
             <header>
                 <div class="container nav">
-                    <a href="#top" class="logo"><span class="logo-mark" aria-label="PepX Research Chemicals"><span class="logo-word"><span class="logo-pep">pep</span><span class="logo-x">X</span></span><span class="logo-sub">research chemicals</span></span></a>
+                    <a href="#top" class="logo"><span class="logo-mark" aria-label="PepX Research"><span class="logo-word"><span class="logo-pep">pep</span><span class="logo-x">X</span></span><span class="logo-sub">research</span></span></a>
                     <nav class="menu">
                         <a href="#top">Home</a>
                         <a href="#products">Shop</a>
@@ -100,7 +100,7 @@ class PepX_Research_Chemicals_Plugin {
 
             <section class="section container" id="reviews">
                 <h2>Leave a Review</h2>
-                <p class="sub">Share your experience with our research chemicals and help others discover what we offer.</p>
+                <p class="sub">Share your experience with our products and help others discover what we offer.</p>
                 <form class="review-form" id="reviewForm" data-review-form>
                     <div class="review-row">
                         <label>
@@ -150,7 +150,7 @@ class PepX_Research_Chemicals_Plugin {
                     <div>
                         <div class="badge"><span class="dot"></span>About Us</div>
                         <h2>Committed to Purity & Precision</h2>
-                        <p>PepX Research Chemicals supplies research-grade compounds backed by third-party laboratory testing and rigorous quality control. Every batch is verified for purity so researchers can trust the integrity of their work.</p>
+                        <p>PepX Research supplies research-grade compounds backed by third-party laboratory testing and rigorous quality control. Every batch is verified for purity so researchers can trust the integrity of their work.</p>
                         <p>Our mission is to make high-quality research compounds accessible, with transparent testing, secure packaging, and reliable fast shipping.</p>
                     </div>
                     <div class="art"></div>
@@ -173,7 +173,7 @@ class PepX_Research_Chemicals_Plugin {
 
             <footer><div class="container">
                 <div class="fgrid">
-                    <div><div class="logo"><span class="logo-mark" aria-label="PepX Research Chemicals"><span class="logo-word"><span class="logo-pep">pep</span><span class="logo-x">X</span></span><span class="logo-sub">research chemicals</span></span></div><p style="font-size:14px">Research-grade compounds with certified purity, trusted by thousands of researchers.</p></div>
+                    <div><div class="logo"><span class="logo-mark" aria-label="PepX Research"><span class="logo-word"><span class="logo-pep">pep</span><span class="logo-x">X</span></span><span class="logo-sub">research</span></span></div><p style="font-size:14px">Research-grade compounds with certified purity, trusted by thousands of researchers.</p></div>
                     <div><h4>Shop</h4><ul><li><a href="#products">All Peptides</a></li><li><a href="#products">Blends</a></li><li><a href="#products">Supplies</a></li><li><a href="#contact">Wholesale</a></li></ul></div>
                     <div><h4>Learn</h4><ul><li><a href="#faq">Research Guides</a></li><li><a href="#faq">FAQ</a></li><li><a href="#about">Lab Testing</a></li></ul></div>
                     <div><h4>Support</h4><ul><li><a href="#contact">Contact</a></li><li><a href="#faq">Shipping</a></li><li><a href="#faq">Returns</a></li><li><a href="#contact">Track Order</a></li></ul></div>
@@ -191,7 +191,7 @@ class PepX_Research_Chemicals_Plugin {
                         <li><strong>Governing Law</strong><br>This agreement, its interpretation, and all legal relationships arising out of your purchases shall be governed strictly by the laws of the <strong>State of Illinois</strong>, without regard to conflicts of laws principles. Any legal disputes must be filed exclusively in the courts located in Illinois.</li>
                     </ol>
                 </div>
-                <div class="copy">&copy; 2026 PepX Research Chemicals. For research use only. Not for human consumption.</div>
+                <div class="copy">&copy; 2026 PepX Research. For research use only. Not for human consumption.</div>
             </footer>
 
             <div class="backdrop" id="backdrop"></div>

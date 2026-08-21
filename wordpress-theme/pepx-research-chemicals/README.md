@@ -1,4 +1,4 @@
-PepX Research Chemicals — WordPress theme
+PepX Research — WordPress theme
 
 Install:
 1. Copy the `pepx-research-chemicals` folder into your WordPress `wp-content/themes/` directory.

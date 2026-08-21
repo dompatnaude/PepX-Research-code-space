@@ -8,7 +8,7 @@
 <body <?php body_class(); ?>>
 <header>
   <div class="container nav">
-    <a href="<?php echo esc_url(home_url('/')); ?>" class="logo"><span class="logo-mark" aria-label="PepX Research Chemicals"><span class="logo-word"><span class="logo-pep">pep</span><span class="logo-x">X</span></span><span class="logo-sub">research chemicals</span></span></a>
+    <a href="<?php echo esc_url(home_url('/')); ?>" class="logo"><span class="logo-mark" aria-label="PepX Research"><span class="logo-word"><span class="logo-pep">pep</span><span class="logo-x">X</span></span><span class="logo-sub">research</span></span></a>
     <nav class="menu">
       <a href="<?php echo esc_url(home_url('/')); ?>">Home</a>
       <a href="<?php echo esc_url(home_url('/shop')); ?>">Shop</a>
