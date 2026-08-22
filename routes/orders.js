@@ -2,6 +2,7 @@ const express = require("express");
 const pool = require("../db/connection");
 const { money, validatePromoCode } = require("../services/promo-service");
 const { getEasyPostClient, classifyUspsService } = require("../services/easypost");
+const { sendOrderConfirmationForOrder } = require("../services/order-confirmation");
 
 function getQuantityDiscountRate(quantity) {
   const qty = Number(quantity) || 0;
@@ -300,6 +301,7 @@ async function createOrder(req, res) {
   const userId = req.user.id;
   const body = req.body || {};
   const client = await pool.connect();
+  let clientReleased = false;
 
   try {
     await client.query("BEGIN");
@@ -529,7 +531,7 @@ async function createOrder(req, res) {
 
     await client.query("COMMIT");
 
-    return res.status(201).json({
+    const responseBody = {
       order_id: order.id,
       order_number: order.order_number,
       status: order.status,
@@ -555,13 +557,34 @@ async function createOrder(req, res) {
         unit_price: item.discounted_unit_price,
         line_total: item.line_total,
       })),
-    });
+    };
+
+    // The order is committed and durable from here on. Release the pooled
+    // connection before the outbound email so a slow provider can never hold
+    // a database connection, then send the customer receipt. Delivery is
+    // best-effort: sendOrderConfirmationForOrder logs and swallows its own
+    // failures, and this guard makes sure nothing can turn a placed order
+    // into a failed request.
+    client.release();
+    clientReleased = true;
+
+    try {
+      await sendOrderConfirmationForOrder(order.id);
+    } catch (emailError) {
+      console.error('Order confirmation email failed:', emailError);
+    }
+
+    return res.status(201).json(responseBody);
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (!clientReleased) {
+      await client.query("ROLLBACK");
+    }
     console.error(error);
     return res.status(500).json({ error: "Failed to create order" });
   } finally {
-    client.release();
+    if (!clientReleased) {
+      client.release();
+    }
   }
 }
 
