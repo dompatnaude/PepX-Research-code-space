@@ -828,3 +828,108 @@ test('both routes log where the email path stopped, without leaking secrets', ()
     'an env value is logged rather than its presence'
   );
 });
+
+// --- admin manual send endpoint ----------------------------------------
+// Recovery path for an order that reached paid / shipped without its email,
+// e.g. when the state change was served by an older build. It reuses the same
+// service, so every guard and the at-most-once claim still apply.
+
+function adminSendRouter(deps) {
+  return createAdminRouter(async (req, res, next) => {
+    req.user = { id: 'admin-1' };
+    await next();
+  }, deps);
+}
+
+function rolePool(role, extra) {
+  return {
+    async query(sql, params) {
+      const normalized = String(sql).replace(/\s+/g, ' ').trim();
+      if (normalized.toLowerCase().startsWith('select role from users where id = $1')) {
+        return { rows: [{ role: role }] };
+      }
+      if (extra) return extra(normalized, params);
+      throw new Error('Unexpected query: ' + normalized);
+    }
+  };
+}
+
+test('the manual send endpoint is admin-only', async () => {
+  const router = adminSendRouter({ pool: rolePool('customer') });
+  const { res } = await invokeRoute(router, 'post', '/orders/:id/send-email', {
+    params: { id: '42' }, body: { kind: 'payment' }
+  });
+  assert.equal(res.statusCode, 403);
+});
+
+test('the manual send endpoint rejects an unknown email kind', async () => {
+  const router = adminSendRouter({ pool: rolePool('admin') });
+  const { res } = await invokeRoute(router, 'post', '/orders/:id/send-email', {
+    params: { id: '42' }, body: { kind: 'newsletter' }
+  });
+  assert.equal(res.statusCode, 400);
+});
+
+test('the manual send endpoint routes each kind to its own notifier', async () => {
+  const calls = [];
+  const router = adminSendRouter({
+    pool: rolePool('admin'),
+    notifyPaymentConfirmed: async (id) => { calls.push(['payment', id]); return { sent: true }; },
+    notifyOrderShipped: async (id) => { calls.push(['shipping', id]); return { sent: true }; }
+  });
+
+  const payment = await invokeRoute(router, 'post', '/orders/:id/send-email', {
+    params: { id: '42' }, body: { kind: 'payment' }
+  });
+  const shipping = await invokeRoute(router, 'post', '/orders/:id/send-email', {
+    params: { id: '42' }, body: { kind: 'shipping' }
+  });
+
+  assert.deepEqual(calls, [['payment', 42], ['shipping', 42]]);
+  assert.equal(payment.res.body.sent, true);
+  assert.equal(shipping.res.body.sent, true);
+});
+
+test('the manual send endpoint still obeys the state guards', async () => {
+  // An unpaid order must not produce a payment email, however it is triggered.
+  const pool = createMockPool({ order: baseOrder() });
+  const resend = createMockResend();
+  const router = adminSendRouter({
+    pool: rolePool('admin', (sql, params) => pool.query(sql, params)),
+    notifyPaymentConfirmed: (id) => sendPaymentConfirmationForOrder(id, {
+      pool, resend, env: TEST_ENV, logger: silentLogger()
+    })
+  });
+
+  const { res } = await invokeRoute(router, 'post', '/orders/:id/send-email', {
+    params: { id: '42' }, body: { kind: 'payment' }
+  });
+
+  assert.equal(res.body.sent, false);
+  assert.equal(res.body.reason, 'payment_not_confirmed');
+  assert.equal(resend.sent.length, 0);
+});
+
+test('the manual send endpoint cannot duplicate an email that already went out', async () => {
+  const pool = createMockPool({ order: paidOrder() });
+  const resend = createMockResend();
+  const notify = (id) => sendPaymentConfirmationForOrder(id, {
+    pool, resend, env: TEST_ENV, logger: silentLogger()
+  });
+  const router = adminSendRouter({
+    pool: rolePool('admin', (sql, params) => pool.query(sql, params)),
+    notifyPaymentConfirmed: notify
+  });
+
+  const first = await invokeRoute(router, 'post', '/orders/:id/send-email', {
+    params: { id: '42' }, body: { kind: 'payment' }
+  });
+  const second = await invokeRoute(router, 'post', '/orders/:id/send-email', {
+    params: { id: '42' }, body: { kind: 'payment' }
+  });
+
+  assert.equal(first.res.body.sent, true);
+  assert.equal(second.res.body.sent, false);
+  assert.equal(second.res.body.reason, 'already_sent');
+  assert.equal(resend.sent.length, 1, 'the endpoint sent a duplicate');
+});

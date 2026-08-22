@@ -642,6 +642,45 @@ function createAdminRouter(requireAuth, deps) {
     }
   });
 
+  // Send a transactional email for an order that already reached the state it
+  // announces, but never received it - e.g. the state changed while an older
+  // build was serving the request. The service keeps every guarantee: it will
+  // not send unless the database says the order is paid / has tracking, and the
+  // send-claim still makes it at-most-once, so this cannot duplicate a receipt.
+  router.post('/orders/:id/send-email', gate, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(orderId)) {
+        return res.status(400).json({ error: 'Invalid order id' });
+      }
+      const kind = String((req.body && req.body.kind) || '').trim().toLowerCase();
+      if (kind !== 'payment' && kind !== 'shipping') {
+        return res.status(400).json({ error: "kind must be 'payment' or 'shipping'" });
+      }
+
+      const outcome = kind === 'payment'
+        ? await notifyPaymentConfirmed(orderId)
+        : await notifyOrderShipped(orderId);
+
+      console.log('[admin-email-debug] manual send', {
+        orderId,
+        kind,
+        sent: Boolean(outcome && outcome.sent),
+        reason: (outcome && outcome.reason) || 'sent'
+      });
+
+      return res.json({
+        order_id: orderId,
+        kind,
+        sent: Boolean(outcome && outcome.sent),
+        reason: (outcome && outcome.reason) || 'sent'
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Failed to send order email' });
+    }
+  });
+
   return router;
 }
 
