@@ -10,13 +10,18 @@
  * Contract: sendOrderConfirmationForOrder() NEVER throws and never
  * changes the order. A receipt that cannot be delivered is logged and
  * reported in the return value; the order itself is untouched.
+ *
+ * Every step emits an [email-debug] line so a silent failure in a
+ * serverless environment is visible in the platform logs. These lines
+ * carry booleans, ids and reason codes only - never an address body,
+ * never a key, never a provider payload.
  * ------------------------------------------------------------------
  */
 
 'use strict';
 
 const defaultPool = require('../db/connection');
-const { sendOrderConfirmation } = require('./email');
+const { sendOrderConfirmation, resolveRecipient } = require('./email');
 
 // Authoritative order values, plus the account name/email for the
 // greeting and the fallback recipient. Selected server-side only.
@@ -51,18 +56,39 @@ async function sendOrderConfirmationForOrder(orderId, options) {
   const db = opts.pool || defaultPool;
   const logger = opts.logger || console;
   const send = opts.send || sendOrderConfirmation;
+  const env = opts.env || process.env;
+  const debug = (message, detail) => {
+    if (typeof logger.log === 'function') {
+      logger.log('[email-debug] ' + message, detail === undefined ? '' : detail);
+    }
+  };
 
   let claimed = false;
 
   try {
+    debug('config present', {
+      order_id: orderId,
+      resend_key: Boolean(env.RESEND_API_KEY),
+      from_email: Boolean(env.ORDER_FROM_EMAIL),
+      site_url: Boolean(env.SITE_URL)
+    });
+
     const orderResult = await db.query(ORDER_QUERY, [orderId]);
     const order = (orderResult && orderResult.rows && orderResult.rows[0]) || null;
+    debug('order lookup', { order_id: orderId, found: Boolean(order) });
     if (!order) {
       return { sent: false, reason: 'order_not_found' };
     }
 
+    debug('recipient resolved', {
+      order_id: orderId,
+      has_recipient: Boolean(resolveRecipient(order))
+    });
+
     const claimResult = await db.query(CLAIM_QUERY, [orderId]);
-    if (!claimResult || !claimResult.rows || !claimResult.rows.length) {
+    const acquired = Boolean(claimResult && claimResult.rows && claimResult.rows.length);
+    debug('duplicate claim', { order_id: orderId, acquired: acquired });
+    if (!acquired) {
       return { sent: false, reason: 'already_sent' };
     }
     claimed = true;
@@ -70,11 +96,9 @@ async function sendOrderConfirmationForOrder(orderId, options) {
     const itemsResult = await db.query(ITEMS_QUERY, [orderId]);
     const items = (itemsResult && itemsResult.rows) || [];
 
-    const result = await send(order, {
-      items: items,
-      env: opts.env || process.env,
-      resend: opts.resend
-    });
+    debug('resend call attempted', { order_id: orderId, item_count: items.length });
+    const result = await send(order, { items: items, env: env, resend: opts.resend });
+    debug('resend call succeeded', { order_id: orderId, message_id: (result && result.id) || null });
 
     return {
       sent: true,
@@ -89,6 +113,11 @@ async function sendOrderConfirmationForOrder(orderId, options) {
         logger.error('Order confirmation claim release failed:', releaseError);
       }
     }
+    debug('error caught', {
+      order_id: orderId,
+      claim_released: claimed,
+      error_name: (error && error.name) || 'Error'
+    });
     // Never surface provider detail to the customer; log it for us.
     logger.error('Order confirmation email failed:', error);
     return { sent: false, reason: 'send_failed' };

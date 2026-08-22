@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "migrate": "node scripts/migrate.js",
+    "vercel-build": "node scripts/migrate.js",
     "start": "npm run migrate && node server.js",
     "dev": "npm run migrate && node server.js",
     "test": "node --test",

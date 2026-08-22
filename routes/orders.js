@@ -568,8 +568,15 @@ async function createOrder(req, res) {
     client.release();
     clientReleased = true;
 
+    console.log('[email-debug] order committed', order.id);
+    console.log('[email-debug] resend key present', Boolean(process.env.RESEND_API_KEY));
+    console.log('[email-debug] from email present', Boolean(process.env.ORDER_FROM_EMAIL));
+    console.log('[email-debug] site url present', Boolean(process.env.SITE_URL));
+    console.log('[email-debug] starting confirmation send', order.id);
+
     try {
-      await sendOrderConfirmationForOrder(order.id);
+      const receipt = await sendOrderConfirmationForOrder(order.id);
+      console.log('[email-debug] confirmation result', order.id, receipt && receipt.sent, (receipt && receipt.reason) || 'sent');
     } catch (emailError) {
       console.error('Order confirmation email failed:', emailError);
     }

@@ -474,3 +474,97 @@ test('the receipt is triggered server-side in the order route, after COMMIT', ()
     'an email failure must be caught and logged'
   );
 });
+
+// --- production regression: missing migration --------------------------
+
+test('a missing order_confirmation_sent_at column fails closed without calling Resend', async () => {
+  // Reproduces the production outage: migration 029 had not been applied,
+  // so claiming the send threw and the provider was never reached.
+  const pool = createMockPool();
+  const realQuery = pool.query.bind(pool);
+  pool.query = async (sql, params) => {
+    if (String(sql).includes('order_confirmation_sent_at = NOW()')) {
+      const error = new Error(
+        'column "order_confirmation_sent_at" of relation "orders" does not exist'
+      );
+      error.code = '42703';
+      throw error;
+    }
+    return realQuery(sql, params);
+  };
+
+  const resend = createMockResend();
+  const logger = silentLogger();
+  const result = await sendOrderConfirmationForOrder(42, { pool, resend, env: TEST_ENV, logger });
+
+  assert.equal(result.sent, false);
+  assert.equal(result.reason, 'send_failed');
+  assert.equal(resend.sent.length, 0, 'Resend must not be called when the claim fails');
+  assert.equal(logger.errors.length, 1, 'the schema failure must be logged');
+});
+
+test('the migration that backs the duplicate guard is present in the repo', () => {
+  const file = path.join(
+    __dirname, '..', '..', 'db', 'migrations', '029_order_confirmation_email.sql'
+  );
+  const sql = fs.readFileSync(file, 'utf8');
+  assert.match(sql, /ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_confirmation_sent_at/);
+});
+
+test('deploys run pending migrations via a build step', () => {
+  // Vercel serves this app through api/index.js, which only requires
+  // server.js; startServer() (and runMigrations) never runs there.
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')
+  );
+  assert.equal(pkg.scripts['vercel-build'], 'node scripts/migrate.js');
+});
+
+// --- diagnostics are safe ----------------------------------------------
+
+test('diagnostic logging reports presence only and never leaks secrets or addresses', async () => {
+  const pool = createMockPool();
+  const resend = createMockResend();
+  const lines = [];
+  const logger = {
+    errors: [],
+    log(...args) { lines.push(args.map((a) => JSON.stringify(a)).join(' ')); },
+    error(...args) { this.errors.push(args); }
+  };
+
+  await sendOrderConfirmationForOrder(42, { pool, resend, env: TEST_ENV, logger });
+
+  const output = lines.join('\n');
+  assert.match(output, /\[email-debug\] config present/);
+  assert.match(output, /\[email-debug\] order lookup/);
+  assert.match(output, /\[email-debug\] recipient resolved/);
+  assert.match(output, /\[email-debug\] duplicate claim/);
+  assert.match(output, /\[email-debug\] resend call attempted/);
+  assert.match(output, /\[email-debug\] resend call succeeded/);
+
+  assert.ok(!output.includes(TEST_ENV.RESEND_API_KEY), 'API key appeared in diagnostics');
+  assert.ok(!output.includes('dana@lab.example'), 'recipient address appeared in diagnostics');
+  assert.ok(!output.includes('account@lab.example'), 'account address appeared in diagnostics');
+  assert.match(output, /"resend_key":true/);
+  assert.match(output, /"from_email":true/);
+  assert.match(output, /"site_url":true/);
+});
+
+test('diagnostics report missing configuration without inventing a value', async () => {
+  const pool = createMockPool();
+  const resend = createMockResend();
+  const lines = [];
+  const logger = {
+    log(...args) { lines.push(args.map((a) => JSON.stringify(a)).join(' ')); },
+    error() {}
+  };
+
+  await sendOrderConfirmationForOrder(42, {
+    pool, resend, env: { ORDER_FROM_EMAIL: '', SITE_URL: '' }, logger
+  });
+
+  const output = lines.join('\n');
+  assert.match(output, /"resend_key":false/);
+  assert.match(output, /"from_email":false/);
+  assert.match(output, /"site_url":false/);
+});
