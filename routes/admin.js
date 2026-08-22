@@ -524,8 +524,26 @@ function createAdminRouter(requireAuth, deps) {
       // The label is bought and the shipment row is saved, so carrier and
       // tracking number now exist. Announce it; delivery is best-effort and
       // must never fail the purchase.
+      const purchased = (result && result.label) || {};
+      console.log('[shipping-email-debug] label purchased', {
+        orderId,
+        hasTracking: Boolean(purchased.trackingNumber),
+        hasCarrier: Boolean(purchased.carrier)
+      });
+      console.log('[email-config-debug]', {
+        resendKeyPresent: Boolean(process.env.RESEND_API_KEY),
+        fromEmailPresent: Boolean(process.env.ORDER_FROM_EMAIL),
+        siteUrlPresent: Boolean(process.env.SITE_URL)
+      });
+
       try {
-        await notifyOrderShipped(orderId);
+        console.log('[shipping-email-debug] notifier called', { orderId });
+        const shippingEmail = await notifyOrderShipped(orderId);
+        console.log('[shipping-email-debug] notifier result', {
+          orderId,
+          sent: Boolean(shippingEmail && shippingEmail.sent),
+          reason: (shippingEmail && shippingEmail.reason) || 'sent'
+        });
       } catch (emailError) {
         console.error('Shipping confirmation email failed:', emailError);
       }
@@ -593,8 +611,26 @@ function createAdminRouter(requireAuth, deps) {
       );
       // Payment state is durable at this point. Announce it; delivery is
       // best-effort and must never fail the confirmation.
+      const updatedOrder = result.rows[0] || {};
+      console.log('[payment-email-debug] payment updated', {
+        orderId,
+        paymentStatus: updatedOrder.payment_status,
+        paidAtPresent: Boolean(updatedOrder.paid_at)
+      });
+      console.log('[email-config-debug]', {
+        resendKeyPresent: Boolean(process.env.RESEND_API_KEY),
+        fromEmailPresent: Boolean(process.env.ORDER_FROM_EMAIL),
+        siteUrlPresent: Boolean(process.env.SITE_URL)
+      });
+
       try {
-        await notifyPaymentConfirmed(orderId);
+        console.log('[payment-email-debug] notifier called', { orderId });
+        const paymentEmail = await notifyPaymentConfirmed(orderId);
+        console.log('[payment-email-debug] notifier result', {
+          orderId,
+          sent: Boolean(paymentEmail && paymentEmail.sent),
+          reason: (paymentEmail && paymentEmail.reason) || 'sent'
+        });
       } catch (emailError) {
         console.error('Payment confirmation email failed:', emailError);
       }

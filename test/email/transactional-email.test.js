@@ -736,3 +736,95 @@ test('the admin order detail reports both email states', () => {
   assert.match(ui, /Payment email/);
   assert.match(ui, /Shipping email/);
 });
+
+// --- regression: production wiring reaches the real service -------------
+// A production incident looked like a wiring bug: payment was confirmed and a
+// label was purchased, both routes returned success, yet no Resend call was
+// ever made. These tests pin the wiring so a genuinely undefined or no-op
+// notifier can never ship.
+
+test('the admin router as production builds it reaches the real email service', async () => {
+  const seen = [];
+  const db = {
+    async query(sql, params) {
+      const normalized = String(sql).replace(/\s+/g, ' ').trim();
+      const lower = normalized.toLowerCase();
+      seen.push(normalized);
+
+      if (lower.startsWith('select role from users where id = $1')) {
+        return { rows: [{ role: 'admin' }] };
+      }
+      if (lower.startsWith('select id, payment_method, payment_status, status from orders')) {
+        return { rows: [{ id: 42, order_number: 'PX100042', payment_method: 'zelle', payment_status: 'awaiting_payment', status: 'pending_payment' }] };
+      }
+      if (lower.startsWith("update orders set payment_status = 'paid'")) {
+        return { rows: [{ id: 42, order_number: 'PX100042', payment_status: 'paid', paid_at: '2026-08-22T12:00:00.000Z', status: 'processing' }] };
+      }
+      // Queries below can only be reached through the real transactional-email service.
+      if (normalized.startsWith('SELECT o.*')) {
+        return { rows: [paidOrder()] };
+      }
+      if (normalized.startsWith('UPDATE orders SET payment_confirmation_sent_at = NOW()')) {
+        // Report the claim as already taken so the run stops before any provider call.
+        return { rows: [] };
+      }
+      throw new Error('Unexpected query: ' + normalized);
+    }
+  };
+
+  // Exactly how server.js builds it: no notifier dependencies supplied.
+  const router = createAdminRouter(async (req, res, next) => {
+    req.user = { id: 'admin-1' };
+    await next();
+  }, { pool: db });
+
+  const { res } = await invokeRoute(router, 'post', '/orders/:id/confirm-zelle-payment', {
+    params: { id: '42' }
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(
+    seen.some((sql) => sql.startsWith('SELECT o.*')),
+    'the default notifier never reached the transactional email service'
+  );
+  assert.ok(
+    seen.some((sql) => sql.startsWith('UPDATE orders SET payment_confirmation_sent_at = NOW()')),
+    'the default notifier never attempted the duplicate claim'
+  );
+});
+
+test('both notifier defaults resolve to real exported functions, not undefined or no-ops', () => {
+  const service = require('../../services/transactional-email');
+  assert.equal(typeof service.sendPaymentConfirmationForOrder, 'function');
+  assert.equal(typeof service.sendShippingConfirmationForOrder, 'function');
+
+  const source = readSource('routes/admin.js');
+  // The imported names must match the exported names exactly.
+  assert.match(source, /sendPaymentConfirmationForOrder,\s*\n\s*sendShippingConfirmationForOrder\s*\n\}\s*=\s*require\('\.\.\/services\/transactional-email'\)/);
+  assert.match(source, /deps\.notifyPaymentConfirmed \|\|\s*\n\s*\(\(orderId\) => sendPaymentConfirmationForOrder\(orderId, \{ pool: db \}\)\)/);
+  assert.match(source, /deps\.notifyOrderShipped \|\|\s*\n\s*\(\(orderId\) => sendShippingConfirmationForOrder\(orderId, \{ pool: db \}\)\)/);
+  // No stub or no-op may stand in for a notifier default.
+  assert.ok(!/notify(PaymentConfirmed|OrderShipped)\s*=\s*[^|]*\(\)\s*=>\s*\{\s*\}/.test(source), 'a no-op notifier default is present');
+});
+
+test('server.js mounts the admin router without overriding the notifiers', () => {
+  const source = readSource('server.js');
+  assert.match(source, /app\.use\("\/api\/admin", createAdminRouter\(requireAuth\)\);/);
+  assert.ok(!/notifyPaymentConfirmed|notifyOrderShipped/.test(source), 'server.js overrides a notifier');
+});
+
+test('both routes log where the email path stopped, without leaking secrets', () => {
+  const source = readSource('routes/admin.js');
+  assert.match(source, /\[payment-email-debug\] payment updated/);
+  assert.match(source, /\[payment-email-debug\] notifier called/);
+  assert.match(source, /\[payment-email-debug\] notifier result/);
+  assert.match(source, /\[shipping-email-debug\] label purchased/);
+  assert.match(source, /\[shipping-email-debug\] notifier called/);
+  assert.match(source, /\[shipping-email-debug\] notifier result/);
+  assert.match(source, /resendKeyPresent: Boolean\(process\.env\.RESEND_API_KEY\)/);
+  // Presence booleans only - never the values themselves.
+  assert.ok(
+    !/console\.log\([^)]*process\.env\.RESEND_API_KEY\s*[,)]/.test(source.replace(/Boolean\(process\.env\.RESEND_API_KEY\)/g, 'X')),
+    'an env value is logged rather than its presence'
+  );
+});
