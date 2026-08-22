@@ -9,6 +9,10 @@ const {
   voidShipmentForOrder,
   loadShipmentsForOrder
 } = require('../services/shipping-workflow');
+const {
+  sendPaymentConfirmationForOrder,
+  sendShippingConfirmationForOrder
+} = require('../services/transactional-email');
 
 // Allowed order statuses (kept in one place, reused by validation).
 const ORDER_STATUSES = [
@@ -110,6 +114,13 @@ function createAdminRouter(requireAuth, deps) {
   const router = express.Router();
   const db = deps.pool || pool;
   const shippingClient = deps.client || null;
+
+  // Customer emails are fired from this router, each one after the state it
+  // announces is already durable. Injectable so tests never reach the network.
+  const notifyPaymentConfirmed = deps.notifyPaymentConfirmed ||
+    ((orderId) => sendPaymentConfirmationForOrder(orderId, { pool: db }));
+  const notifyOrderShipped = deps.notifyOrderShipped ||
+    ((orderId) => sendShippingConfirmationForOrder(orderId, { pool: db }));
 
   // --- requireAdmin -------------------------------------------------
   // 1. runs requireAuth first (verifies logged in, sets req.user)
@@ -402,6 +413,10 @@ function createAdminRouter(requireAuth, deps) {
         payment_method: order.payment_method || null,
         payment_status: order.payment_status || (order.status === 'pending_payment' ? 'awaiting_payment' : 'paid'),
         paid_at: order.paid_at || null,
+      emails: {
+        payment_confirmation_sent_at: order.payment_confirmation_sent_at || null,
+        shipping_confirmation_sent_at: order.shipping_confirmation_sent_at || null
+      },
         tracking: {
           tracking_number: latestShipment && latestShipment.trackingNumber || order.tracking_number,
           carrier: latestShipment && latestShipment.carrier || order.carrier,
@@ -506,6 +521,15 @@ function createAdminRouter(requireAuth, deps) {
         rateId: req.body && (req.body.rateId || req.body.rate_id),
         env: process.env
       });
+      // The label is bought and the shipment row is saved, so carrier and
+      // tracking number now exist. Announce it; delivery is best-effort and
+      // must never fail the purchase.
+      try {
+        await notifyOrderShipped(orderId);
+      } catch (emailError) {
+        console.error('Shipping confirmation email failed:', emailError);
+      }
+
       return res.status(201).json(result);
     } catch (error) {
       if (error instanceof ShippingWorkflowError) {
@@ -567,6 +591,14 @@ function createAdminRouter(requireAuth, deps) {
           RETURNING id, order_number, payment_status, paid_at, status`,
         [req.adminUserId, orderId]
       );
+      // Payment state is durable at this point. Announce it; delivery is
+      // best-effort and must never fail the confirmation.
+      try {
+        await notifyPaymentConfirmed(orderId);
+      } catch (emailError) {
+        console.error('Payment confirmation email failed:', emailError);
+      }
+
       return res.json(result.rows[0]);
     } catch (error) {
       console.error(error);

@@ -1281,6 +1281,8 @@
       + '<div class="kv"><span>Method</span><strong>' + esc(order.payment_method || 'Not recorded') + '</strong></div>'
       + '<div class="kv"><span>Payment status</span><strong>' + statusBadge(d.payment_status) + '</strong></div>'
       + (d.paid_at ? '<div class="kv"><span>Paid at</span><strong>' + esc(fmtDate(d.paid_at)) + '</strong></div>' : '')
+        + '<div class="kv"><span>Payment email</span><strong>' + (d.emails && d.emails.payment_confirmation_sent_at ? 'Sent ' + esc(fmtDate(d.emails.payment_confirmation_sent_at)) : 'Not sent') + '</strong></div>'
+        + '<div class="kv"><span>Shipping email</span><strong>' + (d.emails && d.emails.shipping_confirmation_sent_at ? 'Sent ' + esc(fmtDate(d.emails.shipping_confirmation_sent_at)) : 'Not sent') + '</strong></div>'
       + '<div class="kv"><span>Subtotal</span><strong>' + money(d.totals && d.totals.subtotal_before_discount != null ? d.totals.subtotal_before_discount : d.totals && d.totals.subtotal) + '</strong></div>'
       + '<div class="kv"><span>Discount</span><strong>-' + money(d.totals && d.totals.discount_amount) + '</strong></div>'
       + '<div class="kv"><span>Shipping</span><strong>' + (Number(d.totals && d.totals.shipping_cost) === 0 ? '<span class="badge green">FREE</span>' : money(d.totals && d.totals.shipping_cost)) + '</strong></div>'
