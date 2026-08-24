@@ -31,6 +31,40 @@ const ORDER_LIST_SORT_FIELDS = {
   status: 'o.status'
 };
 
+// node-postgres checks out a SEPARATE pool client for every concurrent
+// pool.query(). An unbounded Promise.all over N queries therefore needs N
+// clients at once. The pool is capped (see `max` in db/connection.js), and the
+// session store needs a client for essentially every request on the site, so a
+// single wide fan-out here can starve unrelated traffic. Keep the admin
+// dashboard's fan-out well under the pool size.
+const SUMMARY_QUERY_CONCURRENCY = 3;
+
+// Runs `thunks` with at most `limit` in flight, preserving result order.
+// Rejections are captured (never left unhandled) and the first one is rethrown.
+async function runBounded(thunks, limit) {
+  const results = new Array(thunks.length);
+  let next = 0;
+  let failure = null;
+
+  async function worker() {
+    for (;;) {
+      const index = next++;
+      if (index >= thunks.length) return;
+      try {
+        results[index] = await thunks[index]();
+      } catch (err) {
+        if (!failure) failure = err;
+        return;
+      }
+    }
+  }
+
+  const size = Math.max(1, Math.min(limit, thunks.length));
+  await Promise.all(Array.from({ length: size }, worker));
+  if (failure) throw failure;
+  return results;
+}
+
 function money(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
@@ -159,44 +193,44 @@ function createAdminRouter(requireAuth, deps) {
         lowStockRes,
         outOfStockRes,
         customersRes
-      ] = await Promise.all([
-        db.query(
+      ] = await runBounded([
+        () => db.query(
           `SELECT status, COUNT(*)::int AS count
              FROM orders
             GROUP BY status`
         ),
-        db.query(
+        () => db.query(
           `SELECT COUNT(*)::int AS count
              FROM orders
             WHERE status IN ('paid','processing')
               AND shipped_at IS NULL`
         ),
-        db.query(
+        () => db.query(
           `SELECT COUNT(*)::int AS count
              FROM orders
             WHERE COALESCE(TRIM(tracking_number), '') = ''
               AND (shipped_at IS NOT NULL OR status IN ('shipped','completed'))`
         ),
-        db.query(
+        () => db.query(
           `SELECT COUNT(*)::int AS count
              FROM orders
             WHERE COALESCE(TRIM(shipping_label_url), '') = ''
               AND status IN ('paid','processing')`
         ),
-        db.query(
+        () => db.query(
           `SELECT COUNT(*)::int AS order_count,
                   COALESCE(SUM(total), 0) AS sales_total,
                   COALESCE(AVG(total), 0) AS avg_order_value
              FROM orders
             WHERE created_at >= NOW() - INTERVAL '30 days'`
         ),
-        db.query(
+        () => db.query(
           `SELECT id, order_number, status, total, created_at, shipping_name, shipping_email, tracking_number, carrier
              FROM orders
             ORDER BY created_at DESC
             LIMIT 8`
         ),
-        db.query(
+        () => db.query(
           `SELECT pv.id, pv.product_id, pv.name, pv.stock_quantity, p.name AS product_name
              FROM product_variants pv
              JOIN products p ON p.id = pv.product_id
@@ -206,7 +240,7 @@ function createAdminRouter(requireAuth, deps) {
             ORDER BY pv.stock_quantity ASC, pv.updated_at DESC
             LIMIT 8`
         ),
-        db.query(
+        () => db.query(
           `SELECT pv.id, pv.product_id, pv.name, pv.stock_quantity, p.name AS product_name
              FROM product_variants pv
              JOIN products p ON p.id = pv.product_id
@@ -215,14 +249,14 @@ function createAdminRouter(requireAuth, deps) {
             ORDER BY pv.updated_at DESC
             LIMIT 8`
         ),
-        db.query(
+        () => db.query(
           `SELECT id, name, email, created_at
              FROM users
             WHERE COALESCE(role, 'customer') <> 'admin'
             ORDER BY created_at DESC
             LIMIT 8`
         )
-      ]);
+      ], SUMMARY_QUERY_CONCURRENCY);
 
       let promoSummary = {
         redemptions_30d: 0,
