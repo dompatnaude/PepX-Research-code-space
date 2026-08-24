@@ -742,7 +742,7 @@ app.get('/auth/google/callback', (req, res, next) => {
         return res.redirect(withAuthQuery(returnTo, authCodeFromError(sessionErr)));
       }
     });
-  });
+  })(req, res, next);
 });
 
 app.get('/api/auth/protected', requireAuth, (req, res) => {
