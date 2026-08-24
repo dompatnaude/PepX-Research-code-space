@@ -601,6 +601,9 @@ nav.menu a:hover{color:var(--blue);}
 .rail-link{display:inline-flex;align-items:center;justify-content:center;padding:12px 18px;border-radius:999px;background:#101426;color:#fff;font-size:14px;font-weight:700;white-space:nowrap;}
 .rail-link:hover{background:#2536b8;}
 .grid-rail{grid-template-columns:repeat(3,1fr);}
+/* Rails render a 4th product so mobile can show a complete 2x2 grid.
+   Every wider breakpoint keeps the established 3-card row. */
+.grid-rail > :nth-child(4){display:none;}
 .product-rail-related{padding-top:6px;}
 .hero-copy h1{font-size:44px;line-height:1.05;max-width:520px;}
 .hero-copy p{color:var(--muted);max-width:520px;}
@@ -1303,6 +1306,11 @@ footer{background:#1f2937;}
 	.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
 	.page-shop .grid-shop{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
 	.grid-rail{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+	/* 2 x 2: reveal the 4th card so the grid has no empty cell. */
+	.grid-rail > :nth-child(4){display:flex;}
+	/* "View All" spans the rail, flush with the grid edges below it. */
+	.rail-head{align-items:stretch;}
+	.rail-link{width:100%;align-self:stretch;}
 	.product-card{border-radius:18px;}
 	.product-card-media{height:auto;aspect-ratio:19/10;padding:0;}
 	.product-card-body{padding:12px;gap:8px;}

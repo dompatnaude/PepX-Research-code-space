@@ -426,6 +426,10 @@ function buildProductDisclaimer(product){
   ].join('');
 }
 
+// Products requested per recommendation rail. Mobile lays these out 2x2; the
+// 4th card is hidden by CSS at wider breakpoints, which keep a 3-card row.
+var RAIL_PRODUCT_LIMIT = 4;
+
 function getUpsellProducts(product, limit){
   return PRODUCTS.filter(function(item){
     return item.id !== product.id && item.category !== product.category;
@@ -1178,8 +1182,11 @@ function renderProductDetailPage(){
     };
   }
 
-  renderProductRail('upsellGrid', getUpsellProducts(product, 3));
-  renderProductRail('relatedGrid', getRelatedProducts(product, 3));
+  // Rails request 4 products so mobile can fill a complete 2x2 grid.
+  // Wider viewports still show 3: styles.css hides the 4th card above the
+  // mobile breakpoint, so the desktop/tablet row is unchanged.
+  renderProductRail('upsellGrid', getUpsellProducts(product, RAIL_PRODUCT_LIMIT));
+  renderProductRail('relatedGrid', getRelatedProducts(product, RAIL_PRODUCT_LIMIT));
 }
 
 function addSelectedProductToCart(){
