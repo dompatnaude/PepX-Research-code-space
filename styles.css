@@ -1584,15 +1584,14 @@ body.dark-mode .checkout-promo-applied span{color:#d3e5ff;}
 .address-suggestion-actions{display:flex;flex-wrap:wrap;gap:10px;}
 @media(max-width:600px){.address-suggestion-cols{grid-template-columns:1fr;}}
 
-/* Product-card media on mobile: the media box is 19/10 while the source product
-   image is 1:1, so object-fit:contain letterboxes it and leaves empty side
-   gutters. Every product uses the same image, and its backdrop is a purely
-   vertical gradient (uniform left-to-right), so we repaint that exact gradient
-   on the media box behind the gutters: each card reads edge-to-edge with the
-   whole vial still visible - nothing cropped, scaled, stretched or
-   repositioned. (Was GLP-3RT-only; generalised to every product card.) */
+/* GLP-3RT only: its source image is 1:1 while every other product image is ~19:10.
+   On mobile the card media box is 19/10 with object-fit:contain, so the square image
+   letterboxes and shows empty side gutters. Its own backdrop is a purely vertical
+   gradient (uniform left-to-right), so we repaint that exact gradient on the media box
+   behind the gutters: the card reads edge-to-edge with the whole vial still visible -
+   nothing cropped, scaled, stretched or repositioned. */
 @media (max-width: 720px) {
-	.product-card-media {
+	.product-card-media:has(img[alt^="GLP-3RT"]) {
 		background: linear-gradient(180deg,
 			#e6e5ea 0%,
 			#e9e7ed 10%,
