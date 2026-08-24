@@ -4,6 +4,7 @@
   var state = {
     tab: 'home',
     filter: '',
+    view: '',
     search: '',
     orders: [],
     statuses: [],
@@ -213,6 +214,7 @@
     var qs = [];
     var status = filterToStatus(state.filter);
     if (status) qs.push('status=' + encodeURIComponent(status));
+    if (state.view) qs.push('view=' + encodeURIComponent(state.view));
     if (state.search) qs.push('search=' + encodeURIComponent(state.search));
     qs.push('page=' + encodeURIComponent(state.pagination.page || 1));
     qs.push('page_size=' + encodeURIComponent(state.pagination.page_size || 25));
@@ -284,9 +286,12 @@
           return;
         }
         state.filter = '';
+        state.view = '';
         if (action === 'ready_to_ship') state.filter = 'processing';
         if (action === 'pending_payment') state.filter = 'new';
-        if (action === 'paid') state.filter = '';
+        // Confirmed payments sit in processing/shipped/completed, so this
+        // drill-down asks the server for the paid *view* rather than a status.
+        if (action === 'paid') state.view = 'paid';
         if (action === 'shipped') state.filter = 'shipped';
         switchTab('orders');
       });
@@ -1909,6 +1914,7 @@
           Array.prototype.forEach.call(adminFilters.querySelectorAll('button'), function (b) { b.classList.remove('active'); });
           btn.classList.add('active');
           state.filter = btn.getAttribute('data-filter') || '';
+          state.view = '';
           loadOrders();
         });
       });

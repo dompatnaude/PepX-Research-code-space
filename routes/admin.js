@@ -13,6 +13,7 @@ const {
   sendPaymentConfirmationForOrder,
   sendShippingConfirmationForOrder
 } = require('../services/transactional-email');
+const { PAID_ORDER_SQL } = require('../services/admin-customers');
 
 // Allowed order statuses (kept in one place, reused by validation).
 const ORDER_STATUSES = [
@@ -100,7 +101,10 @@ function buildOrderWhereSql(query) {
   } else if (view === 'pending_payment') {
     where.push("o.status = 'pending_payment'");
   } else if (view === 'paid') {
-    where.push("o.status IN ('paid','processing','shipped','completed')");
+    // Same definition the dashboard's Paid-orders count uses, so the card and
+    // its drill-down can never disagree. Payment lives in payment_status /
+    // paid_at; `status` has already moved on to processing/shipped/completed.
+    where.push(PAID_ORDER_SQL);
   } else if (view === 'canceled') {
     where.push("o.status = 'cancelled'");
   } else if (view === 'refunded') {
@@ -188,6 +192,7 @@ function createAdminRouter(requireAuth, deps) {
         requiringFulfillmentRes,
         missingTrackingRes,
         labelIssuesRes,
+        paidOrdersRes,
         sales30Res,
         recentOrdersRes,
         lowStockRes,
@@ -216,6 +221,18 @@ function createAdminRouter(requireAuth, deps) {
              FROM orders
             WHERE COALESCE(TRIM(shipping_label_url), '') = ''
               AND status IN ('paid','processing')`
+        ),
+        // Payment state is tracked separately from fulfillment state.
+        // Confirming payment sets payment_status='paid' and moves `status`
+        // straight to 'processing', so counting status='paid' reports zero.
+        // PAID_ORDER_SQL is the admin-wide definition of a paid order (also
+        // used for customer lifetime spend): payment_status='paid', or a
+        // legacy row with no payment_status that is past pending_payment --
+        // cancelled and refunded excluded in both cases.
+        () => db.query(
+          `SELECT COUNT(*)::int AS count
+             FROM orders o
+            WHERE ${PAID_ORDER_SQL}`
         ),
         () => db.query(
           `SELECT COUNT(*)::int AS order_count,
@@ -288,7 +305,7 @@ function createAdminRouter(requireAuth, deps) {
       return res.json({
         counts: {
           pending_payment: Number(statusCounts.pending_payment || 0),
-          paid: Number(statusCounts.paid || 0),
+          paid: Number(paidOrdersRes.rows[0].count || 0),
           processing: Number(statusCounts.processing || 0),
           shipped: Number(statusCounts.shipped || 0),
           completed: Number(statusCounts.completed || 0),
