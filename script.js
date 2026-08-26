@@ -1314,15 +1314,31 @@ function toggleCheckoutEmptyState(hasItems){
   if(side){ side.style.display = hasItems ? '' : 'none'; }
 }
 
+function checkoutAgreementsAccepted(){
+  var a = document.getElementById('agreeResearchTerms');
+  var b = document.getElementById('agreeLabUseOnly');
+  if(!a && !b) return true;
+  return !!(a && a.checked) && !!(b && b.checked);
+}
+
+function syncCheckoutAgreementHint(){
+  var hint = document.getElementById('checkoutAgreementHint');
+  var wrap = document.getElementById('checkoutAgreements');
+  var ok = checkoutAgreementsAccepted();
+  if(hint){ hint.style.display = ok ? 'none' : ''; }
+  if(wrap && ok){ wrap.classList.remove('is-invalid'); }
+}
+
 function updateCheckoutActionState(hasItems){
   var checkoutBtn = document.getElementById('checkoutBtn');
   if(!checkoutBtn) return;
   if(!checkoutBtn.getAttribute('data-default-label')){
     checkoutBtn.setAttribute('data-default-label', checkoutBtn.textContent || 'Place Order');
   }
-  var shouldDisable = !hasItems || checkoutState.promoValidating || hasAnyCartItemPending();
+  var shouldDisable = !hasItems || checkoutState.promoValidating || hasAnyCartItemPending() || !checkoutAgreementsAccepted();
   checkoutBtn.disabled = shouldDisable;
   checkoutBtn.classList.toggle('is-disabled', shouldDisable);
+  syncCheckoutAgreementHint();
 }
 
 function syncPromoAppliedState(){
@@ -3003,6 +3019,22 @@ function initCheckoutPage(){
   checkoutState.promoValidating = false;
   renderCart();
 
+  (function initCheckoutAgreements(){
+    ['agreeResearchTerms','agreeLabUseOnly'].forEach(function(id){
+      var box = document.getElementById(id);
+      if(!box) return;
+      box.addEventListener('change', function(){
+        if(checkoutAgreementsAccepted()){ setCheckoutMessage('', false); }
+        updateCheckoutActionState((cartData.items || []).length > 0);
+      });
+    });
+    var links = document.querySelectorAll('#checkoutAgreements a');
+    Array.prototype.forEach.call(links, function(link){
+      link.addEventListener('click', function(e){ e.stopPropagation(); });
+    });
+    syncCheckoutAgreementHint();
+  })();
+
   // Toggle Zelle instructions panel when the Zelle payment option is selected.
   (function initZelleToggle(){
     var paymentRadios = document.querySelectorAll('input[name="payment_method"]');
@@ -3372,6 +3404,16 @@ function initCheckoutPage(){
       setCheckoutMessage('Please select a shipping method before placing your order.', true);
       var methodCard = document.getElementById('shippingMethodCard');
       if(methodCard){ methodCard.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      return;
+    }
+
+    if(!checkoutAgreementsAccepted()){
+      setCheckoutMessage('Please confirm both required agreements before placing your order.', true);
+      var agreeWrap = document.getElementById('checkoutAgreements');
+      if(agreeWrap){
+        agreeWrap.classList.add('is-invalid');
+        agreeWrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       return;
     }
 

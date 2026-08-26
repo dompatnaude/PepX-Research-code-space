@@ -1614,3 +1614,34 @@ body.dark-mode .checkout-promo-applied span{color:#d3e5ff;}
 			#f6f6f8 100%);
 	}
 }
+
+/* Consolidated checkout summary: shipping method, payment, agreements, place order */
+.page-checkout .checkout-side{position:static;top:auto;}
+.checkout-totals > .checkout-summary-shipping{display:block;}
+.checkout-summary-shipping,.checkout-summary-payment,.checkout-agreements{min-width:0;}
+.checkout-summary-shipping{margin:4px 0 2px;padding-top:12px;border-top:1px dashed #d5deeb;}
+.checkout-summary-payment{margin-top:14px;padding-top:14px;border-top:1px solid #edf2f8;}
+.checkout-summary-subhead{font-size:12px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#475569;margin:0 0 10px;}
+.checkout-summary-shipping .shipping-rates-state{margin:0 0 8px;}
+.checkout-summary-shipping .shipping-rates-list,.checkout-summary-payment .checkout-payments{width:100%;}
+.checkout-summary-shipping .shipping-rate-card,.checkout-summary-payment .checkout-payment-option{width:100%;min-width:0;}
+.checkout-summary-payment .zelle-instructions{margin-top:12px;}
+.checkout-agreements{display:grid;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid #edf2f8;}
+.checkout-agreement{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;line-height:1.55;color:#475569;cursor:pointer;}
+.checkout-agreement input[type="checkbox"]{flex:0 0 auto;width:16px;height:16px;margin-top:2px;accent-color:var(--blue);cursor:pointer;}
+.checkout-agreement > span{min-width:0;overflow-wrap:anywhere;}
+.checkout-agreement a{color:var(--blue);text-decoration:underline;font-weight:700;}
+.checkout-agreements.is-invalid .checkout-agreement{color:#b42318;}
+.checkout-agreements.is-invalid input[type="checkbox"]{outline:2px solid #f04438;outline-offset:2px;}
+.checkout-agreement-hint{font-size:12px;color:#b45309;margin:0;}
+.checkout-side .btn.primary.co{width:100%;justify-content:center;}
+body.dark-mode .checkout-summary-shipping{border-top-color:#223154;}
+body.dark-mode .checkout-summary-payment,body.dark-mode .checkout-agreements{border-top-color:#223154;}
+body.dark-mode .checkout-summary-subhead{color:#9fb4dd;}
+body.dark-mode .checkout-agreement{color:#c7d4f0;}
+body.dark-mode .checkout-agreement a{color:#7fb1ff;}
+body.dark-mode .checkout-agreement-hint{color:#f3c07b;}
+@media(max-width:720px){
+.checkout-summary-shipping,.checkout-summary-payment,.checkout-agreements{margin-top:12px;padding-top:12px;}
+.checkout-agreement{font-size:12px;}
+}

@@ -88,85 +88,6 @@
             </form>
           </article>
 
-          <article class="checkout-card" id="shippingMethodCard">
-            <div class="checkout-card-head">
-              <h2>Shipping Method</h2>
-              <p>Select a shipping option for your order.</p>
-            </div>
-            <div id="shippingRatesLoading" class="shipping-rates-state" style="display:none;">
-              <span class="shipping-rates-loading-text">Calculating shipping options&hellip;</span>
-            </div>
-            <div id="shippingRatesError" class="shipping-rates-state shipping-rates-error-state" style="display:none;">
-              <p id="shippingRatesErrorMsg">Could not load shipping rates.</p>
-              <button type="button" class="btn ghost btn-sm" id="retryShippingRates">Try Again</button>
-            </div>
-            <div id="shippingRatesPrompt" class="shipping-rates-state">
-              <p class="shipping-rates-prompt-text">Enter your shipping address above to see available rates.</p>
-            </div>
-            <div id="shippingAddressSuggestion" class="shipping-rates-state address-suggestion" style="display:none;">
-          <div class="address-suggestion-head">
-            <span class="address-verified-badge">&#10004; USPS Verified Address</span>
-            <p class="address-suggestion-lead">We found a USPS verified version of your address. USPS recommends using the verified address to avoid delivery issues.</p>
-          </div>
-          <div class="address-suggestion-cols">
-            <div class="address-suggestion-card">
-              <h4>Original Address</h4>
-              <address id="suggestionOriginalAddress" class="address-suggestion-body"></address>
-            </div>
-            <div class="address-suggestion-card is-suggested">
-              <h4>Suggested Address</h4>
-              <address id="suggestionSuggestedAddress" class="address-suggestion-body"></address>
-            </div>
-          </div>
-          <div class="address-suggestion-actions">
-            <button type="button" class="btn" id="useSuggestedAddress">Use Suggested Address</button>
-            <button type="button" class="btn ghost" id="keepOriginalAddress">Keep Original Address</button>
-          </div>
-        </div>
-        <div id="shippingRatesList" class="shipping-rates-list" style="display:none;" role="radiogroup" aria-label="Shipping methods"></div>
-          </article>
-
-          <article class="checkout-card">
-            <div class="checkout-card-head">
-              <h2>Payment</h2>
-              <p>Your order remains in pending status until payment is finalized.</p>
-            </div>
-            <div class="checkout-payments" id="paymentMethods">
-              <label class="checkout-payment-option checkout-payment-option--disabled">
-                <input type="radio" name="payment_method" value="card" disabled>
-                <span>
-                  <strong>Credit / Debit Card <span class="checkout-coming-soon">Coming Soon</span></strong>
-                  <small>Card payments are not yet available.</small>
-                </span>
-              </label>
-              <label class="checkout-payment-option">
-                <input type="radio" name="payment_method" value="zelle" checked>
-                <span>
-                  <strong>Zelle</strong>
-                  <small>Send payment after placing your order using the instructions provided.</small>
-                </span>
-              </label>
-            </div>
-            <div id="zelleInstructions" class="zelle-instructions" aria-live="polite">
-              <h4 class="zelle-instructions-title">Pay with Zelle</h4>
-              <ol class="zelle-steps">
-                <li>Complete your order by clicking <strong>Place Order</strong> below.</li>
-                <li>After your order is created, you will receive an <strong>order number</strong>.</li>
-                <li>Send the <strong>exact order total</strong> through Zelle to:<br>
-                  <span class="zelle-id-row">
-                    <strong id="zelleIdDisplay">pxresearch</strong>
-                    <button type="button" class="zelle-copy-btn" data-copy="pxresearch" aria-label="Copy Zelle ID">Copy</button>
-                  </span>
-                </li>
-                <li>Enter your <strong>order number</strong> in the Zelle payment memo.</li>
-                <li>Your order will remain pending until the payment is manually verified.</li>
-              </ol>
-              <p class="zelle-warning"><strong>Important:</strong> Please verify that you are sending payment to the correct Zelle recipient before submitting the transfer. PepX Research is not responsible for payments sent to the wrong recipient.</p>
-              <p class="zelle-pre-order-note">Your exact order number and total will be shown <strong>after</strong> you click Place Order — you will need them for the Zelle memo and amount.</p>
-            </div>
-            <p class="checkout-note" id="checkoutError" aria-live="polite"></p>
-          </article>
-
           <article class="checkout-card checkout-trust">
             <h3>Why Order With PepX</h3>
             <ul>
@@ -203,10 +124,95 @@
               <div><span>Subtotal</span><strong id="checkoutSubtotal">$0.00</strong></div>
               <div id="checkoutPromoRow" style="display:none;"><span>Discount</span><strong id="checkoutPromoDiscount">-$0.00</strong></div>
               <div><span>Shipping</span><strong id="checkoutShipping">$0.00</strong></div>
+              <div class="checkout-summary-shipping" id="shippingMethodCard">
+                <h3 class="checkout-summary-subhead">Shipping Method</h3>
+                    <div id="shippingRatesLoading" class="shipping-rates-state" style="display:none;">
+                      <span class="shipping-rates-loading-text">Calculating shipping options&hellip;</span>
+                    </div>
+                    <div id="shippingRatesError" class="shipping-rates-state shipping-rates-error-state" style="display:none;">
+                      <p id="shippingRatesErrorMsg">Could not load shipping rates.</p>
+                      <button type="button" class="btn ghost btn-sm" id="retryShippingRates">Try Again</button>
+                    </div>
+                    <div id="shippingRatesPrompt" class="shipping-rates-state">
+                      <p class="shipping-rates-prompt-text">Enter your shipping address above to see available rates.</p>
+                    </div>
+                    <div id="shippingAddressSuggestion" class="shipping-rates-state address-suggestion" style="display:none;">
+                  <div class="address-suggestion-head">
+                    <span class="address-verified-badge">&#10004; USPS Verified Address</span>
+                    <p class="address-suggestion-lead">We found a USPS verified version of your address. USPS recommends using the verified address to avoid delivery issues.</p>
+                  </div>
+                  <div class="address-suggestion-cols">
+                    <div class="address-suggestion-card">
+                      <h4>Original Address</h4>
+                      <address id="suggestionOriginalAddress" class="address-suggestion-body"></address>
+                    </div>
+                    <div class="address-suggestion-card is-suggested">
+                      <h4>Suggested Address</h4>
+                      <address id="suggestionSuggestedAddress" class="address-suggestion-body"></address>
+                    </div>
+                  </div>
+                  <div class="address-suggestion-actions">
+                    <button type="button" class="btn" id="useSuggestedAddress">Use Suggested Address</button>
+                    <button type="button" class="btn ghost" id="keepOriginalAddress">Keep Original Address</button>
+                  </div>
+                </div>
+                <div id="shippingRatesList" class="shipping-rates-list" style="display:none;" role="radiogroup" aria-label="Shipping methods"></div>
+              </div>
               <div class="checkout-savings" id="cartSavings" style="display:none;">You saved $0.00</div>
               <p class="checkout-tax-note">Estimated tax is calculated at final checkout.</p>
               <div class="total"><span>Total</span><strong id="checkoutTotal">$0.00</strong></div>
             </div>
+
+            <div class="checkout-summary-payment">
+              <h3 class="checkout-summary-subhead">Payment</h3>
+              <div class="checkout-payments" id="paymentMethods">
+                <label class="checkout-payment-option checkout-payment-option--disabled">
+                  <input type="radio" name="payment_method" value="card" disabled>
+                  <span>
+                    <strong>Credit / Debit Card <span class="checkout-coming-soon">Coming Soon</span></strong>
+                    <small>Card payments are not yet available.</small>
+                  </span>
+                </label>
+                <label class="checkout-payment-option">
+                  <input type="radio" name="payment_method" value="zelle" checked>
+                  <span>
+                    <strong>Zelle</strong>
+                    <small>Send payment after placing your order using the instructions provided.</small>
+                  </span>
+                </label>
+              </div>
+              <div id="zelleInstructions" class="zelle-instructions" aria-live="polite">
+                <h4 class="zelle-instructions-title">Pay with Zelle</h4>
+                <ol class="zelle-steps">
+                  <li>Complete your order by clicking <strong>Place Order</strong> below.</li>
+                  <li>After your order is created, you will receive an <strong>order number</strong>.</li>
+                  <li>Send the <strong>exact order total</strong> through Zelle to:<br>
+                    <span class="zelle-id-row">
+                      <strong id="zelleIdDisplay">pxresearch</strong>
+                      <button type="button" class="zelle-copy-btn" data-copy="pxresearch" aria-label="Copy Zelle ID">Copy</button>
+                    </span>
+                  </li>
+                  <li>Enter your <strong>order number</strong> in the Zelle payment memo.</li>
+                  <li>Your order will remain pending until the payment is manually verified.</li>
+                </ol>
+                <p class="zelle-warning"><strong>Important:</strong> Please verify that you are sending payment to the correct Zelle recipient before submitting the transfer. PepX Research is not responsible for payments sent to the wrong recipient.</p>
+                <p class="zelle-pre-order-note">Your exact order number and total will be shown <strong>after</strong> you click Place Order — you will need them for the Zelle memo and amount.</p>
+              </div>
+            </div>
+
+            <div class="checkout-agreements" id="checkoutAgreements">
+              <label class="checkout-agreement">
+                <input type="checkbox" id="agreeResearchTerms" required>
+                <span>I confirm that I am 21+ years old, understand these products are for laboratory research purposes only (not for human consumption), and agree to the <a href="terms-conditions.html" target="_blank" rel="noopener noreferrer">Terms &amp; Conditions</a>. I understand and agree that these products are not approved by the FDA, and are not intended for human or animal consumption, diagnosis, treatment, cure, or prevention of any disease. I understand my personal data will be used to process my order, support my experience throughout this website, and for other purposes described in the <a href="privacy-policy.html" target="_blank" rel="noopener noreferrer">privacy policy</a>.</span>
+              </label>
+              <label class="checkout-agreement">
+                <input type="checkbox" id="agreeLabUseOnly" required>
+                <span>I confirm this purchase is for laboratory research use only and not for human or veterinary use.</span>
+              </label>
+              <p class="checkout-agreement-hint" id="checkoutAgreementHint">Please accept both agreements to place your order.</p>
+            </div>
+
+            <p class="checkout-note" id="checkoutError" aria-live="polite"></p>
 
             <button class="btn primary co" id="checkoutBtn" type="button">Place Order</button>
 
