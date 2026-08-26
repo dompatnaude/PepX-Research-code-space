@@ -9,6 +9,9 @@
     "vercel-build": "node scripts/migrate.js",
     "start": "npm run migrate && node server.js",
     "dev": "npm run migrate && node server.js",
+    "dev:local": "bash scripts/dev-local.sh",
+    "dev:local:seed": "bash scripts/dev-local-seed.sh",
+    "dev:local:down": "docker rm -f ${DEV_DB_CONTAINER:-pepx-dev-db}",
     "test": "node --test",
     "test:auth": "node --test test/auth/**/*.test.js"
   },

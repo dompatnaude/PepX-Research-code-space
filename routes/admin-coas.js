@@ -119,7 +119,7 @@ function createAdminCoasRouter(requireAuth) {
         params.push('%' + search + '%');
         const p = '$' + params.length;
         where.push(
-          '(p.name ILIKE ' + p +
+          '(COALESCE(p.name, c.product_name) ILIKE ' + p +
           ' OR pv.name ILIKE ' + p +
           ' OR c.batch_number ILIKE ' + p +
           ' OR c.lab_name ILIKE ' + p + ')'
@@ -150,13 +150,13 @@ function createAdminCoasRouter(requireAuth) {
                c.file_storage_key, c.thumbnail_storage_key,
                c.status, c.created_at, c.updated_at, c.published_at, c.archived_at,
                c.created_by, c.updated_by, c.published_by,
-               p.name AS product_name,
+               COALESCE(p.name, c.product_name) AS product_name,
                pv.name AS variant_name,
                u1.name AS created_by_name,
                u2.name AS updated_by_name,
                u3.name AS published_by_name
           FROM coas c
-          JOIN products p ON p.id = c.product_id
+          LEFT JOIN products p ON p.id = c.product_id
           LEFT JOIN product_variants pv ON pv.id = c.variant_id
           LEFT JOIN users u1 ON u1.id = c.created_by
           LEFT JOIN users u2 ON u2.id = c.updated_by
@@ -169,7 +169,7 @@ function createAdminCoasRouter(requireAuth) {
       const countSql = `
         SELECT COUNT(*)::int AS total
           FROM coas c
-          JOIN products p ON p.id = c.product_id
+          LEFT JOIN products p ON p.id = c.product_id
           LEFT JOIN product_variants pv ON pv.id = c.variant_id
          ${whereSql}
       `;
@@ -253,12 +253,12 @@ function createAdminCoasRouter(requireAuth) {
                 c.file_storage_key, c.thumbnail_storage_key,
                 c.status, c.created_at, c.updated_at, c.published_at, c.archived_at,
                 c.created_by, c.updated_by, c.published_by,
-                p.name AS product_name, pv.name AS variant_name,
+                COALESCE(p.name, c.product_name) AS product_name, pv.name AS variant_name,
                 u1.name AS created_by_name,
                 u2.name AS updated_by_name,
                 u3.name AS published_by_name
            FROM coas c
-           JOIN products p ON p.id = c.product_id
+           LEFT JOIN products p ON p.id = c.product_id
            LEFT JOIN product_variants pv ON pv.id = c.variant_id
            LEFT JOIN users u1 ON u1.id = c.created_by
            LEFT JOIN users u2 ON u2.id = c.updated_by

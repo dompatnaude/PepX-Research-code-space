@@ -1,6 +1,10 @@
 (function () {
   'use strict';
 
+  // Shown before any permanent delete in the admin panel.
+  var PERMANENT_DELETE_CONFIRM =
+    'Are you sure you want to permanently delete this item? This cannot be undone.';
+
   var state = {
     tab: 'home',
     filter: '',
@@ -671,13 +675,20 @@
       .catch(function (err) { toast(err.message || 'Failed to save discount code'); });
   }
 
+  // Permanent delete. Disable and Archive remain the reversible options; this
+  // one removes the code from the database. Orders that used it keep their
+  // recorded code text and discount amount.
   function deletePromo(id) {
-    if (!window.confirm('Delete this discount code? If it has been used, it will be archived instead.')) {
+    if (!window.confirm(PERMANENT_DELETE_CONFIRM)) {
       return Promise.resolve(false);
     }
     return api('/api/admin/promos/' + id, { method: 'DELETE' })
-      .then(function (result) {
-        toast(result && result.mode === 'archived' ? 'Code archived (already used)' : 'Discount code deleted');
+      .then(function () {
+        state.promos = (state.promos || []).filter(function (p) {
+          return Number(p.id) !== Number(id);
+        });
+        renderPromoTable();
+        toast('Discount code permanently deleted');
         return loadPromos();
       })
       .catch(function (err) { toast(err.message || 'Failed to delete discount code'); });
@@ -1101,10 +1112,22 @@
     }).catch(function (err) { toast(err.message || 'Failed to update product status'); });
   }
 
+  // Permanent delete. This is not the Disable button -- the product row is
+  // removed from the database, so it leaves the admin list and the storefront
+  // at the same time. Past orders keep their own line-item snapshot.
   function removeProduct(id) {
-    api('/api/admin/products/' + id, { method: 'DELETE' })
+    if (!window.confirm(PERMANENT_DELETE_CONFIRM)) {
+      return Promise.resolve(false);
+    }
+    return api('/api/admin/products/' + id, { method: 'DELETE' })
       .then(function () {
-        toast('Product disabled');
+        // Drop the row straight away so the table reflects the delete even if
+        // the follow-up refresh is slow or fails.
+        state.products = (state.products || []).filter(function (p) {
+          return Number(p.id) !== Number(id);
+        });
+        renderProductTable();
+        toast('Product permanently deleted');
         return loadProducts();
       })
       .catch(function (err) { toast(err.message || 'Failed to delete product'); });

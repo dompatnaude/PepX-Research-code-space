@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../db/connection");
 const { money, normalizePromoCode } = require("../services/promo-service");
+const { withTransaction } = require("../services/db-transaction");
 
 function parseOptionalNumber(value) {
   if (value == null || value === "") return null;
@@ -26,8 +27,8 @@ function normalizeDiscountType(value) {
   return String(value || "percentage").trim().toLowerCase();
 }
 
-async function getPromoRedemptionColumnAvailability() {
-  const result = await pool.query(
+async function getPromoRedemptionColumnAvailability(db) {
+  const result = await (db || pool).query(
     `SELECT column_name
        FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -43,8 +44,8 @@ async function getPromoRedemptionColumnAvailability() {
   };
 }
 
-async function getOrdersColumnAvailability() {
-  const result = await pool.query(
+async function getOrdersColumnAvailability(db) {
+  const result = await (db || pool).query(
     `SELECT column_name
        FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -127,7 +128,8 @@ function buildPromoPayload(input, isUpdate) {
   };
 }
 
-function createAdminPromosRouter(requireAuth) {
+function createAdminPromosRouter(requireAuth, deps) {
+  const db = (deps && deps.pool) || pool;
   const router = express.Router();
 
   async function requireAdmin(req, res, next) {
@@ -136,7 +138,7 @@ function createAdminPromosRouter(requireAuth) {
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const result = await pool.query("SELECT role FROM users WHERE id = $1", [userId]);
+      const result = await db.query("SELECT role FROM users WHERE id = $1", [userId]);
       const role = result.rows.length ? result.rows[0].role : null;
       if (role !== "admin") {
         return res.status(403).json({ error: "Admin access required" });
@@ -152,14 +154,14 @@ function createAdminPromosRouter(requireAuth) {
 
   router.get("/promos/summary", gate, async (req, res) => {
     try {
-      const summaryRes = await pool.query(
+      const summaryRes = await db.query(
         `SELECT
             COUNT(*) FILTER (WHERE active = true AND (expires_at IS NULL OR expires_at >= NOW()) AND archived_at IS NULL) AS active_codes,
             COALESCE(SUM(total_discount_given), 0) AS total_discounts_given,
             COALESCE(SUM(total_revenue_generated), 0) AS total_revenue_generated
            FROM promo_codes`
       );
-      const usageRes = await pool.query(
+      const usageRes = await db.query(
         `SELECT
             COUNT(*) FILTER (WHERE redeemed_at >= DATE_TRUNC('day', NOW()))::int AS used_today,
             COUNT(*) FILTER (WHERE redeemed_at >= DATE_TRUNC('week', NOW()))::int AS used_this_week,
@@ -204,7 +206,7 @@ function createAdminPromosRouter(requireAuth) {
       }
 
       const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT id,
                 code,
                 discount_type,
@@ -255,7 +257,7 @@ function createAdminPromosRouter(requireAuth) {
         return res.status(400).json({ error: "Invalid promo id." });
       }
 
-      const promoRes = await pool.query(
+      const promoRes = await db.query(
         `SELECT id, code, discount_type, discount_value, total_used, total_discount_given, total_revenue_generated, created_at, updated_at
            FROM promo_codes
           WHERE id = $1`,
@@ -265,8 +267,8 @@ function createAdminPromosRouter(requireAuth) {
         return res.status(404).json({ error: "Discount code not found." });
       }
 
-      const availability = await getPromoRedemptionColumnAvailability();
-      const orderAvailability = await getOrdersColumnAvailability();
+      const availability = await getPromoRedemptionColumnAvailability(db);
+      const orderAvailability = await getOrdersColumnAvailability(db);
       const discountAmountExpr = availability.hasDiscountAmount
         ? "COALESCE(pr.discount_amount, 0)"
         : (orderAvailability.hasDiscountAmount ? "COALESCE(o.discount_amount, 0)" : "0");
@@ -277,7 +279,7 @@ function createAdminPromosRouter(requireAuth) {
         ? "pr.subtotal_before_discount"
         : (orderAvailability.hasSubtotalBeforeDiscount ? "o.subtotal_before_discount" : "NULL");
 
-      const usesOverTimeRes = await pool.query(
+      const usesOverTimeRes = await db.query(
         `SELECT DATE_TRUNC('day', pr.redeemed_at) AS day,
                 COUNT(*)::int AS uses,
                 COALESCE(SUM(${discountAmountExpr}),0) AS discount_given,
@@ -291,7 +293,7 @@ function createAdminPromosRouter(requireAuth) {
         [id]
       );
 
-      const topProductsRes = await pool.query(
+      const topProductsRes = await db.query(
         `SELECT oi.product_id,
                 oi.name,
                 SUM(oi.quantity)::int AS units,
@@ -305,7 +307,7 @@ function createAdminPromosRouter(requireAuth) {
         [id]
       );
 
-      const recentRes = await pool.query(
+      const recentRes = await db.query(
         `SELECT pr.id,
                 pr.order_id,
                 o.order_number,
@@ -322,7 +324,7 @@ function createAdminPromosRouter(requireAuth) {
         [id]
       );
 
-      const avgOrderRes = await pool.query(
+      const avgOrderRes = await db.query(
         `SELECT COALESCE(AVG(${finalTotalExpr}),0) AS average_order_value
            FROM promo_code_redemptions pr
            LEFT JOIN orders o ON o.id = pr.order_id
@@ -353,7 +355,7 @@ function createAdminPromosRouter(requireAuth) {
         return res.status(400).json({ error: built.error });
       }
       const p = built.payload;
-      const result = await pool.query(
+      const result = await db.query(
         `INSERT INTO promo_codes (
             code,
             discount_type,
@@ -404,7 +406,7 @@ function createAdminPromosRouter(requireAuth) {
         return res.status(400).json({ error: "Invalid promo id." });
       }
 
-      const existingRes = await pool.query("SELECT * FROM promo_codes WHERE id = $1", [id]);
+      const existingRes = await db.query("SELECT * FROM promo_codes WHERE id = $1", [id]);
       if (!existingRes.rows.length) {
         return res.status(404).json({ error: "Discount code not found." });
       }
@@ -438,7 +440,7 @@ function createAdminPromosRouter(requireAuth) {
 
       const discountPercent = discountType === "percentage" ? discountValue : null;
 
-      const result = await pool.query(
+      const result = await db.query(
         `UPDATE promo_codes
             SET code = $1,
                 discount_type = $2,
@@ -484,6 +486,20 @@ function createAdminPromosRouter(requireAuth) {
     }
   });
 
+  // Permanently deletes a discount code.
+  //
+  // This is a real DELETE, not an archive and not `active = false`. The row
+  // leaves the database, so the code disappears from the admin Discount Codes
+  // list and immediately stops validating at checkout. Disable/Enable
+  // (PUT /promos/:id with { active }) and Archive (with { archived: true })
+  // remain as the reversible soft options.
+  //
+  // Historical orders are preserved. `orders` already stores promo_code,
+  // discount_amount and subtotal_before_discount as its own snapshot, and
+  // migration 031 changed both orders.promo_code_id and
+  // promo_code_redemptions.promo_code_id to ON DELETE SET NULL with a
+  // promo_code text snapshot on the redemption row -- so the redemption audit
+  // trail and every order total survive the delete intact.
   router.delete("/promos/:id", gate, async (req, res) => {
     try {
       const id = parseInt(req.params.id, 10);
@@ -491,37 +507,61 @@ function createAdminPromosRouter(requireAuth) {
         return res.status(400).json({ error: "Invalid promo id." });
       }
 
-      const refs = await pool.query(
-        `SELECT
-            EXISTS(SELECT 1 FROM promo_code_redemptions WHERE promo_code_id = $1) AS has_redemptions,
-            EXISTS(SELECT 1 FROM orders WHERE promo_code_id = $1) AS has_orders`,
-        [id]
-      );
-      const existsRes = await pool.query("SELECT id, code FROM promo_codes WHERE id = $1", [id]);
+      const existsRes = await db.query("SELECT id, code FROM promo_codes WHERE id = $1", [id]);
       if (!existsRes.rows.length) {
         return res.status(404).json({ error: "Discount code not found." });
       }
+      const promo = existsRes.rows[0];
 
-      const hasRedemptions = !!(refs.rows[0] && refs.rows[0].has_redemptions);
-      const hasOrders = !!(refs.rows[0] && refs.rows[0].has_orders);
-
-      if (hasRedemptions || hasOrders) {
-        const result = await pool.query(
-          `UPDATE promo_codes
-              SET active = false,
-                  archived_at = COALESCE(archived_at, CURRENT_TIMESTAMP),
-                  updated_by = $2,
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1
-            RETURNING id, code, active, archived_at`,
-          [id, req.adminUserId]
+      const result = await withTransaction(db, async (client) => {
+        // Freeze what history needs before the links are severed.
+        await client.query(
+          "UPDATE promo_code_redemptions SET promo_code = COALESCE(promo_code, $2) WHERE promo_code_id = $1",
+          [id, promo.code]
         );
-        return res.json({ deleted: true, mode: "archived", promo: result.rows[0] });
+        await client.query(
+          "UPDATE orders SET promo_code = COALESCE(NULLIF(BTRIM(promo_code), ''), $2) WHERE promo_code_id = $1",
+          [id, promo.code]
+        );
+
+        const redemptionRefs = await client.query(
+          "SELECT COUNT(*)::int AS count FROM promo_code_redemptions WHERE promo_code_id = $1",
+          [id]
+        );
+        const orderRefs = await client.query(
+          "SELECT COUNT(*)::int AS count FROM orders WHERE promo_code_id = $1",
+          [id]
+        );
+
+        const deleted = await client.query(
+          "DELETE FROM promo_codes WHERE id = $1 RETURNING id, code",
+          [id]
+        );
+
+        return {
+          deleted: deleted.rows[0],
+          redemptionsPreserved: Number((redemptionRefs.rows[0] && redemptionRefs.rows[0].count) || 0),
+          ordersPreserved: Number((orderRefs.rows[0] && orderRefs.rows[0].count) || 0)
+        };
+      });
+
+      if (!result.deleted) {
+        return res.status(404).json({ error: "Discount code not found." });
       }
 
-      const deleted = await pool.query("DELETE FROM promo_codes WHERE id = $1 RETURNING id, code", [id]);
-      return res.json({ deleted: true, mode: "hard_delete", promo: deleted.rows[0] });
+      return res.json({
+        deleted: true,
+        mode: "hard_delete",
+        promo: result.deleted,
+        redemptions_preserved: result.redemptionsPreserved,
+        orders_preserved: result.ordersPreserved
+      });
     } catch (error) {
+      if (error && error.code === "23503") {
+        return res.status(409).json({
+          error: "This discount code is still referenced by other records and could not be deleted. Disable it instead."
+        });
+      }
       console.error(error);
       res.status(500).json({ error: "Failed to delete discount code." });
     }

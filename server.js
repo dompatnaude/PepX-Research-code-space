@@ -985,7 +985,17 @@ app.use((err, req, res, next) => {
 });
 
 async function startServer() {
-  await runMigrations();
+  // Migrations run on boot against whatever DATABASE_URL points at. Set
+  // SKIP_DB_MIGRATIONS=true to start the server without touching the schema
+  // (for example to run this code against a database you are not ready to
+  // migrate). The local dev flow does not need it: scripts/dev-local.sh
+  // points DATABASE_URL at a throwaway local database, so its migrations
+  // apply there and nowhere else.
+  if (String(process.env.SKIP_DB_MIGRATIONS).toLowerCase() === 'true') {
+    console.log('SKIP_DB_MIGRATIONS=true - starting without running migrations.');
+  } else {
+    await runMigrations();
+  }
   await ensureBootstrapAdmin({
     pool,
     bcrypt,
