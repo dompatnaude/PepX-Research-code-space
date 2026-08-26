@@ -1615,6 +1615,22 @@ body.dark-mode .checkout-promo-applied span{color:#d3e5ff;}
 	}
 }
 
+/* Quantity Savings chart relocated inside the product purchase box */
+.product-detail-copy .product-detail-purchase .product-savings-chart{flex:1 1 100%;width:100%;max-width:100%;min-width:0;margin:20px 0 0;padding:18px 0 0;background:transparent;border:0;border-top:1px solid #edf0f6;border-radius:0;box-shadow:none;}
+.product-detail-copy .product-detail-purchase .product-savings-chart h2{font-size:19px;line-height:1.2;letter-spacing:-.2px;text-align:left;margin:0 0 6px;}
+.product-detail-copy .product-detail-purchase .product-savings-chart .sub{font-size:13px;line-height:1.5;margin:0 0 12px;max-width:none;}
+.product-detail-copy .product-detail-purchase .savings-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.product-detail-copy .product-detail-purchase .savings-table{width:100%;min-width:0;table-layout:fixed;}
+.product-detail-copy .product-detail-purchase .savings-table th,.product-detail-copy .product-detail-purchase .savings-table td{padding:9px 8px;font-size:13px;}
+.product-detail-copy .product-detail-purchase .savings-table th{font-size:11px;letter-spacing:.05em;}
+body.dark-mode .product-detail-copy .product-detail-purchase .product-savings-chart{background:transparent;border:0;border-top:1px solid #223154;box-shadow:none;}
+@media(max-width:560px){
+.product-detail-copy .product-detail-purchase .product-savings-chart{margin-top:16px;padding-top:14px;}
+.product-detail-copy .product-detail-purchase .product-savings-chart h2{font-size:17px;}
+.product-detail-copy .product-detail-purchase .savings-table th,.product-detail-copy .product-detail-purchase .savings-table td{padding:8px 6px;font-size:12px;}
+.product-detail-copy .product-detail-purchase .savings-table th{font-size:10px;letter-spacing:.04em;}
+}
+
 /* Consolidated checkout summary: shipping method, payment, agreements, place order */
 .page-checkout .checkout-side{position:static;top:auto;}
 .checkout-totals > .checkout-summary-shipping{display:block;}

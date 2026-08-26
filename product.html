@@ -67,6 +67,22 @@
             <button class="btn primary" id="productDetailAddBtn" type="button">Add to Cart</button>
             <button class="btn ghost" id="productDetailCheckoutBtn" type="button">Checkout</button>
           </div>
+          <section class="product-savings-chart" aria-label="Quantity savings chart">
+            <h2>Quantity Savings Chart</h2>
+            <p class="sub">Savings are shown through quantity 5, plus an automatic 20% bulk discount at 10+ quantity.</p>
+            <div class="savings-table-wrap">
+              <table class="savings-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Quantity</th>
+                    <th scope="col">Discounted Price</th>
+                    <th scope="col">% Saved</th>
+                  </tr>
+                </thead>
+                <tbody id="productSavingsRows"></tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </div>
     </section>
@@ -74,23 +90,6 @@
     <section class="product-detail-tabs-section" aria-label="Product disclaimer">
       <p class="product-disclaimer-caption">Please read the disclaimer below before purchasing.</p>
       <div class="product-detail-tab-panel" id="productTabPanel" aria-live="polite"></div>
-    </section>
-
-    <section class="product-savings-chart" aria-label="Quantity savings chart">
-      <h2>Quantity Savings Chart</h2>
-      <p class="sub">Savings are shown through quantity 5, plus an automatic 20% bulk discount at 10+ quantity.</p>
-      <div class="savings-table-wrap">
-        <table class="savings-table">
-          <thead>
-            <tr>
-              <th scope="col">Quantity</th>
-              <th scope="col">Discounted Price</th>
-              <th scope="col">% Saved</th>
-            </tr>
-          </thead>
-          <tbody id="productSavingsRows"></tbody>
-        </table>
-      </div>
     </section>
 
     <section class="product-rail-section">
