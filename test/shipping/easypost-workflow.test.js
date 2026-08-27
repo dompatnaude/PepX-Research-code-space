@@ -958,3 +958,20 @@ test('existing admin order functionality still works', async () => {
   assert.equal(db.state.orders[0].status, 'shipped');
   assert.ok(db.state.orders[0].shipped_at);
 });
+test('non-admin users cannot download the 4x6 print label', async () => {
+  const db = createMockPool({
+    users: [{ id: 'user-1', role: 'customer' }],
+    orders: [createBaseOrder()],
+    shipments: []
+  });
+  const router = createAdminRouter((req, res, next) => {
+    req.user = { id: 'user-1' };
+    next();
+  }, { pool: db, client: createMockEasyPostClient() });
+
+  const { res } = await invokeRoute(router, 'get', '/orders/:id/label-4x6.pdf', {
+    params: { id: '1' }
+  });
+
+  assert.equal(res.statusCode, 403);
+});

@@ -283,6 +283,14 @@ function formatAddressForComparison(address) {
   return sanitizeAddress(address);
 }
 
+// Label output requested from EasyPost at shipment-creation time.
+// USPS returns a native 4x6 portrait thermal label; because label_format is
+// PDF the printable file comes back on postage_label.label_pdf_url.
+const SHIPMENT_LABEL_OPTIONS = {
+  label_size: '4x6',
+  label_format: 'PDF'
+};
+
 function buildShipmentCreateParams({ toAddress, fromAddress, packageInfo }) {
   return {
     to_address: toAddress,
@@ -292,7 +300,8 @@ function buildShipmentCreateParams({ toAddress, fromAddress, packageInfo }) {
       length: packageInfo.length,
       width: packageInfo.width,
       height: packageInfo.height
-    }
+    },
+    options: Object.assign({}, SHIPMENT_LABEL_OPTIONS)
   };
 }
 
@@ -336,6 +345,7 @@ module.exports = {
   validatePackageInput,
   formatAddressForComparison,
   buildShipmentCreateParams,
+  SHIPMENT_LABEL_OPTIONS,
   missingConfigError,
   classifyUspsService,
   getCheckoutPackage

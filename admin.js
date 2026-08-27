@@ -1236,7 +1236,7 @@
     var selectedRate = rates.find(function (rate) { return rate.rateId === state.shipping.selectedRateId; }) || null;
     var shipmentHistoryRows = shipments.map(function (shipment) {
       var rateText = [shipment.carrier, shipment.service].filter(Boolean).join(' ');
-      var labelLink = shipment.labelUrl ? '<a href="' + esc(shipment.labelUrl) + '" target="_blank" rel="noopener">open</a>' : '<span class="muted">none</span>';
+      var labelLink = shipment.labelUrl ? '<a href="' + esc(shipment.labelUrl) + '" target="_blank" rel="noopener">original</a>' : '<span class="muted">none</span>';
       return '<tr>'
         + '<td>' + esc(fmtDate(shipment.createdAt || shipment.purchasedAt || shipment.updatedAt)) + '</td>'
         + '<td>' + shipmentStatusBadge(shipment.shipmentStatus) + '</td>'
@@ -1266,7 +1266,9 @@
         + '<div class="shipping-summary-row"><span class="label">Service</span><span>' + esc(displayShipment.service || '\u2014') + '</span></div>'
         + '<div class="shipping-summary-row"><span class="label">Cost</span><span>' + money(displayShipment.labelCost || 0) + '</span></div>'
         + '<div class="shipping-summary-row"><span class="label">Tracking</span><span>' + esc(displayShipment.trackingNumber || '\u2014') + '</span></div>'
-        + '<div class="shipping-summary-row"><span class="label">Label</span><span>' + (displayShipment.labelUrl ? '<a href="' + esc(displayShipment.labelUrl) + '" target="_blank" rel="noopener">open label</a>' : '<span class="muted">none</span>') + '</span></div>'
+        + '<div class="shipping-summary-row"><span class="label">Label</span><span>' + (displayShipment.labelUrl ? '<a href="/api/admin/orders/' + encodeURIComponent(order.id) + '/label-4x6.pdf" target="_blank" rel="noopener">View Label</a>'
+            + ' &middot; <a href="/api/admin/orders/' + encodeURIComponent(order.id) + '/label-4x6.pdf?download=1">Download 4&times;6 Label</a>'
+            + ' &middot; <a class="muted" href="' + esc(displayShipment.labelUrl) + '" target="_blank" rel="noopener">Original EasyPost Label</a>' : '<span class="muted">none</span>') + '</span></div>'
         + '<div class="shipping-summary-row"><span class="label">Tracking link</span><span>' + (displayShipment.trackingUrl ? '<a href="' + esc(displayShipment.trackingUrl) + '" target="_blank" rel="noopener">open tracking</a>' : '<span class="muted">none</span>') + '</span></div>'
         + '</div>'
       : '<div class="muted">No purchased shipment yet.</div>';
@@ -1323,7 +1325,9 @@
       + (order.shipping_service ? '<div class="kv"><span>Customer\'s chosen service</span><strong>' + esc(order.shipping_service) + '</strong></div>' : '')
       + '<div>Carrier: ' + esc((displayShipment && displayShipment.carrier) || order.carrier || '\u2014') + '</div>'
       + '<div>Tracking #: ' + esc((displayShipment && displayShipment.trackingNumber) || '\u2014') + '</div>'
-      + '<div>Label: ' + ((displayShipment && displayShipment.labelUrl) ? '<a href="' + esc(displayShipment.labelUrl) + '" target="_blank" rel="noopener">view label</a>' : '<span class="muted">none</span>') + '</div>'
+      + '<div>Label: ' + ((displayShipment && displayShipment.labelUrl) ? '<a href="/api/admin/orders/' + encodeURIComponent(order.id) + '/label-4x6.pdf" target="_blank" rel="noopener">View Label</a>'
+          + ' &middot; <a href="/api/admin/orders/' + encodeURIComponent(order.id) + '/label-4x6.pdf?download=1">Download 4&times;6 Label</a>'
+          + ' &middot; <a class="muted" href="' + esc(displayShipment.labelUrl) + '" target="_blank" rel="noopener">Original EasyPost Label</a>' : '<span class="muted">none</span>') + '</div>'
       + '<div class="chip-row"><span class="chip">' + esc(d.customer_status && d.customer_status.label || 'In progress') + '</span><span class="chip">' + esc(d.fulfillment_status || 'unfulfilled') + '</span><span class="chip">' + esc(d.payment_status || 'awaiting_payment') + '</span></div>'
       + '</div>'
       + '</div>'

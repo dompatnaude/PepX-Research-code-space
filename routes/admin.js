@@ -14,6 +14,7 @@ const {
   sendShippingConfirmationForOrder
 } = require('../services/transactional-email');
 const { PAID_ORDER_SQL } = require('../services/admin-customers');
+const { buildFourBySixLabelForOrder } = require('../services/label-print');
 
 // Allowed order statuses (kept in one place, reused by validation).
 const ORDER_STATUSES = [
@@ -530,6 +531,58 @@ function createAdminRouter(requireAuth, deps) {
       }
       console.error(error);
       res.status(500).json({ error: 'Failed to load shipments' });
+    }
+  });
+
+  // Filenames prefer the human order number (PX100012) over the database id.
+  async function printLabelFileName(orderId) {
+    let stem = 'order-' + orderId;
+    try {
+      const result = await db.query(
+        'SELECT order_number FROM orders WHERE id = $1',
+        [orderId]
+      );
+      const orderNumber = result && result.rows && result.rows[0]
+        ? result.rows[0].order_number
+        : null;
+      if (orderNumber) stem = String(orderNumber);
+    } catch (error) {
+      // Fall back to the id if the order number cannot be read.
+    }
+    return stem.replace(/[^A-Za-z0-9._-]/g, '') + '-shipping-label-4x6.pdf';
+  }
+
+  // Print-ready 4x6 copy of the label EasyPost already issued for this order.
+  // Read-only: it never purchases, regenerates, converts or voids a label.
+  // Served inline so it can be viewed in a tab; ?download=1 forces a download.
+  router.get('/orders/:id/label-4x6.pdf', gate, async (req, res) => {
+    try {
+      const orderId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(orderId)) {
+        return res.status(400).json({ error: 'Invalid order id' });
+      }
+      const printable = await buildFourBySixLabelForOrder(db, orderId);
+      const body = Buffer.from(printable.bytes);
+      const wantsDownload = String(req.query && req.query.download) === '1';
+      const fileName = await printLabelFileName(orderId);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', String(body.length));
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader(
+        'Content-Disposition',
+        (wantsDownload ? 'attachment' : 'inline') + '; filename="' + fileName + '"'
+      );
+      return res.send(body);
+    } catch (error) {
+      if (error instanceof ShippingWorkflowError) {
+        return res.status(error.status || 500).json({ error: error.message });
+      }
+      if (error && error.status) {
+        return res.status(error.status).json({ error: error.message });
+      }
+      console.error(error);
+      return res.status(500).json({ error: 'Failed to build the 4x6 label' });
     }
   });
 
