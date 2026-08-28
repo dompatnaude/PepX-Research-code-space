@@ -88,6 +88,25 @@ function createCheckoutCardRouter({ pool, requireAuth }) {
       await pool.query('UPDATE orders SET maef_session_token = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
         [order.id, token]);
 
+      // Square requires an ISO-3166 alpha-2 country and validates billingContact during
+      // verifyBuyer. A full country name ("United States") or a ZIP+4 is rejected there, and
+      // the SDK surfaces that as a card-entry error rather than an address error — so it reads
+      // to the buyer as "enter a valid card number" with nothing wrong with their card.
+      const ISO2 = {
+        'united states': 'US', 'united states of america': 'US', 'usa': 'US', 'us': 'US',
+        'canada': 'CA', 'ca': 'CA', 'united kingdom': 'GB', 'uk': 'GB', 'gb': 'GB',
+      };
+      const toIso2 = (v) => {
+        const raw = String(v || '').trim();
+        if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
+        return ISO2[raw.toLowerCase()] || 'US';
+      };
+      const toPostal = (v) => {
+        const raw = String(v || '').trim();
+        const m = raw.match(/^(\d{5})(?:-\d{4})?$/);   // ZIP+4 -> 5, which is what AVS checks
+        return m ? m[1] : raw;
+      };
+
       const nameParts = String(order.shipping_name || '').trim().split(/\s+/);
       return res.json({
         session_token: token,
@@ -101,8 +120,8 @@ function createCheckoutCardRouter({ pool, requireAuth }) {
           address_1: order.shipping_address || '',
           city: order.shipping_city || '',
           state: order.shipping_state || '',
-          postcode: order.shipping_zip || '',
-          country: order.shipping_country || 'US',
+          postcode: toPostal(order.shipping_zip),
+          country: toIso2(order.shipping_country),
         },
       });
     } catch (err) {
