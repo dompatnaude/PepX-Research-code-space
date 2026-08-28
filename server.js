@@ -13,6 +13,7 @@ const createAdminCustomersRouter = require('./routes/admin-customers');
 const { isAccountDisabled } = require('./services/admin-customers');
 const createAdminCoasRouter = require('./routes/admin-coas');
 const createCheckoutShippingRouter = require('./routes/checkout-shipping');
+const { createCheckoutCardRouter } = require('./routes/checkout-card');
 const { transferGuestCart } = require("./routes/cart");
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
@@ -880,6 +881,7 @@ app.post('/api/account/orders', function (req, res, next) {
 app.use("/api/products", requireApiAuth, productsRouter);
 app.use("/api/cart", requireApiAuth, createCartRouter(requireAuth));
 app.use('/api/checkout/shipping', requireApiAuth, createCheckoutShippingRouter(requireAuth));
+app.use('/api/checkout/card', requireApiAuth, createCheckoutCardRouter({ pool, requireAuth }));
 app.use("/api/orders", requireApiAuth, createOrdersRouter(requireAuth));
 app.use('/api/admin/products', createAdminProductsRouter(requireAuth));
 app.use('/api/admin', createAdminVariantsRouter(requireAuth));

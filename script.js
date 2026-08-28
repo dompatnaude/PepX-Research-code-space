@@ -3041,15 +3041,46 @@ function initCheckoutPage(){
     var zellePanel = document.getElementById('zelleInstructions');
     if(!zellePanel || !paymentRadios.length) return;
 
+    var cardPanel = document.getElementById('cardPanel');
+
     function updateZellePanel(){
       var selected = document.querySelector('input[name="payment_method"]:checked');
       var isZelle = selected && selected.value === 'zelle';
+      var isCard  = selected && selected.value === 'card';
       zellePanel.style.display = isZelle ? '' : 'none';
+      if (cardPanel) cardPanel.style.display = isCard ? '' : 'none';
+      // Mount the secure card frame as soon as the rail is chosen, so the buyer
+      // types their card once and the store keeps a single Place Order button.
+      if (isCard && window.PXCard) {
+        window.PXCard.mount().catch(function(){
+          window.PXCard.say('Card payments are temporarily unavailable. Please choose another method.', true);
+        });
+      }
     }
 
     Array.prototype.forEach.call(paymentRadios, function(radio){
       radio.addEventListener('change', updateZellePanel);
     });
+    updateZellePanel();
+
+    // The card rail advertises itself only when the payment host can actually
+    // charge. Failing closed here means a buyer never meets a dead rail: if
+    // this call fails for any reason, Zelle remains the selected method.
+    (function detectCardRail(){
+      var cardRadio = document.querySelector('input[name="payment_method"][data-card-rail]');
+      if (!cardRadio) return;
+      fetch('/api/checkout/card/availability', { credentials: 'same-origin' })
+        .then(function(r){ return r.ok ? r.json() : { available: false }; })
+        .then(function(j){
+          if (!j || !j.available) return;
+          cardRadio.disabled = false;
+          var opt = document.getElementById('cardOption');
+          if (opt) opt.classList.remove('checkout-payment-option--disabled');
+          cardRadio.checked = true;
+          updateZellePanel();
+        })
+        .catch(function(){ /* stay on Zelle */ });
+    })();
 
     zellePanel.addEventListener('click', function(e){
       var btn = e.target.closest('[data-copy]');
@@ -3442,6 +3473,22 @@ function initCheckoutPage(){
       method: 'POST',
       body: JSON.stringify(shipping)
     }).then(function(order){
+      // A card order is placed but NOT finished: the goods are not paid for
+      // until the payment host confirms the capture. Charge first, redirect after.
+      if (order.payment_method === 'card' && window.PXCard) {
+        checkoutBtnEl.textContent = 'Authorising...';
+        return window.PXCard.charge(order.order_id).then(function(){
+          return order;
+        }).catch(function(cardErr){
+          var e = new Error('CARD_STAGE');
+          e.cardStage = true;
+          e.order = order;
+          e.cause = cardErr;
+          throw e;
+        });
+      }
+      return order;
+    }).then(function(order){
       cart = {};
       cartData = { items: [], total: 0 };
       renderCart();
@@ -3454,6 +3501,14 @@ function initCheckoutPage(){
         + (order.shipping_service ? '&shipping_service=' + encodeURIComponent(order.shipping_service) : '');
       window.location.href = 'order-confirmation.html?' + qs;
     }).catch(function(err){
+      if(err && err.cardStage){
+        // The order was created; only the card step failed. The buyer can retry
+        // the card without re-running checkout against an emptied cart.
+        setCheckoutMessage('Your order was created but the card was not charged. Please check the card details above and try again.', true);
+        announceCartLive('Card payment was not completed.');
+        if (window.PXCard) window.PXCard.reset();
+        return;
+      }
       if(err && err.status === 401){
         showToast('Please sign in to place your order.');
         announceCartLive('Please sign in to place your order.');

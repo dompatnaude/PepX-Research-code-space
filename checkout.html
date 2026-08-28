@@ -166,11 +166,11 @@
             <div class="checkout-summary-payment">
               <h3 class="checkout-summary-subhead">Payment</h3>
               <div class="checkout-payments" id="paymentMethods">
-                <label class="checkout-payment-option checkout-payment-option--disabled">
-                  <input type="radio" name="payment_method" value="card" disabled>
+                <label class="checkout-payment-option checkout-payment-option--disabled" id="cardOption">
+                  <input type="radio" name="payment_method" value="card" disabled data-card-rail>
                   <span>
-                    <strong>Credit / Debit Card <span class="checkout-coming-soon">Coming Soon</span></strong>
-                    <small>Card payments are not yet available.</small>
+                    <strong>Credit or Debit Card</strong>
+                    <small>Visa, Mastercard, American Express and Discover accepted.</small>
                   </span>
                 </label>
                 <label class="checkout-payment-option">
@@ -180,6 +180,15 @@
                     <small>Send payment after placing your order using the instructions provided.</small>
                   </span>
                 </label>
+              </div>
+              <div id="cardPanel" class="card-panel" aria-live="polite">
+                <div id="cardFrameWrap" class="card-frame-wrap">
+                  <div id="cardFrameBoot" class="card-frame-boot">Loading secure card form&hellip;</div>
+                  <iframe id="cardFrame" title="Card details" referrerpolicy="no-referrer" allow="payment"
+                          style="display:none;width:100%;border:0;height:0;"></iframe>
+                </div>
+                <p id="cardMsg" class="card-msg" role="status"></p>
+                <p class="card-note">Your card details are entered directly into the payment provider's secure form. They are never sent to or stored on this site.</p>
               </div>
               <div id="zelleInstructions" class="zelle-instructions" aria-live="polite">
                 <h4 class="zelle-instructions-title">Pay with Zelle</h4>
@@ -266,6 +275,14 @@
   </div></footer>
 
   <div class="toast" id="toast"></div>
+  <script src="card-rail.js"></script>
   <script src="script.js"></script>
+<div id="threeDsOverlay" class="threeds-overlay" hidden>
+  <div class="threeds-backdrop"></div>
+  <div class="threeds-panel">
+    <p class="threeds-title">Your bank needs to verify this payment</p>
+    <p class="threeds-sub">Please complete the step shown below, then this page will continue automatically.</p>
+  </div>
+</div>
 </body>
 </html>
