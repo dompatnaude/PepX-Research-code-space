@@ -17,25 +17,38 @@
     <nav class="links"><a href="shop.html">Shop</a><a href="account.html">Account</a></nav>
   </div></header>
 
-  <main class="container page-checkout">
-    <section class="section">
-      <h1>Order Confirmed</h1>
-      <p class="sub" id="confirmMsg">Thank you. Your order has been placed.</p>
+  <main class="page-order-confirm">
+    <section class="oc-wrap">
+      <div class="oc-head">
+        <div class="oc-check" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 7"></polyline></svg></div>
+        <h1 class="oc-title">Order Confirmed</h1>
+        <p class="oc-sub" id="confirmMsg">Thank you for your order.<br>We&rsquo;ll notify you when it ships.</p>
+      </div>
 
-      <div class="cart-table" id="orderSummary"><p class="sub">Loading your order&hellip;</p></div>
+      <div class="oc-card oc-summary">
+        <div class="oc-items" id="orderSummary"><p class="oc-note">Loading your order&hellip;</p></div>
+        <div class="oc-totals">
+          <div class="oc-row"><span>Subtotal</span><span id="confSubtotal">$0.00</span></div>
+          <div class="oc-row" id="confDiscountRow" style="display:none;"><span>Discount</span><span id="confDiscount">-$0.00</span></div>
+          <div class="oc-row"><span>Shipping</span><span id="confShipping">$0.00</span></div>
+          <div class="oc-row oc-row-total"><span>Total</span><span id="confTotal">$0.00</span></div>
+        </div>
+      </div>
 
-      <div class="drawer-foot">
-        <div class="tot"><span>Order Number</span><span id="confOrderNumber">&mdash;</span></div>
-        <div class="tot"><span>Status</span><span id="confStatus">&mdash;</span></div>
-        <div id="confShippingServiceRow" style="display:none;" class="tot"><span>Shipping Method</span><span id="confShippingService">&mdash;</span></div>
-        <div class="tot"><span>Subtotal</span><span id="confSubtotal">$0.00</span></div>
-        <div id="confDiscountRow" style="display:none;"><span>Discount</span><span id="confDiscount">-$0.00</span></div>
-        <div class="tot"><span>Shipping</span><span id="confShipping">$0.00</span></div>
-        <div class="tot"><span>Total</span><span id="confTotal">$0.00</span></div>
-        <a class="btn primary co" href="shop.html">Continue Shopping</a>
+      <div class="oc-card oc-info" id="confShippingServiceRow" style="display:none;">
+        <span class="oc-info-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="14" height="11" rx="1.5"></rect><path d="M15 10h3.6l2.4 3v4h-6z"></path><circle cx="6" cy="18.5" r="1.8"></circle><circle cx="17.5" cy="18.5" r="1.8"></circle></svg></span>
+        <span class="oc-info-text"><span class="oc-info-label">Shipping Method</span><span class="oc-info-value" id="confShippingService">&mdash;</span></span>
+      </div>
+
+      <div class="oc-card oc-info">
+        <span class="oc-info-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><polyline points="14 3 14 8 19 8"></polyline><line x1="8.5" y1="13" x2="15.5" y2="13"></line><line x1="8.5" y1="16.5" x2="13" y2="16.5"></line></svg></span>
+        <span class="oc-info-text"><span class="oc-info-label">Order Number</span><span class="oc-info-value" id="confOrderNumber">&mdash;</span></span>
       </div>
 
       <div id="zelleConfirmPanel" class="zelle-conf-panel" style="display:none;"></div>
+
+      <a class="btn primary oc-cta" href="shop.html">Continue Shopping</a>
+      <a class="oc-link" href="account.html#orders">View My Orders <span aria-hidden="true">&rsaquo;</span></a>
     </section>
   </main>
 
@@ -129,7 +142,7 @@
         confMsg.textContent = 'Your order has been received. Please complete your Zelle payment below.';
       }
       if(!orderId){
-        summaryEl.innerHTML = '<p class="cart-empty">No order reference provided.</p>';
+        summaryEl.innerHTML = '<p class="oc-note">No order reference provided.</p>';
         return;
       }
       api('/api/orders/' + encodeURIComponent(orderId)).then(function(data){
@@ -138,7 +151,6 @@
         var totals = data.totals || {};
         var isZelle = (order.payment_method === 'zelle') || (paymentMethodQS === 'zelle');
         document.getElementById('confOrderNumber').textContent = order.order_number || orderNumberQS || '\u2014';
-        document.getElementById('confStatus').textContent = isZelle ? 'Awaiting Zelle Payment' : (data.status || order.status || '\u2014');
         var svcName = order.shipping_service || shippingServiceQS || null;
         if(svcName){
           var ssRow2 = document.getElementById('confShippingServiceRow');
@@ -163,13 +175,21 @@
         document.getElementById('confShipping').innerHTML = Number(totals.shipping_cost) === 0 ? '<span class="shipping-free-badge">FREE</span>' : money(totals.shipping_cost);
         document.getElementById('confTotal').textContent = money(totals.total);
         if(!items.length){
-          summaryEl.innerHTML = '<p class="cart-empty">No items found for this order.</p>';
+          summaryEl.innerHTML = '<p class="oc-note">No items found for this order.</p>';
         } else {
+          var fallbackImg = (typeof DEFAULT_PRODUCT_IMAGE_URL === 'string' && DEFAULT_PRODUCT_IMAGE_URL) || 'assets/products/default-product.png';
           summaryEl.innerHTML = items.map(function(it){
-            return '<div class="cart-item"><div class="thumb"></div><div class="info">'
-              + '<div class="nm">' + esc(it.name) + '</div>'
-              + '<div class="pr">' + money(it.price) + ' &times; ' + (Number(it.quantity)||0) + '</div>'
-              + '</div><div class="qty"><span>' + money(Number(it.price) * (Number(it.quantity)||0)) + '</span></div></div>';
+            var qty = Number(it.quantity) || 0;
+            var lineTotal = Number(it.price) * qty;
+            var nm = esc(it.name || 'Product');
+            if(it.variant_name){ nm += ' <span class="oc-item-variant">(' + esc(it.variant_name) + ')</span>'; }
+            var img = esc(it.image_url || fallbackImg);
+            return '<div class="oc-item">'
+              + '<img class="oc-thumb" src="' + img + '" alt="" loading="lazy" onerror="this.onerror=null;this.src=\'' + esc(fallbackImg) + '\';">'
+              + '<div class="oc-item-info"><div class="oc-item-name">' + nm + '</div>'
+              + '<div class="oc-item-qty">Qty: ' + qty + '</div></div>'
+              + '<div class="oc-item-price">' + money(lineTotal) + '</div>'
+            + '</div>';
           }).join('');
         }
         if(isZelle){
@@ -177,11 +197,11 @@
         }
       }).catch(function(err){
         if(err && err.status === 401){
-          summaryEl.innerHTML = '<p class="cart-empty">Please sign in to view this order.</p>';
+          summaryEl.innerHTML = '<p class="oc-note">Please sign in to view this order.</p>';
           if(typeof openAuthModal === 'function'){ openAuthModal('login'); }
           return;
         }
-        summaryEl.innerHTML = '<p class="cart-empty">' + esc((err && err.message) || 'Could not load order.') + '</p>';
+        summaryEl.innerHTML = '<p class="oc-note">' + esc((err && err.message) || 'Could not load order.') + '</p>';
       });
     });
   })();</script>

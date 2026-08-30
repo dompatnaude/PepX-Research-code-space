@@ -2299,7 +2299,10 @@ function initAccountPage(){
   var welcome = document.getElementById('accountWelcome');
 
   var state = {
-    activeTab: 'overview',
+      activeTab: (function(){
+        var h = String(window.location.hash || '').replace('#', '');
+        return (/^[a-z-]+$/.test(h) && page.querySelector('[data-account-panel="' + h + '"]')) ? h : 'overview';
+      })(),
     profile: null,
     orders: [],
     addressBook: { addresses: [], defaultId: null, phone: '' }

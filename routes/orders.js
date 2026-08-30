@@ -224,10 +224,12 @@ function createOrdersRouter(requireAuth) {
       }
       const order = orderRes.rows[0];
       const itemsRes = await pool.query(
-        `SELECT id, product_id, variant_id, name, variant_name, variant_price, price, quantity
-           FROM order_items
-          WHERE order_id = $1
-          ORDER BY id ASC`,
+        `SELECT oi.id, oi.product_id, oi.variant_id, oi.name, oi.variant_name, oi.variant_price, oi.price, oi.quantity,
+                oi_p.image_url AS image_url
+           FROM order_items oi
+           LEFT JOIN products oi_p ON oi_p.id = oi.product_id
+          WHERE oi.order_id = $1
+          ORDER BY oi.id ASC`,
         [order.id]
       );
       const zelleMethod = order.payment_method === 'zelle';
