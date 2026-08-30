@@ -12,6 +12,8 @@ const maef = require('../services/maef-card');
 const { markOrderPaidByCard } = require('../services/mark-order-paid');
 
 const money = (n) => Math.round(Number(n) * 100) / 100;
+/** This store's own address — needed only by a rail that leaves the site and comes back. */
+const siteBase = () => String(process.env.SITE_URL || 'https://pepxresearch.com').trim().replace(/\/+$/, '');
 
 function createCheckoutCardRouter({ pool, requireAuth }) {
   const router = express.Router();
@@ -40,11 +42,41 @@ function createCheckoutCardRouter({ pool, requireAuth }) {
     return order;
   }
 
+  // Mint a payment session and remember it on the order. The card frame and the
+  // wallet redirect charge the SAME session through the same host, so there is
+  // one way to mint it and both rails use it.
+  async function mintForOrder(order) {
+    const itemsRes = await pool.query(
+      'SELECT product_id, variant_id, price AS unit_price, quantity FROM order_items WHERE order_id = $1 ORDER BY id',
+      [order.id]
+    );
+
+    let ref = order.maef_ref;
+    if (!ref) {
+      ref = maef.neutralRef();
+      await pool.query('UPDATE orders SET maef_ref = $2 WHERE id = $1', [order.id, ref]);
+    }
+
+    const { token } = await maef.mintSession({
+      orderId: order.id,
+      ref,
+      total: money(order.total),
+      shipping: money(order.shipping_cost || 0),
+      items: itemsRes.rows,
+    });
+
+    await pool.query('UPDATE orders SET maef_session_token = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [order.id, token]);
+
+    return { token, ref };
+  }
+
   // ── availability: the operator master switch. The card option stays hidden
   // until this says yes, so the store never shows a rail that cannot charge.
   router.get('/availability', requireAuth, (req, res) => {
     const c = maef.config();
-    return res.json({ available: Boolean(c.enabled && c.base && c.secret) });
+    const available = Boolean(c.enabled && c.base && c.secret);
+    return res.json({ available, wallet: available && Boolean(c.wallet) });
   });
 
   // ── prepare: hand the browser the frame address + a ticket so the buyer can
@@ -66,27 +98,7 @@ function createCheckoutCardRouter({ pool, requireAuth }) {
       if (order.payment_method !== 'card') return res.status(400).json({ error: 'not_a_card_order' });
       if (order.payment_status === 'paid') return res.status(409).json({ error: 'already_paid' });
 
-      const itemsRes = await pool.query(
-        'SELECT product_id, variant_id, price AS unit_price, quantity FROM order_items WHERE order_id = $1 ORDER BY id',
-        [order.id]
-      );
-
-      let ref = order.maef_ref;
-      if (!ref) {
-        ref = maef.neutralRef();
-        await pool.query('UPDATE orders SET maef_ref = $2 WHERE id = $1', [order.id, ref]);
-      }
-
-      const { token } = await maef.mintSession({
-        orderId: order.id,
-        ref,
-        total: money(order.total),
-        shipping: money(order.shipping_cost || 0),
-        items: itemsRes.rows,
-      });
-
-      await pool.query('UPDATE orders SET maef_session_token = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-        [order.id, token]);
+      const { token } = await mintForOrder(order);
 
       // Square requires an ISO-3166 alpha-2 country and validates billingContact during
       // verifyBuyer. A full country name ("United States") or a ZIP+4 is rejected there, and
@@ -127,6 +139,40 @@ function createCheckoutCardRouter({ pool, requireAuth }) {
     } catch (err) {
       console.error('[card] session mint failed:', err && err.message, err && err.upstreamStatus);
       return res.status(502).json({ error: 'session_unavailable' });
+    }
+  });
+
+  // ── wallet: where to send the buyer so they can pay with a wallet ────────
+  // Apple Pay binds its merchant session to the TOP-LEVEL document, and Google
+  // Pay reports the top-level origin to Google. Inside the payment frame the top
+  // level is this store, so either wallet would carry this address upstream —
+  // the fix would be the leak. Instead the buyer goes to the host, pays there,
+  // and comes back to be settled by the same signed answer the card waits for.
+  router.post('/wallet-start', requireAuth, async (req, res) => {
+    try {
+      if (!maef.walletAvailable()) return res.status(503).json({ error: 'wallet_unavailable' });
+      const order = await loadOwnedOrder(req, res);
+      if (!order) return undefined;
+      if (order.payment_method !== 'card') return res.status(400).json({ error: 'not_a_card_order' });
+      if (order.payment_status === 'paid') return res.status(409).json({ error: 'already_paid' });
+
+      const { token, ref } = await mintForOrder(order);
+
+      // The return address rides the URL FRAGMENT, which a browser never sends to
+      // a server and never puts in a Referer.
+      const back = siteBase() + '/order-confirmation.html'
+        + '?order_id=' + encodeURIComponent(order.id)
+        + '&order_number=' + encodeURIComponent(order.order_number || '')
+        + '&payment_method=card&w=1';
+      const fragment = 't=' + encodeURIComponent(token)
+        + '&a=' + Math.round(money(order.total) * 100)
+        + '&r=' + encodeURIComponent(back)
+        + '&ref=' + encodeURIComponent(ref || '');
+
+      return res.json({ redirect: maef.walletUrl() + '#' + fragment });
+    } catch (err) {
+      console.error('[wallet] start failed:', err && err.message, err && err.upstreamStatus);
+      return res.status(502).json({ error: 'wallet_unavailable' });
     }
   });
 

@@ -145,7 +145,23 @@
         summaryEl.innerHTML = '<p class="oc-note">No order reference provided.</p>';
         return;
       }
-      api('/api/orders/' + encodeURIComponent(orderId)).then(function(data){
+      // A buyer returning from the wallet page has paid on the payment host, and
+      // this browser is not allowed to say so. This asks our own server to go and
+      // check with the host first — the same signed answer the card rail waits on —
+      // so the order is already settled by the time it is rendered.
+      function settleIfReturningFromWallet(){
+        if(getParam('w') !== '1') return Promise.resolve();
+        return fetch('/api/checkout/card/confirm', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: orderId })
+        }).then(function(){}).catch(function(){});
+      }
+
+      settleIfReturningFromWallet().then(function(){
+        return api('/api/orders/' + encodeURIComponent(orderId));
+      }).then(function(data){
         var order = data.order || {};
         var items = data.items || [];
         var totals = data.totals || {};

@@ -13,6 +13,7 @@ function config() {
     base: String(process.env.MAEF_PARENT_URL || '').replace(/\/+$/, ''),
     secret: String(process.env.MAEF_SECRET || ''),
     enabled: String(process.env.MAEF_CARD_ENABLED || '') === '1',
+    wallet: String(process.env.MAEF_WALLET_ENABLED || '') === '1',
   };
 }
 function configured() {
@@ -26,6 +27,19 @@ function configured() {
  */
 function available() {
   return configured() && config().enabled;
+}
+/**
+ * Wallets ride the same session and the same charge engine as the card, so they
+ * can only be live where the card already is. They keep a switch of their own
+ * because a wallet button will not draw until the payment host's domain is
+ * registered with Apple and Google, which is not this store's to arrange.
+ */
+function walletAvailable() {
+  return available() && config().wallet;
+}
+/** Wallets run top-level on the payment host, never inside a frame. */
+function walletUrl() {
+  return config().base + '/secure-wallet/';
 }
 function sign(body, secret) {
   return crypto.createHmac('sha256', secret).update(body, 'utf8').digest('hex');
@@ -115,4 +129,7 @@ async function sessionStatus(token) {
   };
 }
 
-module.exports = { config, configured, available, frameTicket, neutralRef, buildCart, mintSession, sessionStatus };
+module.exports = {
+  config, configured, available, walletAvailable, walletUrl,
+  frameTicket, neutralRef, buildCart, mintSession, sessionStatus,
+};

@@ -173,6 +173,13 @@
                     <small>Visa, Mastercard, American Express and Discover accepted.</small>
                   </span>
                 </label>
+                <label class="checkout-payment-option checkout-payment-option--disabled" id="walletOption">
+                  <input type="radio" name="payment_method" value="wallet" disabled data-wallet-rail>
+                  <span>
+                    <strong>Apple Pay, Google Pay or Cash App Pay</strong>
+                    <small>Express checkout &mdash; pay with the card already in your wallet. Nothing to type.</small>
+                  </span>
+                </label>
                 <label class="checkout-payment-option">
                   <input type="radio" name="payment_method" value="zelle" checked>
                   <span>
@@ -189,6 +196,9 @@
                 </div>
                 <p id="cardMsg" class="card-msg" role="status"></p>
                 <p class="card-note">Your card details are entered directly into the payment provider's secure form. They are never sent to or stored on this site.</p>
+              </div>
+              <div id="walletPanel" class="card-panel" aria-live="polite" style="display:none;">
+                <p class="card-note">When you place your order you will be taken to our payment provider's secure page to approve the payment with your wallet, then brought straight back here.</p>
               </div>
               <div id="zelleInstructions" class="zelle-instructions" aria-live="polite">
                 <h4 class="zelle-instructions-title">Pay with Zelle</h4>

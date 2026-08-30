@@ -3045,13 +3045,16 @@ function initCheckoutPage(){
     if(!zellePanel || !paymentRadios.length) return;
 
     var cardPanel = document.getElementById('cardPanel');
+    var walletPanel = document.getElementById('walletPanel');
 
     function updateZellePanel(){
       var selected = document.querySelector('input[name="payment_method"]:checked');
       var isZelle = selected && selected.value === 'zelle';
       var isCard  = selected && selected.value === 'card';
+      var isWallet = selected && selected.value === 'wallet';
       zellePanel.style.display = isZelle ? '' : 'none';
       if (cardPanel) cardPanel.style.display = isCard ? '' : 'none';
+      if (walletPanel) walletPanel.style.display = isWallet ? '' : 'none';
       // Mount the secure card frame as soon as the rail is chosen, so the buyer
       // types their card once and the store keeps a single Place Order button.
       if (isCard && window.PXCard) {
@@ -3080,6 +3083,16 @@ function initCheckoutPage(){
           var opt = document.getElementById('cardOption');
           if (opt) opt.classList.remove('checkout-payment-option--disabled');
           cardRadio.checked = true;
+          // The wallets are offered only where the payment host can actually draw
+          // one. Card stays the pre-selected rail; a wallet is the buyer's choice.
+          if (j.wallet) {
+            var walletRadio = document.querySelector('input[name="payment_method"][data-wallet-rail]');
+            if (walletRadio) {
+              walletRadio.disabled = false;
+              var wopt = document.getElementById('walletOption');
+              if (wopt) wopt.classList.remove('checkout-payment-option--disabled');
+            }
+          }
           updateZellePanel();
         })
         .catch(function(){ /* stay on Zelle */ });
@@ -3454,6 +3467,10 @@ function initCheckoutPage(){
     var firstName = String((document.getElementById('shipping_first_name') || {}).value || '').trim();
     var lastName = String((document.getElementById('shipping_last_name') || {}).value || '').trim();
     var paymentMethodEl = document.querySelector('input[name="payment_method"]:checked');
+    // A wallet order IS a card order — same session, same host, same settlement.
+    // The distinction lives only in how the buyer approves it, so the store
+    // records one payment method and every downstream queue stays unchanged.
+    var isWalletPay = Boolean(paymentMethodEl && paymentMethodEl.value === 'wallet');
     var shipping = {
       shipping_name: (firstName + ' ' + lastName).trim(),
       shipping_email: String((document.getElementById('shipping_email') || {}).value || '').trim(),
@@ -3463,7 +3480,7 @@ function initCheckoutPage(){
       shipping_zip: String((document.getElementById('shipping_zip') || {}).value || '').trim(),
       shipping_country: String((document.getElementById('shipping_country') || {}).value || '').trim(),
       shipping_phone: String((document.getElementById('shipping_phone') || {}).value || '').trim(),
-      payment_method: paymentMethodEl ? paymentMethodEl.value : 'zelle',
+      payment_method: isWalletPay ? 'card' : (paymentMethodEl ? paymentMethodEl.value : 'zelle'),
       promo_code: checkoutState.appliedPromoCode || null,
       easypost_shipment_id: checkoutState.easypostShipmentId,
       easypost_rate_id: checkoutState.selectedRate.rateId
@@ -3476,6 +3493,31 @@ function initCheckoutPage(){
       method: 'POST',
       body: JSON.stringify(shipping)
     }).then(function(order){
+      // The wallet is approved on the payment host's own page, top-level, because
+      // that is the only place a wallet can run without carrying this store's
+      // address to Apple or Google. The order is already placed; the buyer comes
+      // back to the confirmation page, which settles it.
+      if (isWalletPay) {
+        checkoutBtnEl.textContent = 'Opening secure checkout...';
+        return authApi('/api/checkout/card/wallet-start', {
+          method: 'POST',
+          body: JSON.stringify({ order_id: order.order_id })
+        }).then(function(started){
+          if (!started || !started.redirect) throw new Error('no_redirect');
+          cart = {};
+          cartData = { items: [], total: 0 };
+          renderCart();
+          closeCart();
+          window.location.href = started.redirect;
+          return new Promise(function(){});   // leaving the site; nothing after this runs
+        }).catch(function(walletErr){
+          var we = new Error('WALLET_STAGE');
+          we.walletStage = true;
+          we.order = order;
+          we.cause = walletErr;
+          throw we;
+        });
+      }
       // A card order is placed but NOT finished: the goods are not paid for
       // until the payment host confirms the capture. Charge first, redirect after.
       if (order.payment_method === 'card' && window.PXCard) {
@@ -3504,6 +3546,13 @@ function initCheckoutPage(){
         + (order.shipping_service ? '&shipping_service=' + encodeURIComponent(order.shipping_service) : '');
       window.location.href = 'order-confirmation.html?' + qs;
     }).catch(function(err){
+      if(err && err.walletStage){
+        // The order exists and is unpaid. Card is the rail that can still pay it
+        // on this page, so point the buyer there rather than at a dead retry.
+        setCheckoutMessage('Your order was created but the express checkout could not be opened. Please choose Credit or Debit Card above to pay for it.', true);
+        announceCartLive('Express checkout could not be opened.');
+        return;
+      }
       if(err && err.cardStage){
         // The order was created; only the card step failed. The buyer can retry
         // the card without re-running checkout against an emptied cart.
