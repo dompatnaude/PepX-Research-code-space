@@ -12,11 +12,29 @@ function missingConfigError(message, code) {
   return err;
 }
 
+let warnedAboutKeyMode = false;
+
+// Warns once when the EasyPost key mode does not match the deployment target
+// (for example a test key in production). Never logs the key itself - only
+// whether it is a live (EZAK) or test (EZTK) key.
+function warnOnKeyModeMismatch(key) {
+  if (warnedAboutKeyMode) return;
+  warnedAboutKeyMode = true;
+  const mode = key.indexOf('EZTK') === 0 ? 'test' : (key.indexOf('EZAK') === 0 ? 'live' : 'unknown');
+  const target = process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+  if (target === 'production' && mode !== 'live') {
+    console.warn('[easypost] WARNING: EASYPOST_API_KEY is a ' + mode + ' key but the deployment target is production.');
+  } else if (target !== 'production' && mode === 'live') {
+    console.warn('[easypost] WARNING: EASYPOST_API_KEY is a LIVE key outside production (target: ' + target + '). Real charges are possible.');
+  }
+}
+
 function getEasyPostApiKey(env) {
   const key = String((env || process.env).EASYPOST_API_KEY || '').trim();
   if (!key) {
     throw missingConfigError('EasyPost is not configured: EASYPOST_API_KEY is missing.', 'easypost-api-key-missing');
   }
+  warnOnKeyModeMismatch(key);
   return key;
 }
 

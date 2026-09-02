@@ -22,7 +22,6 @@ function createCheckoutShippingRouter(requireAuth) {
   const router = express.Router();
 
   router.post('/rates', requireAuth, async (req, res) => {
-    console.log('[checkout-shipping] rates route hit — EP configured:', !!process.env.EASYPOST_API_KEY, '| ship-from ZIP:', !!process.env.SHIP_FROM_ZIP);
     try {
       const body = req.body || {};
       const zip = String(body.zip || '').trim();
