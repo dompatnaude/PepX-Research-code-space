@@ -785,41 +785,6 @@ function createAdminRouter(requireAuth, deps) {
     }
   });
 
-  // --- GET /api/admin/shipping/config-status -------------------------------
-  // Admin-only diagnostic. Reports WHETHER EasyPost is configured and whether
-  // the key is a live or test key. Never returns the key itself or any part
-  // of it - only the four-character mode classification.
-  router.get('/shipping/config-status', gate, function (req, res) {
-    const ep = require('../services/easypost');
-    const out = {
-      deploymentTarget: process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
-      easypostConfigured: false,
-      keyMode: 'unknown',
-      webhookSecretConfigured: false,
-      shipFromConfigured: false
-    };
-    try {
-      const key = ep.getEasyPostApiKey();
-      out.easypostConfigured = true;
-      out.keyMode = key.indexOf('EZAK') === 0 ? 'live' : (key.indexOf('EZTK') === 0 ? 'test' : 'unknown');
-    } catch (error) {
-      out.easypostError = error.code || 'easypost-api-key-missing';
-    }
-    try {
-      ep.getEasyPostWebhookSecret();
-      out.webhookSecretConfigured = true;
-    } catch (error) {
-      out.webhookSecretError = error.code || 'easypost-webhook-secret-missing';
-    }
-    try {
-      ep.getShipFromAddress();
-      out.shipFromConfigured = true;
-    } catch (error) {
-      out.shipFromError = error.code || 'easypost-ship-from-missing';
-    }
-    return res.json(out);
-  });
-
   return router;
 }
 
