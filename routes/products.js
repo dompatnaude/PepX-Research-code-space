@@ -2,6 +2,24 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db/connection");
 
+// Storefront ordering: in-stock products first, sold-out products last.
+// The partition is stable, so the SQL ORDER BY (created_at DESC) still decides
+// the order inside the in-stock group and inside the sold-out group.
+// It reads the same effective stock_quantity that produces stock_status below,
+// so products that only carry stock on their variants are counted correctly.
+function sortInStockFirst(items) {
+  const inStock = [];
+  const soldOut = [];
+  for (const item of items) {
+    if (Number(item.stock_quantity) > 0) {
+      inStock.push(item);
+    } else {
+      soldOut.push(item);
+    }
+  }
+  return inStock.concat(soldOut);
+}
+
 // GET all products (SELECT * includes category)
 router.get("/", async (req, res) => {
   try {
@@ -68,7 +86,7 @@ router.get("/", async (req, res) => {
       };
     });
 
-    res.json(payload);
+    res.json(sortInStockFirst(payload));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch products" });
