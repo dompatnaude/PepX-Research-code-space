@@ -651,6 +651,22 @@ function selectHomepageFeaturedProducts(products){
   return selected;
 }
 
+function sortProductsInStockFirst(products){
+  // In-stock first, sold-out last. The partition is stable, so whatever order
+  // came in (the API order, or the shopper's chosen sort) is preserved inside
+  // each group. Sold-out products are never removed, only moved to the end.
+  var inStock = [];
+  var soldOut = [];
+  for(var i = 0; i < products.length; i += 1){
+    if(isProductSoldOut(products[i], null)){
+      soldOut.push(products[i]);
+    } else {
+      inStock.push(products[i]);
+    }
+  }
+  return inStock.concat(soldOut);
+}
+
 function renderProducts(filter){
   var grid = document.getElementById('productGrid');
   if(!grid) return;
@@ -669,6 +685,8 @@ function renderProducts(filter){
   } else if(activeSort === 'nameDesc'){
     visible.sort(function(a,b){return b.name.localeCompare(a.name);});
   }
+
+  visible = sortProductsInStockFirst(visible);
 
   if(isHomepageFeaturedGrid(grid)){
     visible = selectHomepageFeaturedProducts(visible);
