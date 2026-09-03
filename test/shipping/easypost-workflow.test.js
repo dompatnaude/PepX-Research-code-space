@@ -858,6 +858,31 @@ test('invalid webhook signatures are rejected', async () => {
   assert.equal(res.statusCode, 401);
 });
 
+test('valid webhook signatures with EasyPost hmac-sha256-hex= prefix are accepted', async () => {
+  const secret = 'whsec_prod_test_12345';
+  const crypto = require('crypto');
+  const bodyText = '{"id":"evt_1","description":"tracker.updated","result":{"id":"trk_1","status":"in_transit"}}';
+  const rawBody = Buffer.from(bodyText);
+  const expectedHex = crypto.createHmac('sha256', Buffer.from(secret.normalize('NFKD'), 'utf8'))
+    .update(bodyText, 'utf8')
+    .digest('hex');
+  const signatureHeader = `hmac-sha256-hex=${expectedHex}`;
+
+  assert.equal(validateWebhookSignature(rawBody, signatureHeader, secret), true);
+
+  const router = createEasyPostWebhookRouter({
+    pool: createMockPool(),
+    env: { EASYPOST_WEBHOOK_SECRET: secret }
+  });
+
+  const { res } = await invokeRoute(router, 'post', '/', {
+    headers: { 'x-hmac-signature': signatureHeader },
+    body: rawBody
+  });
+
+  assert.equal(res.statusCode, 200);
+});
+
 test('valid tracker webhooks update the correct shipment', async () => {
   const db = createMockPool({
     orders: [createBaseOrder({ status: 'processing' })],

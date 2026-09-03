@@ -164,10 +164,33 @@ function sanitizeTrackerStatus(status) {
 }
 
 function validateWebhookSignature(rawBody, signatureHeader, webhookSecret) {
+  if (!webhookSecret) return false;
   const bodyBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(String(rawBody || ''));
-  const expectedHex = crypto.createHmac('sha256', webhookSecret).update(bodyBuffer).digest('hex');
-  const expectedBase64 = crypto.createHmac('sha256', webhookSecret).update(bodyBuffer).digest('base64');
   const header = String(signatureHeader || '').trim();
+  if (!header) return false;
+
+  const normalizedSecret = String(webhookSecret || '').normalize('NFKD');
+  const encodedSecret = Buffer.from(normalizedSecret, 'utf8');
+
+  // EasyPost SDK converts integer weights to floats in JSON (e.g. "weight": 10 -> "weight": 10.0) when calculating HMAC
+  const correctedBodyText = bodyBuffer.toString('utf8').replace(/("weight":\s*)(\d+)(\s*)(?=,|\})/g, '$1$2.0');
+  const rawBodyText = bodyBuffer.toString('utf8');
+
+  const expectedCorrectedHex = crypto.createHmac('sha256', encodedSecret).update(correctedBodyText, 'utf8').digest('hex');
+  const expectedCorrectedBase64 = crypto.createHmac('sha256', encodedSecret).update(correctedBodyText, 'utf8').digest('base64');
+
+  const expectedRawHex = crypto.createHmac('sha256', encodedSecret).update(rawBodyText, 'utf8').digest('hex');
+  const expectedRawBase64 = crypto.createHmac('sha256', encodedSecret).update(rawBodyText, 'utf8').digest('base64');
+
+  // Standard EasyPost webhook signature header format is "hmac-sha256-hex=<signature>"
+  let cleanHeader = header;
+  if (cleanHeader.indexOf('hmac-sha256-hex=') === 0) {
+    cleanHeader = cleanHeader.substring('hmac-sha256-hex='.length);
+  } else if (cleanHeader.indexOf('hmac-sha256-base64=') === 0) {
+    cleanHeader = cleanHeader.substring('hmac-sha256-base64='.length);
+  } else if (cleanHeader.indexOf('hmac-sha256=') === 0) {
+    cleanHeader = cleanHeader.substring('hmac-sha256='.length);
+  }
 
   function safeEqual(a, b) {
     try {
@@ -180,7 +203,14 @@ function validateWebhookSignature(rawBody, signatureHeader, webhookSecret) {
     }
   }
 
-  return safeEqual(header, expectedHex) || safeEqual(header, expectedBase64);
+  return (
+    safeEqual(cleanHeader, expectedCorrectedHex) ||
+    safeEqual(cleanHeader, expectedCorrectedBase64) ||
+    safeEqual(cleanHeader, expectedRawHex) ||
+    safeEqual(cleanHeader, expectedRawBase64) ||
+    safeEqual(header, `hmac-sha256-hex=${expectedCorrectedHex}`) ||
+    safeEqual(header, `hmac-sha256-hex=${expectedRawHex}`)
+  );
 }
 
 function getShipFromAddress(env) {
