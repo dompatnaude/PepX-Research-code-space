@@ -107,7 +107,22 @@
       return;
     }
 
-    if (!state.coas.length) {
+    // The COA feed is a self-contained section of the site. If it cannot be
+  // reached, say so here and leave every other page working normally.
+  if (state.unavailable) {
+    if (status) status.textContent = '';
+    grid.innerHTML = '<div class="coa-empty" style="grid-column:1/-1">'
+      + '<svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true"><rect x="10" y="6" width="36" height="44" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/><path d="M18 18h20M18 25h20M18 32h12" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round"/></svg>'
+      + '<h3>COA information is temporarily unavailable</h3>'
+      + '<p>Certificates of analysis could not be loaded right now. Everything else on the site is unaffected \u2014 please try again shortly.</p>'
+      + '<button type="button" class="btn ghost" id="coaRetry">Try again</button>'
+      + '</div>';
+    var retryBtn = $('coaRetry');
+    if (retryBtn) retryBtn.addEventListener('click', function () { loadCoas(); });
+    return;
+  }
+
+  if (!state.coas.length) {
       if (status) status.textContent = '';
       grid.innerHTML = '<div class="coa-empty" style="grid-column:1/-1">'
         + '<svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true"><rect x="10" y="6" width="36" height="44" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/><path d="M18 18h20M18 25h20M18 32h12" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round"/></svg>'
@@ -210,11 +225,13 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         state.coas = (data && data.coas) || [];
+      state.unavailable = !!(data && data.unavailable);
         state.loading = false;
         renderGrid();
       })
       .catch(function () {
-        state.coas = [];
+      state.coas = [];
+      state.unavailable = true;
         state.loading = false;
         renderGrid();
         toast('Failed to load COAs');
@@ -378,13 +395,15 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         state.coas = (data && data.coas) || [];
+      state.unavailable = !!(data && data.unavailable);
         state.loading = false;
         buildProductFilter(state.coas);
         renderGrid();
         if (openId) openCoaModal(openId);
       })
       .catch(function () {
-        state.coas = [];
+      state.coas = [];
+      state.unavailable = true;
         state.loading = false;
         renderGrid();
       });

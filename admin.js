@@ -1610,13 +1610,20 @@
     if (state.coaStatusFilter) params.set('status', state.coaStatusFilter);
     api('/api/admin/coas?' + params.toString())
       .then(function (data) {
-        state.coas = (data && data.coas) || [];
-        renderCoasTable();
-      })
+      state.coas = (data && data.coas) || [];
+      if (data && data.limits && data.limits.maxUploadBytes) {
+        state.coaMaxUploadBytes = data.limits.maxUploadBytes;
+      }
+      renderCoasTable();
+    })
       .catch(function (err) {
-        var body = $('coasBody');
-        if (body) body.innerHTML = '<tr><td colspan="11" class="muted">Failed to load COAs</td></tr>';
-      });
+      var body = $('coasBody');
+      if (body) {
+        body.innerHTML = '<tr><td colspan="11" class="muted">'
+          + esc((err && err.message) || 'COA information is temporarily unavailable.')
+          + ' The rest of the admin panel is unaffected.</td></tr>';
+      }
+    });
   }
 
   function renderCoasTable() {
@@ -1831,71 +1838,128 @@
     syncModalBodyLock();
   }
 
-  function saveCoaForm(evt) {
-    evt.preventDefault();
-    var form = $('coaForm');
-    if (!form) return;
+  // Upload limit is whatever the server reports; it differs by host because
+    // serverless platforms cap request bodies well below our own limit.
+    var COA_DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
-    // Parse combined "productId" or "productId:variantId" from the single select
-    var pvSel = $('coaProductVariantSelect');
-    var pvVal = (pvSel && pvSel.value) ? pvSel.value.trim() : '';
-    var parts = pvVal.split(':');
-    var productId = parseInt(parts[0], 10) || 0;
-    var variantId = parseInt(parts[1], 10) || null;
+    function coaMaxUploadBytes() {
+      return state.coaMaxUploadBytes || COA_DEFAULT_MAX_UPLOAD_BYTES;
+    }
 
-    if (!productId) { toast('Please select a product'); return; }
+    // idle -> uploading -> success/error. While busy the form cannot be
+    // resubmitted, cancelled halfway, or have its file swapped underneath it.
+    function setCoaBusy(busy, label) {
+      state.coaSaving = !!busy;
+      var saveBtn = $('coaModalSave');
+      var cancelBtn = $('coaModalCancel');
+      var closeBtn = $('coaModalClose');
+      var fileInput = $('coaFileInput');
+      if (saveBtn) {
+        saveBtn.disabled = !!busy;
+        saveBtn.textContent = busy ? (label || 'Saving…') : 'Save Draft';
+      }
+      if (cancelBtn) cancelBtn.disabled = !!busy;
+      if (closeBtn) closeBtn.disabled = !!busy;
+      if (fileInput) fileInput.disabled = !!busy;
+    }
 
-    // Keep hidden fields in sync so native form validation is happy
-    var pField = $('coaProductIdField');
-    if (pField) pField.value = productId;
-    var vField = $('coaVariantIdField');
-    if (vField) vField.value = variantId || '';
+    function saveCoaForm(evt) {
+      evt.preventDefault();
+      var form = $('coaForm');
+      if (!form) return;
+      if (state.coaSaving) return;
 
-    var payload = {
-      product_id: productId,
-      variant_id: variantId,
-      batch_number: (form.elements.batch_number && form.elements.batch_number.value.trim()) || null,
-      lab_name: (form.elements.lab_name && form.elements.lab_name.value.trim()) || null,
-      test_type: (form.elements.test_type && form.elements.test_type.value.trim()) || null,
-      test_date: (form.elements.test_date && form.elements.test_date.value) || null,
-      report_date: (form.elements.report_date && form.elements.report_date.value) || null,
-      title: (form.elements.title && form.elements.title.value.trim()) || null,
-      notes: (form.elements.notes && form.elements.notes.value.trim()) || null
-    };
+      // Parse combined "productId" or "productId:variantId" from the single select
+      var pvSel = $('coaProductVariantSelect');
+      var pvVal = (pvSel && pvSel.value) ? pvSel.value.trim() : '';
+      var parts = pvVal.split(':');
+      var productId = parseInt(parts[0], 10) || 0;
+      var variantId = parseInt(parts[1], 10) || null;
 
-    var isEdit = !!state.editingCoaId;
-    var metaPromise = isEdit
+      if (!productId) { toast('Please select a product.'); return; }
+
+      var fileInput = $('coaFileInput');
+      var file = (fileInput && fileInput.files && fileInput.files[0]) || null;
+
+      // Fail fast in the browser. The server re-validates all of this, including
+      // the real file contents, and is the authority.
+      if (file) {
+        var maxBytes = coaMaxUploadBytes();
+        if (!/\.(pdf|png|jpe?g)$/i.test(file.name || '')) {
+          toast('Unsupported file type. Choose a PDF, PNG or JPG.');
+          return;
+        }
+        if (!file.size) { toast('That file is empty.'); return; }
+        if (file.size > maxBytes) {
+          toast('File exceeds the ' + Math.round(maxBytes / 1048576) + ' MB limit.');
+          return;
+        }
+      }
+
+      // Keep hidden fields in sync so native form validation is happy
+      var pField = $('coaProductIdField');
+      if (pField) pField.value = productId;
+      var vField = $('coaVariantIdField');
+      if (vField) vField.value = variantId || '';
+
+      var payload = {
+        product_id: productId,
+        variant_id: variantId,
+        batch_number: (form.elements.batch_number && form.elements.batch_number.value.trim()) || null,
+        lab_name: (form.elements.lab_name && form.elements.lab_name.value.trim()) || null,
+        test_type: (form.elements.test_type && form.elements.test_type.value.trim()) || null,
+        test_date: (form.elements.test_date && form.elements.test_date.value) || null,
+        report_date: (form.elements.report_date && form.elements.report_date.value) || null,
+        title: (form.elements.title && form.elements.title.value.trim()) || null,
+        notes: (form.elements.notes && form.elements.notes.value.trim()) || null
+      };
+
+      var isEdit = !!state.editingCoaId;
+      setCoaBusy(true, 'Saving…');
+
+      var metaPromise = isEdit
       ? api('/api/admin/coas/' + state.editingCoaId, { method: 'PUT', body: JSON.stringify(payload) })
       : api('/api/admin/coas', { method: 'POST', body: JSON.stringify(payload) });
 
-    var saveBtn = $('coaModalSave');
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving\u2026'; }
-
-    metaPromise
+      metaPromise
       .then(function (data) {
-        var coaId = isEdit ? state.editingCoaId : data.id;
+          var coaId = isEdit ? state.editingCoaId : (data && data.id);
+          if (!coaId) throw new Error('The COA record could not be saved.');
+          if (!file) return null;
 
-        // Upload file if one was selected
-        var fileInput = $('coaFileInput');
-        if (fileInput && fileInput.files && fileInput.files[0]) {
+          setCoaBusy(true, 'Uploading…');
           var fd = new FormData();
-          fd.append('file', fileInput.files[0]);
-          return api('/api/admin/coas/' + coaId + '/file', { method: 'POST', body: fd });
-        }
-        return null;
+          fd.append('file', file);
+          return api('/api/admin/coas/' + coaId + '/file', { method: 'POST', body: fd })
+          .catch(function (uploadErr) {
+              // The metadata row exists but has no file attached. Report that
+              // precisely instead of leaving the admin guessing.
+              var wrapped = new Error((uploadErr && uploadErr.message) || 'The report file could not be uploaded.');
+              wrapped.recordSaved = true;
+              throw wrapped;
+          });
       })
       .then(function () {
-        toast(isEdit ? 'COA updated' : 'COA draft created');
-        closeCoaModal();
-        loadCoas();
+          toast(isEdit
+            ? 'COA updated'
+            : (file ? 'COA draft created with report file' : 'COA draft created'));
+          closeCoaModal();
+          loadCoas();
       })
-      .catch(function (err) { toast(err.message || 'Failed to save COA'); })
+      .catch(function (err) {
+          if (err && err.recordSaved) {
+            toast(err.message + ' The draft was saved without a file - reopen it to retry.');
+            loadCoas();
+            return;
+          }
+          toast((err && err.message) || 'Failed to save COA');
+      })
       .finally(function () {
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Draft'; }
+          setCoaBusy(false);
       });
-  }
+    }
 
-  function coaPublish(id) {
+    function coaPublish(id) {
     if (!confirm('Publish this COA? It will become visible to the public.')) return;
     api('/api/admin/coas/' + id + '/publish', { method: 'POST' })
       .then(function () { toast('COA published'); loadCoas(); })
@@ -2439,4 +2503,4 @@
   }
 
 
-})();
+    })();

@@ -39,7 +39,35 @@ const { resolveGoogleCallbackUrl } = require('./services/google-config');
 loadProjectEnv({ cwd: __dirname });
 require('dotenv').config();
 
+// A request-level failure must never take the site down. Express 4 does not
+// catch rejections thrown by async route handlers, and Node terminates the
+// process on an unhandled rejection, so one failing query used to be enough to
+// kill the server. These handlers log and keep serving. (An uncaught exception
+// can in principle leave state inconsistent; we accept that over an outage,
+// and the wrapper below means route errors reach the error middleware instead
+// of ever getting here.)
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason && reason.stack ? reason.stack : reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('[uncaughtException]', error && error.stack ? error.stack : error);
+});
+
 const app = express();
+
+// Forward rejections from async route handlers to the error middleware.
+['get', 'post', 'put', 'patch', 'delete', 'head', 'options'].forEach((method) => {
+  const original = app[method].bind(app);
+  app[method] = function () {
+    const args = Array.prototype.slice.call(arguments).map((arg) => {
+      if (typeof arg !== 'function' || arg.length >= 4) return arg;
+      return function (req, res, next) {
+        return Promise.resolve(arg(req, res, next)).catch(next);
+      };
+    });
+    return original.apply(app, args);
+  };
+});
 app.set('trust proxy', 1);
 const PORT = Number(process.env.PORT || 3000);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-change-me';
@@ -956,6 +984,26 @@ app.use(async (req, res, next) => {
   }
 });
 
+// express.static below serves this whole directory, which also contains the
+// server source. Refuse anything that is not a client asset so route handlers,
+// SQL, config and stored uploads are not downloadable.
+const NON_PUBLIC_PREFIXES = [
+  '/routes/', '/services/', '/db/', '/scripts/', '/test/', '/uploads/',
+  '/node_modules/', '/.git/', '/api/', '/wordpress-plugin/', '/wordpress-theme/',
+  '/shopify-theme/', '/.devcontainer/', '/.vscode/'
+];
+const NON_PUBLIC_FILES = new Set([
+  '/package.json', '/package-lock.json', '/vercel.json', '/server.js', '/deploy.sh'
+]);
+app.use((req, res, next) => {
+  const requested = req.path.toLowerCase();
+  if (NON_PUBLIC_FILES.has(requested) ||
+      NON_PUBLIC_PREFIXES.some((prefix) => requested.startsWith(prefix))) {
+    return res.status(404).end();
+  }
+  return next();
+});
+
 app.use(express.static(path.join(__dirname)));
 
 app.get('*', async (req, res, next) => {
@@ -996,14 +1044,29 @@ async function startServer() {
   if (String(process.env.SKIP_DB_MIGRATIONS).toLowerCase() === 'true') {
     console.log('SKIP_DB_MIGRATIONS=true - starting without running migrations.');
   } else {
-    await runMigrations();
+    // A briefly unreachable database (a saturated connection pooler, a restart)
+    // used to stop the process from ever calling listen(), which turned a
+    // transient database problem into a full outage that could not self-heal.
+    // Boot regardless; individual requests fail and recover on their own.
+    try {
+      await runMigrations();
+    } catch (error) {
+      console.error('[startup] migrations failed - starting anyway so the site stays reachable:',
+        error && error.message ? error.message : error);
+    }
   }
-  await ensureBootstrapAdmin({
-    pool,
-    bcrypt,
-    env: process.env,
-    createId: () => crypto.randomUUID()
-  });
+
+  try {
+    await ensureBootstrapAdmin({
+      pool,
+      bcrypt,
+      env: process.env,
+      createId: () => crypto.randomUUID()
+    });
+  } catch (error) {
+    console.error('[startup] bootstrap admin check failed - continuing:',
+      error && error.message ? error.message : error);
+  }
 
   if (bootstrapAdminConfigured && process.env.ADMIN_EMAIL) {
     console.log(`Bootstrap admin ready for ${process.env.ADMIN_EMAIL}`);
