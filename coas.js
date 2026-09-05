@@ -162,83 +162,227 @@
   }
 
   // Render all PDF card previews in the grid after HTML is set
+    // --- PDF first-page previews ------------------------------------------
+  // Rendered client-side with PDF.js. Nothing is rasterised on the server and
+  // nothing is written to disk, so this works unchanged on serverless, and
+  // admins never have to upload a separate thumbnail. Previews render lazily
+  // as cards scroll into view, a couple at a time, so opening the page does
+  // not pull down every report at once.
+
+  var PDFJS_MAX_WAIT_MS = 8000;
+  var PREVIEW_CONCURRENCY = 2;
+  // Only the fetch/parse of the PDF is time-limited; see renderPdfPreview.
+  var PREVIEW_LOAD_TIMEOUT_MS = 20000;
+  var previewQueue = [];
+  var previewActive = 0;
+  var previewObserver = null;
+  var previewObjectUrls = [];
+
+  function pdfjsReady() {
+    return typeof pdfjsLib !== 'undefined' && pdfjsLib && typeof pdfjsLib.getDocument === 'function';
+  }
+
+  // Bounded wait. The old code retried every 400ms forever, so a blocked or
+  // slow CDN left every card spinning indefinitely.
+  function whenPdfjsReady(cb) {
+    if (pdfjsReady()) return cb(true);
+    var waited = 0;
+    var timer = setInterval(function () {
+      if (pdfjsReady()) { clearInterval(timer); return cb(true); }
+      waited += 200;
+      if (waited >= PDFJS_MAX_WAIT_MS) { clearInterval(timer); return cb(false); }
+    }, 200);
+  }
+
+  // Guards a promise so a preview can never hang a card forever.
+  function withPreviewTimeout(promise, ms) {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { reject(new Error('preview timed out')); }, ms);
+      promise.then(
+        function (v) { clearTimeout(timer); resolve(v); },
+        function (e) { clearTimeout(timer); reject(e); }
+      );
+    });
+  }
+
+  function releasePreviewUrls() {
+    previewObjectUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
+    previewObjectUrls = [];
+  }
+
+  function pumpPreviewQueue() {
+    while (previewActive < PREVIEW_CONCURRENCY && previewQueue.length) {
+      var job = previewQueue.shift();
+      previewActive += 1;
+      renderPdfPreview(job.container, job.url, job.name).then(function () {
+        previewActive -= 1;
+        pumpPreviewQueue();
+      });
+    }
+  }
+
+  function queuePreview(container) {
+    if (container.getAttribute('data-preview-state')) return;
+    container.setAttribute('data-preview-state', 'queued');
+    previewQueue.push({
+      container: container,
+      url: '/api/coas/' + container.getAttribute('data-pdf-coa-id') + '/file',
+      name: container.getAttribute('data-pdf-name') || ''
+    });
+    pumpPreviewQueue();
+  }
+
   function renderAllPdfPreviews(scope) {
     var containers = (scope || document).querySelectorAll('.coa-pdf-preview[data-pdf-coa-id]');
     if (!containers.length) return;
 
-    // If PDF.js hasn't loaded from CDN yet, retry after a short delay
-    if (typeof pdfjsLib === 'undefined') {
-      setTimeout(function () { renderAllPdfPreviews(scope); }, 400);
-      return;
-    }
+    whenPdfjsReady(function (ready) {
+      if (!ready) {
+        Array.prototype.forEach.call(containers, function (c) {
+          c.setAttribute('data-preview-state', 'failed');
+          c.innerHTML = pdfFallback(c.getAttribute('data-pdf-name') || '');
+        });
+        return;
+      }
 
-    Array.prototype.forEach.call(containers, function (container) {
-      var coaId = container.getAttribute('data-pdf-coa-id');
-      var name = container.getAttribute('data-pdf-name') || '';
-      renderPdfPreview(container, '/api/coas/' + coaId + '/file', name);
+      if (typeof IntersectionObserver === 'undefined') {
+        Array.prototype.forEach.call(containers, queuePreview);
+        return;
+      }
+
+      if (previewObserver) previewObserver.disconnect();
+      previewObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          previewObserver.unobserve(entry.target);
+          queuePreview(entry.target);
+        });
+      }, { rootMargin: '200px 0px' });
+
+      Array.prototype.forEach.call(containers, function (c) { previewObserver.observe(c); });
     });
   }
 
-  // Render the first page of a PDF at /api/coas/:id/file into an img inside container
+  // Renders page 1 of the PDF at `url` into `container`. Always resolves. On
+  // any failure -- network, 404, password-protected, malformed -- it swaps in
+  // the generic placeholder instead of leaving a spinner or throwing.
   function renderPdfPreview(container, url, productName) {
-    var task = pdfjsLib.getDocument({ url: url });
-    task.promise
-      .then(function (pdf) { return pdf.getPage(1); })
-      .then(function (page) {
-        var vp1 = page.getViewport({ scale: 1 });
-        // Scale the page to ~600px wide — crisp at card size (~300px) including retina
-        var scale = Math.min(600 / vp1.width, 2);
-        var vp = page.getViewport({ scale: scale });
+    if (!pdfjsReady()) {
+      container.setAttribute('data-preview-state', 'failed');
+      container.innerHTML = pdfFallback(productName);
+      return Promise.resolve(false);
+    }
+
+    var loadingTask = pdfjsLib.getDocument({ url: url, isEvalSupported: false });
+
+    return withPreviewTimeout(loadingTask.promise, PREVIEW_LOAD_TIMEOUT_MS)
+      .then(function (pdf) {
+        return pdf.getPage(1).then(function (page) { return { pdf: pdf, page: page }; });
+      })
+      .then(function (bundle) {
+        var page = bundle.page;
+        var baseViewport = page.getViewport({ scale: 1 });
+        // ~600px wide: crisp at card size (~300px) including retina.
+        var scale = Math.min(600 / baseViewport.width, 2);
+        var viewport = page.getViewport({ scale: scale });
 
         var canvas = document.createElement('canvas');
-        canvas.width = Math.round(vp.width);
-        canvas.height = Math.round(vp.height);
+        canvas.width = Math.round(viewport.width);
+        canvas.height = Math.round(viewport.height);
         var ctx = canvas.getContext('2d');
 
-        return page.render({ canvasContext: ctx, viewport: vp }).promise
+        return page.render({ canvasContext: ctx, viewport: viewport }).promise
           .then(function () {
-            // Convert rendered canvas to img so object-fit CSS works normally
-            var dataUrl = canvas.toDataURL('image/png');
-            var img = new Image();
-            img.className = 'coa-pdf-rendered';
-            img.alt = '';
-            img.src = dataUrl;
-            container.innerHTML = '';
-            container.appendChild(img);
+            return new Promise(function (resolve) {
+              // A blob URL holds far less memory alive than a base64 data URL.
+              canvas.toBlob(function (blob) {
+                if (!blob) return resolve(false);
+                var objectUrl = URL.createObjectURL(blob);
+                previewObjectUrls.push(objectUrl);
+                var img = new Image();
+                img.className = 'coa-pdf-rendered';
+                img.alt = '';
+                img.onload = function () { resolve(true); };
+                img.onerror = function () { resolve(false); };
+                img.src = objectUrl;
+                container.innerHTML = '';
+                container.appendChild(img);
+                container.setAttribute('data-preview-state', 'rendered');
+              }, 'image/png');
+            });
+          })
+          .then(function (encoded) {
+            canvas.width = 0;
+            canvas.height = 0;
+            if (bundle.pdf && bundle.pdf.destroy) { try { bundle.pdf.destroy(); } catch (e) {} }
+            if (!encoded) throw new Error('preview encode failed');
+            return true;
           });
       })
       .catch(function () {
-        // Render failed — swap in the static placeholder
+        container.setAttribute('data-preview-state', 'failed');
         container.innerHTML = pdfFallback(productName);
+        return false;
       });
   }
 
-  function loadCoas() {
-    state.loading = true;
-    renderGrid();
+  // --- URL-backed filter state ------------------------------------------
 
+  function currentQueryString() {
     var params = new URLSearchParams();
     if (state.search) params.set('search', state.search);
     if (state.productFilter) params.set('product_id', state.productFilter);
+    return params.toString();
+  }
 
-    fetch('/api/coas?' + params.toString(), { credentials: 'include' })
+  // Filter and search belong in the URL, not only in memory. Without this a
+  // page restored from the browser's back/forward cache kept a stale product
+  // filter while the address bar still showed a bare /coas.html -- which read
+  // as "the COA page opened but the reports are missing".
+  function syncUrl() {
+    if (!window.history || !window.history.replaceState) return;
+    var qs = currentQueryString();
+    var next = window.location.pathname + (qs ? '?' + qs : '');
+    if (next !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, '', next);
+    }
+  }
+
+  function applyStateFromUrl() {
+    var p = new URLSearchParams(window.location.search);
+    state.search = (p.get('search') || '').trim();
+    state.productFilter = (p.get('product_id') || '').trim();
+    var searchInput = $('coaSearch');
+    if (searchInput) searchInput.value = state.search;
+    setActiveProductFilter(state.productFilter);
+  }
+
+  function loadCoas(options) {
+    options = options || {};
+    if (options.updateUrl !== false) syncUrl();
+
+    releasePreviewUrls();
+    state.loading = true;
+    renderGrid();
+
+    fetch('/api/coas?' + currentQueryString(), { credentials: 'include' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         state.coas = (data && data.coas) || [];
-      state.unavailable = !!(data && data.unavailable);
+        state.unavailable = !!(data && data.unavailable);
         state.loading = false;
         renderGrid();
       })
       .catch(function () {
-      state.coas = [];
-      state.unavailable = true;
+        state.coas = [];
+        state.unavailable = true;
         state.loading = false;
         renderGrid();
         toast('Failed to load COAs');
       });
   }
 
-  function openCoaModal(id) {
+function openCoaModal(id) {
     var modal = $('coaModal');
     var preview = $('coaModalPreview');
     var meta = $('coaModalMeta');
@@ -315,7 +459,7 @@
     });
   }
 
-  function buildProductFilter(coas) {
+    function buildProductFilter(coas) {
     // Gather unique products from loaded COAs
     var seen = {};
     var products = [];
@@ -329,11 +473,10 @@
     var filter = $('coaProductFilter');
     if (!filter || !products.length) return;
 
-    // Keep the "All" button, append product buttons
     var extra = products.map(function (p) {
       return '<button type="button" class="pill" data-product="' + p.id + '">' + esc(p.name) + '</button>';
     }).join('');
-    filter.innerHTML = '<button type="button" class="pill active" data-product="">All Products</button>' + extra;
+    filter.innerHTML = '<button type="button" class="pill" data-product="">All Products</button>' + extra;
 
     Array.prototype.forEach.call(filter.querySelectorAll('.pill'), function (btn) {
       btn.addEventListener('click', function () {
@@ -342,6 +485,9 @@
         loadCoas();
       });
     });
+
+    // Highlight whatever the URL asked for (nothing = All Products).
+    setActiveProductFilter(state.productFilter);
   }
 
   function init() {
@@ -386,28 +532,47 @@
       });
     }
 
-    // Initial load — then build product filter from results
+    applyStateFromUrl();
     state.loading = true;
     renderGrid();
 
-    var params = new URLSearchParams();
-    fetch('/api/coas?' + params.toString(), { credentials: 'include' })
+    // Always fetch the unfiltered set once so the product pills can list every
+    // product that has a published report; only then narrow the grid if the
+    // URL asked for a filter. A bare /coas.html always shows everything.
+    fetch('/api/coas', { credentials: 'include' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        state.coas = (data && data.coas) || [];
-      state.unavailable = !!(data && data.unavailable);
-        state.loading = false;
-        buildProductFilter(state.coas);
-        renderGrid();
+        var all = (data && data.coas) || [];
+        state.unavailable = !!(data && data.unavailable);
+        buildProductFilter(all);
+
+        if (state.productFilter || state.search) {
+          loadCoas({ updateUrl: false });
+        } else {
+          state.coas = all;
+          state.loading = false;
+          renderGrid();
+        }
+
         if (openId) openCoaModal(openId);
       })
       .catch(function () {
-      state.coas = [];
-      state.unavailable = true;
+        state.coas = [];
+        state.unavailable = true;
         state.loading = false;
         renderGrid();
       });
+
+    // A page restored from the back/forward cache keeps its old JavaScript
+    // state, including any product filter that was active when the user left.
+    // Re-apply whatever the URL says so the canonical COA page never comes
+    // back showing a stale, filtered subset of the reports.
+    window.addEventListener('pageshow', function (evt) {
+      if (!evt.persisted) return;
+      applyStateFromUrl();
+      loadCoas({ updateUrl: false });
+    });
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', init);
 })();
