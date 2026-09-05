@@ -13,6 +13,59 @@ function getQuantityDiscountRate(quantity) {
   return 0;
 }
 
+/**
+ * The one place an order's money is decided.
+ *
+ * Every input is server-side: prices read from the products table, the
+ * discount computed from the promo row, the shipping cost read back from the
+ * carrier. The browser chooses what is bought and which code to try; it never
+ * gets to say what any of it costs.
+ */
+function computeCheckoutTotals(input) {
+  const opts = input || {};
+  const subtotalBeforeDiscount = money(opts.subtotalBeforeDiscount);
+  const requestedDiscount = money(opts.discountAmount || 0);
+  // A discount is never negative and never exceeds what is being bought, so a
+  // fixed-amount code larger than the cart cannot produce a negative total.
+  const discountAmount = money(Math.min(Math.max(requestedDiscount, 0), subtotalBeforeDiscount));
+  const subtotalAfterDiscount = money(subtotalBeforeDiscount - discountAmount);
+  // Free shipping is earned on what is actually paid for goods, so a discount
+  // that drops the cart under the threshold also drops the perk.
+  const freeShippingApplies = Boolean(opts.freeShippingEligible)
+    && subtotalAfterDiscount >= Number(opts.freeShippingThreshold);
+  const shippingCost = money(freeShippingApplies ? 0 : Math.max(Number(opts.carrierRate || 0), 0));
+  const total = money(subtotalAfterDiscount + shippingCost);
+  return {
+    subtotalBeforeDiscount,
+    discountAmount,
+    subtotalAfterDiscount,
+    shippingCost,
+    freeShippingApplies,
+    total,
+  };
+}
+
+/**
+ * Refuse to write an order whose numbers do not add up. Returns the list of
+ * problems found, empty when the totals are sound.
+ */
+function assertTotalsConsistent(totals) {
+  const t = totals || {};
+  const problems = [];
+  if (!(t.subtotalBeforeDiscount >= 0)) problems.push("subtotal is negative");
+  if (!(t.discountAmount >= 0)) problems.push("discount is negative");
+  if (t.discountAmount > t.subtotalBeforeDiscount) problems.push("discount exceeds subtotal");
+  if (money(t.subtotalBeforeDiscount - t.discountAmount) !== money(t.subtotalAfterDiscount)) {
+    problems.push("discounted subtotal does not equal subtotal minus discount");
+  }
+  if (!(t.shippingCost >= 0)) problems.push("shipping is negative");
+  if (money(t.subtotalAfterDiscount + t.shippingCost) !== money(t.total)) {
+    problems.push("total does not equal discounted subtotal plus shipping");
+  }
+  if (!(t.total >= 0)) problems.push("total is negative");
+  return problems;
+}
+
 async function getCartId(client, userId, lockRow) {
   const lockClause = lockRow ? " FOR UPDATE" : "";
   const cartRes = await client.query(
@@ -240,6 +293,7 @@ function createOrdersRouter(requireAuth) {
         totals: {
           subtotal: order.subtotal,
           subtotal_before_discount: order.subtotal_before_discount,
+          subtotal_after_discount: money(Number(order.total || 0) - Number(order.shipping_cost || 0)),
           discount_amount: order.discount_amount,
           promo_code: order.promo_code,
           shipping_cost: order.shipping_cost,
@@ -379,12 +433,29 @@ async function createOrder(req, res) {
 
     const canonicalService = classifyUspsService(verifiedRate.carrier, verifiedRate.service);
     const isGroundAdvantage = canonicalService === 'USPS Ground Advantage';
-    const freeShipApplies = subtotalAfterDiscount >= FREE_SHIPPING_THRESHOLD && isGroundAdvantage;
-    const shippingCost = money(freeShipApplies ? 0 : Number(verifiedRate.rate || 0));
+
+    const totals = computeCheckoutTotals({
+      subtotalBeforeDiscount,
+      discountAmount,
+      carrierRate: Number(verifiedRate.rate || 0),
+      freeShippingEligible: isGroundAdvantage,
+      freeShippingThreshold: FREE_SHIPPING_THRESHOLD,
+    });
+
+    // Nothing is written unless the money adds up.
+    const totalsProblems = assertTotalsConsistent(totals);
+    if (totalsProblems.length) {
+      await client.query("ROLLBACK");
+      console.error("[orders] refusing to write inconsistent totals", { problems: totalsProblems });
+      return res.status(500).json({ error: "Failed to create order" });
+    }
+
+    discountAmount = totals.discountAmount;
+    subtotalAfterDiscount = totals.subtotalAfterDiscount;
+    const shippingCost = totals.shippingCost;
+    const total = totals.total;
     const shippingService = canonicalService || verifiedRate.service || null;
     const shippingDeliveryDays = verifiedRate.delivery_days != null ? Number(verifiedRate.delivery_days) : null;
-
-    const total = money(subtotalAfterDiscount + shippingCost);
     const shippingCountry = String(body.shipping_country || "").trim() || null;
     const shippingPhone = String(body.shipping_phone || "").trim() || null;
     const paymentMethod = String(body.payment_method || "").trim() || null;
@@ -502,14 +573,15 @@ async function createOrder(req, res) {
       await client.query(
         `INSERT INTO promo_code_redemptions (
             promo_code_id,
+            promo_code,
             user_id,
             order_id,
             discount_amount,
             subtotal_before_discount,
             final_total
          )
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [promoCodeId, userId, order.id, discountAmount, subtotalBeforeDiscount, total]
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [promoCodeId, promoCode, userId, order.id, discountAmount, subtotalBeforeDiscount, total]
       );
 
       await client.query(
@@ -539,8 +611,13 @@ async function createOrder(req, res) {
       payment_status: paymentStatus,
       shipping_service: shippingService,
       totals: {
-        subtotal: subtotalAfterDiscount,
+        // \"subtotal\" is the pre-discount figure everywhere it is shown: the
+        // confirmation page, the email and the admin order view all render
+        // Subtotal / Discount / Shipping / Total. Reporting the discounted
+        // number here made this response disagree with all three.
+        subtotal: subtotalBeforeDiscount,
         subtotal_before_discount: subtotalBeforeDiscount,
+        subtotal_after_discount: subtotalAfterDiscount,
         discount_amount: discountAmount,
         promo_code: promoCode,
         shipping_cost: shippingCost,
@@ -568,3 +645,5 @@ async function createOrder(req, res) {
 }
 
 module.exports = createOrdersRouter;
+module.exports.computeCheckoutTotals = computeCheckoutTotals;
+module.exports.assertTotalsConsistent = assertTotalsConsistent;
