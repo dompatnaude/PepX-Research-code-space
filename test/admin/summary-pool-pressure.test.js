@@ -18,22 +18,21 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
 const express = require('express');
 
 const createAdminRouter = require('../../routes/admin');
 
-const REPO = path.join(__dirname, '..', '..');
-
 // The pool ceiling this route has to live under, read from the real config so
 // the test follows the source of truth rather than a copy of it.
 function configuredPoolMax() {
-  const source = fs.readFileSync(path.join(REPO, 'db', 'connection.js'), 'utf8');
-  const match = source.match(/max:\s*(\d+)/);
-  assert.ok(match, 'could not read `max` from db/connection.js');
-  return Number(match[1]);
+  // Read the value the app will actually use. db/connection.js derives this at
+  // runtime now (smaller on serverless, DB_POOL_MAX overrides), so scraping a
+  // numeric literal out of the source no longer reflects the real ceiling.
+  const pool = require('../../db/connection');
+  const max = pool && pool.options && Number(pool.options.max);
+  assert.ok(Number.isFinite(max) && max > 0, 'could not read `max` from the configured pg pool');
+  return max;
 }
 
 // A stub pool that records how many queries are in flight simultaneously --

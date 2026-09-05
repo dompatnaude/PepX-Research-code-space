@@ -128,8 +128,13 @@ test('npm exposes the local dev commands', () => {
 test('boot migrations stay on by default and can be switched off explicitly', () => {
   const source = readSource('server.js');
   assert.match(source, /if \(String\(process\.env\.SKIP_DB_MIGRATIONS\)\.toLowerCase\(\) === 'true'\)/);
-  assert.match(source, /} else \{\s*await runMigrations\(\);\s*\}/,
+  const bootBlock = source.slice(source.indexOf("String(process.env.SKIP_DB_MIGRATIONS)"));
+  assert.match(bootBlock, /await runMigrations\(\);/,
     'migrations must still run when the flag is not set');
+  // A migration that cannot reach the database must not stop the server from
+  // listening: that turned a transient database problem into a full outage.
+  assert.match(bootBlock.slice(0, 900), /catch \(error\)/,
+    'a failed migration must be caught so the server still boots');
 });
 
 test('migration 019 contains only SQL', () => {

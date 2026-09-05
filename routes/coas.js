@@ -1,15 +1,10 @@
 'use strict';
 
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
 const pool = require('../db/connection');
+const coaStorage = require('../services/coa-storage');
 
 // Shared helpers -------------------------------------------------------
-
-function coaUploadDir() {
-  return process.env.COA_UPLOAD_DIR || path.join(__dirname, '..', 'uploads', 'coas');
-}
 
 function toPublicCoa(row) {
   return {
@@ -113,8 +108,14 @@ function createCoasRouter() {
         }
       });
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to load COAs' });
-    }
+    console.error('[coa list] failed', err && err.stack ? err.stack : err);
+    return res.status(503).json({
+      error: 'COA information is temporarily unavailable.',
+      unavailable: true,
+      coas: [],
+      pagination: { page: 1, pageSize: 0, total: 0, totalPages: 0 }
+    });
+  }
   });
 
   // GET /api/coas/:id
@@ -140,73 +141,83 @@ function createCoasRouter() {
 
       return res.json({ coa: toPublicCoa(result.rows[0]) });
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to load COA' });
-    }
+    console.error('[coa detail] failed', err && err.stack ? err.stack : err);
+    return res.status(503).json({ error: 'COA information is temporarily unavailable.', unavailable: true });
+  }
   });
 
-  // GET /api/coas/:id/file  — serves the report for published COAs only
+  // GET /api/coas/:id/file -- serves the report for published COAs only.
+  // Answers with a buffer rather than piping a stream: a deleted or unreadable
+  // file becomes a clean 404 instead of an unhandled 'error' event on a stream,
+  // which in Node terminates the process.
   router.get('/:id/file', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (!id) return res.status(404).end();
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (!id) return res.status(404).end();
 
-      const result = await pool.query(
-        `SELECT file_storage_key, file_name, file_mime_type
-           FROM coas
-          WHERE id = $1 AND status = 'published'`,
-        [id]
-      );
+        const result = await pool.query(
+          `SELECT file_storage_key, file_name, file_mime_type
+FROM coas
+WHERE id = $1 AND status = 'published'`,
+          [id]
+        );
 
-      const row = result.rows[0];
-      if (!row || !row.file_storage_key) return res.status(404).end();
+        const row = result.rows[0];
+        if (!row || !row.file_storage_key) return res.status(404).end();
 
-      const filePath = path.join(coaUploadDir(), row.file_storage_key);
+        const stored = await coaStorage.readFile(pool, row.file_storage_key);
+        if (!stored || !stored.buffer || !stored.buffer.length) {
+          coaStorage.logCoa('file.missing', {
+              scope: 'public', coaId: id, storageKey: row.file_storage_key
+          });
+          return res.status(404).end();
+        }
 
-      // Reject path-traversal attempts
-      if (!filePath.startsWith(coaUploadDir())) return res.status(400).end();
+        const mime = row.file_mime_type || stored.mimeType || 'application/octet-stream';
+        const displayName = String(row.file_name || row.file_storage_key).replace(/["\r\n]/g, '');
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Content-Length', String(stored.buffer.length));
+            res.setHeader('Content-Disposition', 'inline; filename="' + displayName + '"');
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Cache-Control', 'private, max-age=300');
+            return res.end(stored.buffer);
+          } catch (err) {
+            console.error('[coa public file] failed', err && err.stack ? err.stack : err);
+            return res.status(503).end();
+          }
+      });
 
-      if (!fs.existsSync(filePath)) return res.status(404).end();
+      // GET /api/coas/:id/thumbnail -- serves the thumbnail for published COAs.
+      router.get('/:id/thumbnail', async (req, res) => {
+          try {
+            const id = parseInt(req.params.id, 10);
+            if (!id) return res.status(404).end();
 
-      const mime = row.file_mime_type || 'application/octet-stream';
-      const displayName = row.file_name || row.file_storage_key;
-      res.setHeader('Content-Type', mime);
-      res.setHeader('Content-Disposition', 'inline; filename="' + displayName.replace(/"/g, '') + '"');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      return fs.createReadStream(filePath).pipe(res);
-    } catch (err) {
-      return res.status(500).end();
+            const result = await pool.query(
+              `SELECT thumbnail_storage_key
+FROM coas
+WHERE id = $1 AND status = 'published'`,
+              [id]
+            );
+
+            const row = result.rows[0];
+            if (!row || !row.thumbnail_storage_key) return res.status(404).end();
+
+            const stored = await coaStorage.readFile(pool, row.thumbnail_storage_key);
+            if (!stored || !stored.buffer || !stored.buffer.length) return res.status(404).end();
+
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Content-Length', String(stored.buffer.length));
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Cache-Control', 'private, max-age=300');
+            return res.end(stored.buffer);
+          } catch (err) {
+            console.error('[coa public thumbnail] failed', err && err.stack ? err.stack : err);
+            return res.status(503).end();
+          }
+      });
+
+      return router;
     }
-  });
 
-  // GET /api/coas/:id/thumbnail  — serves the thumbnail for published COAs
-  router.get('/:id/thumbnail', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (!id) return res.status(404).end();
-
-      const result = await pool.query(
-        `SELECT thumbnail_storage_key, file_mime_type
-           FROM coas
-          WHERE id = $1 AND status = 'published'`,
-        [id]
-      );
-
-      const row = result.rows[0];
-      if (!row || !row.thumbnail_storage_key) return res.status(404).end();
-
-      const filePath = path.join(coaUploadDir(), row.thumbnail_storage_key);
-      if (!filePath.startsWith(coaUploadDir())) return res.status(400).end();
-      if (!fs.existsSync(filePath)) return res.status(404).end();
-
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      return fs.createReadStream(filePath).pipe(res);
-    } catch (err) {
-      return res.status(500).end();
-    }
-  });
-
-  return router;
-}
-
-module.exports = createCoasRouter;
+    module.exports = createCoasRouter;

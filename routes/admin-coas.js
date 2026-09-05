@@ -2,40 +2,16 @@
 
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
+const os = require('os');
+const fsp = require('fs').promises;
 const { formidable } = require('formidable');
 const pool = require('../db/connection');
+const coaStorage = require('../services/coa-storage');
 
 // ---- constants -------------------------------------------------------
 
-const ACCEPTED_MIME_TYPES = new Set([
-  'application/pdf',
-  'image/png',
-  'image/jpeg'
-]);
-
-const ACCEPTED_EXTENSIONS = new Set(['.pdf', '.png', '.jpg', '.jpeg']);
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
-
 // ---- helpers ---------------------------------------------------------
-
-function coaUploadDir() {
-  return process.env.COA_UPLOAD_DIR || path.join(__dirname, '..', 'uploads', 'coas');
-}
-
-function ensureUploadDir() {
-  const dir = coaUploadDir();
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-function safeExt(mime) {
-  if (mime === 'application/pdf') return '.pdf';
-  if (mime === 'image/png') return '.png';
-  if (mime === 'image/jpeg') return '.jpg';
-  return '';
-}
 
 function toAdminCoa(row) {
   return {
@@ -184,7 +160,8 @@ function createAdminCoasRouter(requireAuth) {
 
       return res.json({
         coas: rows.rows.map(toAdminCoa),
-        pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
+        pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+        limits: { maxUploadBytes: coaStorage.maxUploadBytes() }
       });
     } catch (err) {
       return res.status(500).json({ error: 'Failed to load COAs' });
@@ -440,159 +417,246 @@ function createAdminCoasRouter(requireAuth) {
         return res.status(400).json({ error: 'Published COAs must be archived before deletion' });
       }
 
-      // Remove stored files
-      const dir = coaUploadDir();
-      if (row.file_storage_key) {
-        const fp = path.join(dir, row.file_storage_key);
-        if (fp.startsWith(dir) && fs.existsSync(fp)) fs.unlinkSync(fp);
-      }
-      if (row.thumbnail_storage_key) {
-        const tp = path.join(dir, row.thumbnail_storage_key);
-        if (tp.startsWith(dir) && fs.existsSync(tp)) fs.unlinkSync(tp);
-      }
+      // Remove the record and its stored bytes together, so a delete can never
+        // leave a file behind that nothing points at.
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          if (row.file_storage_key) await coaStorage.deleteFile(client, row.file_storage_key);
+          if (row.thumbnail_storage_key) await coaStorage.deleteFile(client, row.thumbnail_storage_key);
+          await client.query('DELETE FROM coas WHERE id = $1', [id]);
+          await client.query('COMMIT');
+        } catch (txErr) {
+          try { await client.query('ROLLBACK'); } catch (rollbackErr) { /* connection already broken */ }
+          throw txErr;
+        } finally {
+          client.release();
+        }
+        coaStorage.logCoa('deleted', { coaId: id, adminUserId: req.adminUserId });
+        return res.json({ ok: true });
 
-      await pool.query('DELETE FROM coas WHERE id = $1', [id]);
-      return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: 'Failed to delete COA' });
     }
   });
 
-  // POST /api/admin/coas/:id/file — upload or replace the report file
+  // POST /api/admin/coas/:id/file -- upload or replace the report file.
+  //
+  // Order of operations: validate the request -> validate the admin (gate) ->
+  // load the COA -> parse the upload into a scratch directory -> validate size,
+  // extension and the REAL content type -> write the file bytes and the coas row
+  // inside ONE transaction -> respond. Every failure path rolls the transaction
+  // back and deletes the scratch file, so a failed upload can never leave a
+  // half-created record or an orphaned file behind.
   router.post('/coas/:id/file', gate, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (!id) return res.status(404).json({ error: 'Not found' });
+      const startedAt = Date.now();
+      let scratchPath = null;
+      let client = null;
 
-      const existing = await pool.query(
-        'SELECT id, file_storage_key, thumbnail_storage_key FROM coas WHERE id = $1',
-        [id]
-      );
-      if (!existing.rows.length) return res.status(404).json({ error: 'Not found' });
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (!id) return res.status(404).json({ error: 'COA not found' });
 
-      const dir = ensureUploadDir();
+        const existing = await pool.query(
+          'SELECT id, product_id, file_storage_key FROM coas WHERE id = $1',
+          [id]
+        );
+        if (!existing.rows.length) return res.status(404).json({ error: 'COA not found' });
+        const coaRow = existing.rows[0];
 
-      const form = formidable({
-        uploadDir: dir,
-        maxFileSize: MAX_FILE_SIZE,
-        maxFiles: 1,
-        keepExtensions: false,
-        filename: () => crypto.randomUUID() // temporary name, renamed after MIME check
+        const maxBytes = coaStorage.maxUploadBytes();
+        const maxMb = Math.round(maxBytes / (1024 * 1024));
+
+        coaStorage.logCoa('upload.start', {
+            coaId: id,
+            productId: coaRow.product_id,
+            adminUserId: req.adminUserId,
+            maxBytes: maxBytes
+        });
+
+        // Parse into the OS scratch directory. It is writable on every host we run
+        // on, including read-only serverless filesystems where the old code called
+        // mkdirSync inside the deployment and threw EROFS.
+        const form = formidable({
+            uploadDir: os.tmpdir(),
+            maxFileSize: maxBytes,
+            maxFiles: 1,
+            keepExtensions: false,
+            filename: function () { return 'coa-upload-' + crypto.randomUUID(); }
+        });
+
+        let files;
+        try {
+          const parsed = await form.parse(req);
+          files = parsed[1];
+        } catch (parseErr) {
+          const msg = String((parseErr && parseErr.message) || '').toLowerCase();
+          const tooBig = msg.includes('maxfilesize') || msg.includes('max file size') || msg.includes('size');
+          coaStorage.logCoa('upload.parse_failed', {
+              coaId: id, tooBig: tooBig, code: parseErr && parseErr.code
+          });
+          return res.status(400).json({
+              error: tooBig
+              ? ('File exceeds the ' + maxMb + ' MB limit.')
+              : 'The uploaded file could not be read. Please try again.'
+          });
+        }
+
+        const fileArr = (files && (files.file || files.report)) || null;
+        const uploaded = Array.isArray(fileArr) ? fileArr[0] : fileArr;
+        if (!uploaded || !uploaded.filepath) {
+          coaStorage.logCoa('upload.no_file', { coaId: id });
+          return res.status(400).json({ error: 'No file was received. Please choose a file and try again.' });
+        }
+        scratchPath = uploaded.filepath;
+
+        const originalName = String(uploaded.originalFilename || '').trim();
+        const declaredMime = String(uploaded.mimetype || '').toLowerCase().trim();
+        const originalExt = path.extname(originalName).toLowerCase();
+
+        if (originalExt && !coaStorage.ACCEPTED_EXTENSIONS.has(originalExt)) {
+          coaStorage.logCoa('upload.rejected_extension', { coaId: id, ext: originalExt });
+          return res.status(400).json({ error: 'Unsupported file type. Accepted formats: PDF, PNG, JPG.' });
+        }
+
+        const buffer = await fsp.readFile(scratchPath);
+        if (!buffer.length) {
+          return res.status(400).json({ error: 'The uploaded file is empty.' });
+        }
+        if (buffer.length > maxBytes) {
+          return res.status(400).json({ error: 'File exceeds the ' + maxMb + ' MB limit.' });
+        }
+
+        // Trust the bytes, not the browser-declared type.
+        const mimeType = coaStorage.sniffMimeType(buffer);
+        if (!mimeType || !coaStorage.ACCEPTED_MIME_TYPES.has(mimeType)) {
+          coaStorage.logCoa('upload.rejected_content', {
+              coaId: id, declaredMime: declaredMime, bytes: buffer.length
+          });
+          return res.status(400).json({
+              error: 'Unsupported file type. The file contents are not a PDF, PNG or JPG.'
+          });
+        }
+
+        const storageKey = crypto.randomUUID() + coaStorage.extensionForMime(mimeType);
+        const displayName =
+        (path.basename(originalName).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200)) || storageKey;
+        const previousKey = coaRow.file_storage_key;
+
+        client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          await coaStorage.putFile(client, {
+              storageKey: storageKey, coaId: id, mimeType: mimeType, buffer: buffer
+          });
+          await client.query(
+            `UPDATE coas SET
+file_storage_key = $1,
+file_name = $2,
+file_mime_type = $3,
+file_size = $4,
+thumbnail_storage_key = NULL,
+updated_by = $5,
+updated_at = NOW()
+WHERE id = $6`,
+            [storageKey, displayName, mimeType, buffer.length, req.adminUserId, id]
+          );
+          if (previousKey && previousKey !== storageKey) {
+            await coaStorage.deleteFile(client, previousKey);
+          }
+          await client.query('COMMIT');
+        } catch (txErr) {
+          try {
+            await client.query('ROLLBACK');
+          } catch (rollbackErr) {
+            coaStorage.logCoa('upload.rollback_failed', { coaId: id, code: rollbackErr && rollbackErr.code });
+          }
+          throw txErr;
+        } finally {
+          client.release();
+          client = null;
+        }
+
+        // Local copy is a cache only, and only after the transaction committed.
+        coaStorage.writeDiskCache(storageKey, buffer);
+
+        coaStorage.logCoa('upload.success', {
+            coaId: id,
+            productId: coaRow.product_id,
+            adminUserId: req.adminUserId,
+            storageKey: storageKey,
+            fileName: displayName,
+            mimeType: mimeType,
+            bytes: buffer.length,
+            ms: Date.now() - startedAt
+        });
+
+        return res.json({
+            ok: true,
+            storageKey: storageKey,
+            mimeType: mimeType,
+            fileName: displayName,
+            fileSize: buffer.length
+        });
+      } catch (err) {
+        coaStorage.logCoa('upload.failed', {
+            coaId: parseInt(req.params.id, 10) || null,
+            adminUserId: req.adminUserId || null,
+            code: err && err.code,
+            message: err && err.message
+        });
+        console.error('[coa upload] unexpected failure', err && err.stack ? err.stack : err);
+        return res.status(500).json({
+            error: 'Unable to save the report file. The COA record was not changed.'
+        });
+      } finally {
+        if (client) { try { client.release(); } catch (releaseErr) { /* already released */ } }
+        if (scratchPath) {
+          try { await fsp.unlink(scratchPath); } catch (unlinkErr) { /* already gone */ }
+        }
+      }
+  });
+
+  // GET /api/admin/coas/:id/file -- admin preview, any status.
+  // Reads through the storage layer (disk cache first, database second) and
+  // answers with a buffer rather than piping a stream, so a missing or
+  // unreadable file is a clean 404 instead of an unhandled stream error.
+  router.get('/coas/:id/file', gate, async (req, res) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (!id) return res.status(404).json({ error: 'Not found' });
+
+        const result = await pool.query(
+          'SELECT file_storage_key, file_name, file_mime_type FROM coas WHERE id = $1',
+          [id]
+        );
+        const row = result.rows[0];
+        if (!row || !row.file_storage_key) {
+          return res.status(404).json({ error: 'No report file is attached to this COA' });
+        }
+
+        const stored = await coaStorage.readFile(pool, row.file_storage_key);
+        if (!stored || !stored.buffer || !stored.buffer.length) {
+          coaStorage.logCoa('file.missing', {
+              scope: 'admin', coaId: id, storageKey: row.file_storage_key
+          });
+          return res.status(404).json({ error: 'The stored report file is no longer available' });
+        }
+
+        const mime = row.file_mime_type || stored.mimeType || 'application/octet-stream';
+        const displayName = String(row.file_name || row.file_storage_key).replace(/["\r\n]/g, '');
+            res.setHeader('Content-Type', mime);
+            res.setHeader('Content-Length', String(stored.buffer.length));
+            res.setHeader('Content-Disposition', 'inline; filename="' + displayName + '"');
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            return res.end(stored.buffer);
+          } catch (err) {
+            console.error('[coa admin file] failed', err && err.stack ? err.stack : err);
+            return res.status(500).json({ error: 'Unable to load the report file' });
+          }
       });
 
-      let fields, files;
-      try {
-        [fields, files] = await form.parse(req);
-      } catch (parseErr) {
-        const msg = String(parseErr && parseErr.message || '').toLowerCase();
-        if (msg.includes('maxfilesize') || msg.includes('size')) {
-          return res.status(400).json({ error: 'File exceeds the 25 MB size limit' });
-        }
-        return res.status(400).json({ error: 'File upload failed' });
-      }
-
-      const fileArr = files.file || files.report;
-      const uploaded = Array.isArray(fileArr) ? fileArr[0] : fileArr;
-      if (!uploaded || !uploaded.filepath) {
-        return res.status(400).json({ error: 'No file received' });
-      }
-
-      const mime = (uploaded.mimetype || '').toLowerCase().trim();
-      const origName = uploaded.originalFilename || uploaded.newFilename || '';
-      const origExt = path.extname(origName).toLowerCase();
-
-      // Validate MIME type
-      if (!ACCEPTED_MIME_TYPES.has(mime)) {
-        fs.unlinkSync(uploaded.filepath);
-        return res.status(400).json({ error: 'Unsupported file type. Accepted: PDF, PNG, JPG, JPEG' });
-      }
-
-      // Validate extension matches MIME
-      if (origExt && !ACCEPTED_EXTENSIONS.has(origExt)) {
-        fs.unlinkSync(uploaded.filepath);
-        return res.status(400).json({ error: 'File extension does not match accepted types' });
-      }
-
-      const ext = safeExt(mime);
-      const storageKey = crypto.randomUUID() + ext;
-      const finalPath = path.join(dir, storageKey);
-
-      fs.renameSync(uploaded.filepath, finalPath);
-
-      const oldRow = existing.rows[0];
-
-      // Remove old file if being replaced
-      if (oldRow.file_storage_key && oldRow.file_storage_key !== storageKey) {
-        const oldPath = path.join(dir, oldRow.file_storage_key);
-        if (oldPath.startsWith(dir) && fs.existsSync(oldPath)) {
-          fs.unlinkSync(oldPath);
-        }
-      }
-      if (oldRow.thumbnail_storage_key) {
-        const oldThumb = path.join(dir, oldRow.thumbnail_storage_key);
-        if (oldThumb.startsWith(dir) && fs.existsSync(oldThumb)) {
-          fs.unlinkSync(oldThumb);
-        }
-      }
-
-      const sanitizedName = path.basename(origName).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200) || storageKey;
-
-      await pool.query(
-        `UPDATE coas SET
-           file_storage_key      = $1,
-           file_name             = $2,
-           file_mime_type        = $3,
-           file_size             = $4,
-           thumbnail_storage_key = NULL,
-           updated_by            = $5,
-           updated_at            = NOW()
-         WHERE id = $6`,
-        [
-          storageKey,
-          sanitizedName,
-          mime,
-          uploaded.size || null,
-          req.adminUserId,
-          id
-        ]
-      );
-
-      return res.json({ ok: true, storageKey, mimeType: mime, fileName: sanitizedName });
-    } catch (err) {
-      return res.status(500).json({ error: 'Failed to upload file' });
-    }
-  });
-
-  // GET /api/admin/coas/:id/file — serve the file for admin preview (any status)
-  router.get('/coas/:id/file', gate, async (req, res) => {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (!id) return res.status(404).end();
-
-      const result = await pool.query(
-        'SELECT file_storage_key, file_name, file_mime_type FROM coas WHERE id = $1',
-        [id]
-      );
-      const row = result.rows[0];
-      if (!row || !row.file_storage_key) return res.status(404).end();
-
-      const dir = coaUploadDir();
-      const filePath = path.join(dir, row.file_storage_key);
-      if (!filePath.startsWith(dir)) return res.status(400).end();
-      if (!fs.existsSync(filePath)) return res.status(404).end();
-
-      const mime = row.file_mime_type || 'application/octet-stream';
-      const displayName = row.file_name || row.file_storage_key;
-      res.setHeader('Content-Type', mime);
-      res.setHeader('Content-Disposition', 'inline; filename="' + displayName.replace(/"/g, '') + '"');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      return fs.createReadStream(filePath).pipe(res);
-    } catch (err) {
-      return res.status(500).end();
-    }
-  });
-
-  // GET /api/admin/coas-products — products with their active variants for the COA form dropdown
+      // GET /api/admin/coas-products — products with their active variants for the COA form dropdown
   // Reuses products + product_variants tables (same data as the admin Products page).
   router.get('/coas-products', gate, async (req, res) => {
     try {
@@ -644,6 +708,6 @@ function createAdminCoasRouter(requireAuth) {
   });
 
   return router;
-}
+    }
 
-module.exports = createAdminCoasRouter;
+    module.exports = createAdminCoasRouter;
