@@ -315,8 +315,8 @@
       }).join('') || '<tr><td colspan="6" class="muted">No recent orders.</td></tr>';
       Array.prototype.forEach.call(recentOrders.querySelectorAll('[data-open-order]'), function (btn) {
         btn.addEventListener('click', function () {
-          openOrder(parseInt(btn.getAttribute('data-open-order'), 10));
           switchTab('orders');
+          toggleAdminOrder(parseInt(btn.getAttribute('data-open-order'), 10), { forceOpen: true });
         });
       });
     }
@@ -1190,12 +1190,78 @@
         + '<td>' + tracking + '</td>'
         + '<td>' + statusBadge(o.payment_status) + '</td>'
         + '<td>' + statusBadge(o.tracking_status) + '</td>'
-        + '<td><button class="link-btn" data-open="' + o.id + '">Open</button></td>'
-        + '</tr>';
+        + '<td><button type="button" class="link-btn" data-open="' + o.id + '" id="admin-order-toggle-' + o.id + '" aria-expanded="false" aria-controls="admin-order-panel-' + o.id + '">Open</button></td>'
+        + '</tr>'
+        + '<tr class="admin-order-detail-row" data-detail-for="' + o.id + '" hidden>'
+        + '<td colspan="11" class="admin-order-detail-cell">'
+        + '<div class="admin-order-inline-detail" id="admin-order-panel-' + o.id + '" role="region" aria-labelledby="admin-order-toggle-' + o.id + '"></div>'
+        + '</td></tr>';
     }).join('');
     Array.prototype.forEach.call(body.querySelectorAll('[data-open]'), function (btn) {
-      btn.addEventListener('click', function () { openOrder(parseInt(btn.getAttribute('data-open'), 10)); });
-    });
+        btn.addEventListener('click', function () { toggleAdminOrder(parseInt(btn.getAttribute('data-open'), 10)); });
+      });
+      Array.prototype.forEach.call(body.querySelectorAll('[data-admin-order-retry]'), function (btn) {
+        btn.addEventListener('click', function () { toggleAdminOrder(parseInt(btn.getAttribute('data-admin-order-retry'), 10), { forceOpen: true }); });
+      });
+      restoreExpandedAdminOrder();
+  }
+
+  var adminExpandedOrderId = null;
+
+  function adminOrderPanel(id){ return document.getElementById('admin-order-panel-' + id); }
+  function adminOrderRow(id){ return document.querySelector('tr.admin-order-detail-row[data-detail-for="' + id + '"]'); }
+  function adminOrderToggle(id){ return document.getElementById('admin-order-toggle-' + id); }
+
+  function adminSetToggleState(id, open){
+    var btn = adminOrderToggle(id);
+    if (!btn) return;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.textContent = open ? 'Close' : 'Open';
+  }
+
+  function adminShowDetailRow(id){
+    var row = adminOrderRow(id);
+    if (row) row.hidden = false;
+    adminSetToggleState(id, true);
+  }
+
+  function closeExpandedAdminOrder(){
+    if (adminExpandedOrderId === null) return;
+    var row = adminOrderRow(adminExpandedOrderId);
+    if (row) row.hidden = true;
+    adminSetToggleState(adminExpandedOrderId, false);
+    var legacy = $('orderDetail');
+    if (legacy) legacy.classList.add('hidden');
+    adminExpandedOrderId = null;
+  }
+
+  function adminAfterRenderDetail(panel){
+    if (adminOrderRow(state.currentId)) { adminShowDetailRow(state.currentId); return; }
+    if (panel && panel.classList) panel.classList.remove('hidden');
+  }
+
+  function adminOrderErrorMarkup(id){
+    return '<div class="muted admin-order-detail-error">Could not load this order. '
+      + '<button type="button" class="link-btn" data-admin-order-retry="' + id + '">Try again</button></div>';
+  }
+
+  function restoreExpandedAdminOrder(){
+    if (adminExpandedOrderId === null) return;
+    if (!adminOrderRow(adminExpandedOrderId)) { adminExpandedOrderId = null; return; }
+    adminShowDetailRow(adminExpandedOrderId);
+    if (state.orderDetail && state.currentId === adminExpandedOrderId) renderDetail(state.orderDetail);
+  }
+
+  function toggleAdminOrder(id, options){
+    options = options || {};
+    if (!Number.isInteger(id)) return Promise.resolve(null);
+    if (adminExpandedOrderId === id && !options.forceOpen) { closeExpandedAdminOrder(); return Promise.resolve(null); }
+    closeExpandedAdminOrder();
+    adminExpandedOrderId = id;
+    var panel = adminOrderPanel(id);
+    if (panel) panel.innerHTML = '<div class="muted">Loading order...</div>';
+    adminShowDetailRow(id);
+    return openOrder(id);
   }
 
   function openOrder(id) {
@@ -1210,7 +1276,11 @@
     state.shipping.info = '';
     state.shipping.addressVerification = null;
     return api('/api/admin/orders/' + id).then(function (d) { renderDetail(d); })
-      .catch(function (err) { toast(err.message || 'Failed to open order'); });
+      .catch(function (err) {
+        var failPanel = adminOrderPanel(id);
+        if (failPanel) failPanel.innerHTML = adminOrderErrorMarkup(id);
+        toast(err.message || 'Failed to open order');
+      });
   }
 
   function renderDetail(d) {
@@ -1223,7 +1293,7 @@
     var latestShipment = shipments.length ? shipments[0] : null;
     var activeShipment = shipments.find(function (s) { return s.purchasedAt && !s.isVoided; }) || null;
     var displayShipment = activeShipment || latestShipment || null;
-    var panel = $('orderDetail');
+    var panel = adminOrderPanel(state.currentId) || $('orderDetail');
     var itemsRows = items.map(function (it) {
       var variant = it.variant_name ? '<div class="muted">' + esc(it.variant_name) + '</div>' : '';
       return '<tr><td>' + esc(it.name) + variant + '</td><td>' + (Number(it.quantity) || 0) + '</td><td>'
@@ -1382,9 +1452,9 @@
           ? '<button id="btnConfirmZelle" class="zelle-confirm-btn">Mark Zelle Payment Received</button>'
           : '')
       + '</div>';
-    panel.classList.remove('hidden');
+    adminAfterRenderDetail(panel);
 
-    $('detailClose').addEventListener('click', function () { panel.classList.add('hidden'); });
+    $('detailClose').addEventListener('click', function () { closeExpandedAdminOrder(); });
     $('btnProcessing').addEventListener('click', function () { setStatus('processing'); });
     $('btnShipped').addEventListener('click', function () { setStatus('shipped'); });
     if ($('btnConfirmZelle')) {
@@ -2463,7 +2533,7 @@
       var rst = e.target.closest('#resetPwBtn');
       if (rst) { sendReset(rst.getAttribute('data-customer')); return; }
       var ord = e.target.closest('[data-order]');
-      if (ord) { e.preventDefault(); openOrder(parseInt(ord.getAttribute('data-order'), 10)); }
+      if (ord) { e.preventDefault(); switchTab('orders'); toggleAdminOrder(parseInt(ord.getAttribute('data-order'), 10), { forceOpen: true }); return; }
     });
     var closeBtn = $('customerDetailClose');
     if (closeBtn) closeBtn.addEventListener('click', function () { $('customerDetailWrap').classList.add('hidden'); });

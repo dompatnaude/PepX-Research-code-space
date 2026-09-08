@@ -2183,14 +2183,22 @@ function formatMemberSince(value){
   });
 }
 
-function buildOrderListCard(order){
+function panelDomId(scope, orderId){ return 'order-detail-panel-' + scope + '-' + orderId; }
+
+function toggleDomId(scope, orderId){ return 'order-detail-toggle-' + scope + '-' + orderId; }
+
+function buildOrderListCard(order, scope){
+  scope = scope || 'orders';
   var status = String(order.status || 'processing');
   var statusTone = getStatusTone(status);
   var orderId = Number(order.id);
   var actionMarkup = Number.isInteger(orderId)
-    ? '<button type="button" class="btn ghost btn-sm" data-order-view="' + orderId + '">View Order</button>'
+    ? '<button type="button" class="btn ghost btn-sm" id="' + toggleDomId(scope, orderId) + '" data-order-view="' + orderId + '" aria-expanded="false" aria-controls="' + panelDomId(scope, orderId) + '">View Order</button>'
     : '<button type="button" class="btn ghost btn-sm" disabled title="Order unavailable">View Order</button>';
-  return '<article class="account-order-card">' +
+  var detailMarkup = Number.isInteger(orderId)
+    ? '<div class="account-order-inline-detail" id="' + panelDomId(scope, orderId) + '" role="region" aria-labelledby="' + toggleDomId(scope, orderId) + '" hidden></div>'
+    : '';
+  return '<article class="account-order-card" data-order-scope="' + scope + '"' + (Number.isInteger(orderId) ? ' data-order-card="' + orderId + '"' : '') + '>' +
     '<div class="account-order-head">' +
       '<h4>' + escapeHtml(order.order_number || ('Order #' + order.id)) + '</h4>' +
       '<span class="account-order-status ' + statusTone + '">' + escapeHtml(status) + '</span>' +
@@ -2202,6 +2210,7 @@ function buildOrderListCard(order){
     '<div class="account-order-actions">' +
       actionMarkup +
     '</div>' +
+  detailMarkup +
   '</article>';
 }
 
@@ -2378,8 +2387,9 @@ function initAccountPage(){
     if(overviewRecentOrders){
       var preview = orders.slice(0, 3);
       overviewRecentOrders.innerHTML = preview.length
-        ? preview.map(buildOrderListCard).join('')
+        ? preview.map(function(o){ return buildOrderListCard(o, 'overview'); }).join('')
         : '<p class="account-empty">No orders yet.</p>';
+      restoreExpandedOrder('overview');
     }
   }
 
@@ -2387,12 +2397,14 @@ function initAccountPage(){
     if(!ordersList) return;
     var orders = state.orders || [];
     ordersList.innerHTML = orders.length
-      ? orders.map(buildOrderListCard).join('')
+      ? orders.map(function(o){ return buildOrderListCard(o, 'orders'); }).join('')
       : '<p class="account-empty">No orders found.</p>';
+    restoreExpandedOrder('orders');
   }
 
-  function renderOrderDetail(detail){
-    if(!orderDetailCard || !orderDetailBody || !detail || !detail.order) return;
+  function renderOrderDetail(detail, detailScope){
+    detailScope = detailScope || 'orders';
+    if(!detail || !detail.order) return null;
     var order = detail.order;
     var items = Array.isArray(detail.items) ? detail.items : [];
     var shippingLine = [order.shipping_address, order.shipping_city, order.shipping_state, order.shipping_zip, order.shipping_country]
@@ -2439,7 +2451,7 @@ function initAccountPage(){
       '</tr>';
     }).join('') : '<tr><td colspan="4">No line items found.</td></tr>';
 
-    orderDetailBody.innerHTML = '' +
+    var detailHtml = '' +
       '<section class="account-order-hero">' +
         '<div>' +
           '<p class="account-order-eyebrow">Order Details</p>' +
@@ -2504,10 +2516,11 @@ function initAccountPage(){
         getOrderTimelineMarkup(order) +
       '</div>';
 
-    orderDetailCard.classList.remove('hidden');
-    if(order && Number.isInteger(Number(order.id))){
-      updateOrderDetailUrl(Number(order.id));
-    }
+    var targetOrderId = Number(order.id);
+    if(!Number.isInteger(targetOrderId)) return null;
+    var targetPanel = document.getElementById(panelDomId(detailScope, targetOrderId));
+    if(targetPanel) targetPanel.innerHTML = detailHtml;
+    return detailHtml;
   }
 
   function updateOrderDetailUrl(orderId){
@@ -2521,16 +2534,159 @@ function initAccountPage(){
     window.history.replaceState({}, '', url.pathname + url.search + url.hash);
   }
 
+  var expandedOrderIds = { orders: null, overview: null };
+  var orderDetailCache = {};
+  var ORDER_ANIM_MS = 180;
+
+  function orderScopeOf(el){
+    var host = el && el.closest ? el.closest('[data-order-scope]') : null;
+    return (host && host.getAttribute('data-order-scope')) || 'orders';
+  }
+
+  function orderPanelEl(scope, orderId){ return document.getElementById(panelDomId(scope, orderId)); }
+  function orderToggleEl(scope, orderId){ return document.getElementById(toggleDomId(scope, orderId)); }
+
+  function prefersReducedMotion(){
+    try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch (e) { return false; }
+  }
+
+  function setOrderToggleState(btn, open){
+    if(!btn) return;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.textContent = open ? 'Hide Order' : 'View Order';
+  }
+
+  function collapseOrderPanel(scope, orderId, instant){
+    var panel = orderPanelEl(scope, orderId);
+    setOrderToggleState(orderToggleEl(scope, orderId), false);
+    if(!panel) return;
+    if(instant || prefersReducedMotion()){
+      panel.style.transition = '';
+      panel.style.height = '';
+      panel.hidden = true;
+      return;
+    }
+    panel.style.height = panel.scrollHeight + 'px';
+    void panel.offsetHeight;
+    panel.style.transition = 'height ' + ORDER_ANIM_MS + 'ms ease';
+    panel.style.height = '0px';
+    window.setTimeout(function(){
+      panel.style.transition = '';
+      panel.style.height = '';
+      panel.hidden = true;
+    }, ORDER_ANIM_MS);
+  }
+
+  function expandOrderPanel(scope, orderId){
+    var panel = orderPanelEl(scope, orderId);
+    setOrderToggleState(orderToggleEl(scope, orderId), true);
+    if(!panel) return;
+    panel.hidden = false;
+    if(prefersReducedMotion()){ panel.style.height = ''; return; }
+    var target = panel.scrollHeight;
+    panel.style.height = '0px';
+    void panel.offsetHeight;
+    panel.style.transition = 'height ' + ORDER_ANIM_MS + 'ms ease';
+    panel.style.height = target + 'px';
+    window.setTimeout(function(){
+      panel.style.transition = '';
+      panel.style.height = '';
+    }, ORDER_ANIM_MS);
+  }
+
+  function closeExpandedOrder(scope, instant){
+    var keys = scope ? [scope] : Object.keys(expandedOrderIds);
+    keys.forEach(function(key){
+      var current = expandedOrderIds[key];
+      if(current === null || current === undefined) return;
+      collapseOrderPanel(key, current, instant);
+      expandedOrderIds[key] = null;
+    });
+  }
+
+  function renderOrderPanelState(scope, orderId, mode){
+    var panel = orderPanelEl(scope, orderId);
+    if(!panel) return;
+    if(mode === 'loading'){
+      panel.innerHTML = '<p class="account-order-detail-status">Loading order details...</p>';
+    } else if(mode === 'error'){
+      panel.innerHTML = '<p class="account-order-detail-status account-order-detail-error">' +
+        '<span>We could not load this order right now.</span>' +
+        '<button type="button" class="btn ghost btn-sm" data-order-retry="' + orderId + '">Try again</button>' +
+        '</p>';
+    }
+  }
+
+  function loadOrderDetails(orderId){
+    if(!Number.isInteger(orderId)) return Promise.reject(new Error('Invalid order id'));
+    if(orderDetailCache[orderId]) return Promise.resolve(orderDetailCache[orderId]);
+    return authApi('/api/orders/' + orderId, { method: 'GET' }).then(function(detail){
+      orderDetailCache[orderId] = detail;
+      return detail;
+    });
+  }
+
+  function renderOrderDetails(detail, scope){ return renderOrderDetail(detail, scope); }
+
+  function syncOrderPanelHeight(scope, orderId){
+    var panel = orderPanelEl(scope, orderId);
+    if(!panel || panel.hidden) return;
+    if(panel.style.height && panel.style.height !== 'auto'){
+      panel.style.height = panel.scrollHeight + 'px';
+    }
+  }
+
+  function toggleOrderDetails(orderId, scope, options){
+    scope = scope || 'orders';
+    options = options || {};
+    if(!Number.isInteger(orderId)) return Promise.reject(new Error('Invalid order id'));
+    if(expandedOrderIds[scope] === undefined) expandedOrderIds[scope] = null;
+    var alreadyOpen = expandedOrderIds[scope] === orderId;
+    if(alreadyOpen && !options.forceOpen){
+      closeExpandedOrder(scope);
+      if(scope === 'orders') updateOrderDetailUrl(null);
+      return Promise.resolve(null);
+    }
+    closeExpandedOrder(scope);
+    expandedOrderIds[scope] = orderId;
+    var cached = orderDetailCache[orderId];
+    if(cached) renderOrderDetails(cached, scope);
+    else renderOrderPanelState(scope, orderId, 'loading');
+    expandOrderPanel(scope, orderId);
+    if(scope === 'orders') updateOrderDetailUrl(orderId);
+    return loadOrderDetails(orderId).then(function(detail){
+      if(expandedOrderIds[scope] !== orderId) return detail;
+      renderOrderDetails(detail, scope);
+      syncOrderPanelHeight(scope, orderId);
+      return detail;
+    }).catch(function(err){
+      if(expandedOrderIds[scope] === orderId){
+        renderOrderPanelState(scope, orderId, 'error');
+        syncOrderPanelHeight(scope, orderId);
+      }
+      throw err;
+    });
+  }
+
+  function restoreExpandedOrder(scope){
+    var current = expandedOrderIds[scope];
+    if(current === null || current === undefined) return;
+    var panel = orderPanelEl(scope, current);
+    if(!panel){ expandedOrderIds[scope] = null; return; }
+    setOrderToggleState(orderToggleEl(scope, current), true);
+    panel.hidden = false;
+    var cached = orderDetailCache[current];
+    if(cached) renderOrderDetails(cached, scope);
+    else renderOrderPanelState(scope, current, 'loading');
+  }
+
   function openOrderDetail(orderId){
     if(!Number.isInteger(orderId)){
       return Promise.reject(new Error('Invalid order id'));
     }
     setActiveTab('orders');
-    return authApi('/api/orders/' + orderId, { method: 'GET' })
-      .then(function(detail){
-        renderOrderDetail(detail);
-        return detail;
-      });
+    return toggleOrderDetails(orderId, 'orders', { forceOpen: true });
   }
 
   function getOrderIdFromLocation(){
@@ -2697,27 +2853,39 @@ function initAccountPage(){
 
   if(ordersList){
     ordersList.addEventListener('click', function(e){
+      var retryBtn = e.target.closest('[data-order-retry]');
+      if(retryBtn){
+        var retryId = parseInt(retryBtn.getAttribute('data-order-retry'), 10);
+        if(Number.isInteger(retryId)){
+          delete orderDetailCache[retryId];
+          toggleOrderDetails(retryId, orderScopeOf(retryBtn), { forceOpen: true }).catch(function(){});
+        }
+        return;
+      }
       var viewBtn = e.target.closest('[data-order-view]');
       if(!viewBtn) return;
       var orderId = parseInt(viewBtn.getAttribute('data-order-view'), 10);
       if(!Number.isInteger(orderId)) return;
-      openOrderDetail(orderId)
-        .catch(function(err){
-          setPageMessage(err.message || 'Failed to load order details.', true);
-        });
+      toggleOrderDetails(orderId, orderScopeOf(viewBtn)).catch(function(){});
     });
   }
 
   if(overviewRecentOrders){
     overviewRecentOrders.addEventListener('click', function(e){
+      var retryBtn = e.target.closest('[data-order-retry]');
+      if(retryBtn){
+        var retryId = parseInt(retryBtn.getAttribute('data-order-retry'), 10);
+        if(Number.isInteger(retryId)){
+          delete orderDetailCache[retryId];
+          toggleOrderDetails(retryId, orderScopeOf(retryBtn), { forceOpen: true }).catch(function(){});
+        }
+        return;
+      }
       var viewBtn = e.target.closest('[data-order-view]');
       if(!viewBtn) return;
       var orderId = parseInt(viewBtn.getAttribute('data-order-view'), 10);
       if(!Number.isInteger(orderId)) return;
-      openOrderDetail(orderId)
-        .catch(function(err){
-          setPageMessage(err.message || 'Failed to load order details.', true);
-        });
+      toggleOrderDetails(orderId, orderScopeOf(viewBtn)).catch(function(){});
     });
   }
 
