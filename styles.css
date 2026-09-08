@@ -1886,3 +1886,60 @@ right:max(clamp(14px,4vw,24px),env(safe-area-inset-right));
 max-width:100%;
 }
 }
+
+/* Inline order accordion (customer account + admin order lists) */
+.account-order-inline-detail{overflow:hidden;will-change:height;}
+.account-order-inline-detail[hidden]{display:none;}
+.account-order-card > .account-order-inline-detail:not([hidden]){border-top:1px solid #e5eaf5;margin-top:4px;padding-top:14px;}
+body.dark-mode .account-order-card > .account-order-inline-detail:not([hidden]){border-top-color:#2a3a5f;}
+.account-order-inline-detail > *:first-child{margin-top:0;}
+.account-order-inline-detail .account-order-hero{margin-bottom:14px;}
+.account-order-detail-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0;padding:6px 0;font-size:14px;color:#64748b;}
+.account-order-detail-error{color:#b3261e;}
+body.dark-mode .account-order-detail-status{color:#93a9d6;}
+.account-order-inline-detail p,
+.account-order-inline-detail h3,
+.account-order-inline-detail h4,
+.account-order-inline-detail td,
+.account-order-inline-detail a{overflow-wrap:anywhere;word-break:break-word;}
+.account-order-inline-detail .account-order-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%;}
+.account-order-card [data-order-view]:focus-visible{outline:2px solid #2f6df6;outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){.account-order-inline-detail{transition:none !important;}}
+
+/* Admin inline order accordion */
+tr.admin-order-detail-row[hidden]{display:none;}
+tr.admin-order-detail-row > td.admin-order-detail-cell{padding:0 12px 16px;background:#f8fbff;}
+body.dark-mode tr.admin-order-detail-row > td.admin-order-detail-cell{background:#0b1222;}
+.admin-order-inline-detail{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.admin-order-inline-detail > *:first-child{margin-top:0;}
+.admin-order-inline-detail h2,
+.admin-order-inline-detail p,
+.admin-order-inline-detail td,
+.admin-order-inline-detail a{overflow-wrap:anywhere;word-break:break-word;}
+.admin-order-detail-error{color:#b3261e;}
+[data-open][aria-expanded="true"]{font-weight:600;}
+.admin-table [data-open]:focus-visible,
+[data-order-view]:focus-visible{outline:2px solid #2f6df6;outline-offset:2px;}
+
+/* Inline order accordion: allow narrow viewports to shrink the detail grid */
+.account-order-card{min-width:0;}
+.account-order-inline-detail{min-width:0;max-width:100%;}
+.account-order-inline-detail .account-order-hero,
+.account-order-inline-detail .account-order-hero-meta,
+.account-order-inline-detail .account-order-customer,
+.account-order-inline-detail .account-order-detail-grid,
+.account-order-inline-detail .account-order-detail-block,
+.account-order-inline-detail .account-order-side,
+.account-order-inline-detail .account-order-totals,
+.account-order-inline-detail .account-order-table-wrap{min-width:0;max-width:100%;}
+.account-order-inline-detail .account-order-totals p{display:flex;justify-content:space-between;gap:12px;min-width:0;}
+.account-order-inline-detail .account-order-totals p > span{min-width:0;overflow-wrap:anywhere;}
+.account-order-inline-detail .account-order-totals p > strong{white-space:nowrap;}
+
+/* Keep prose words intact; only long tokens break mid-word */
+.account-order-inline-detail h3,
+.account-order-inline-detail h4,
+.account-order-inline-detail strong,
+.account-order-inline-detail .account-timeline strong,
+.account-order-inline-detail .account-order-status,
+.account-order-inline-detail .account-order-eyebrow{overflow-wrap:break-word;word-break:normal;}
