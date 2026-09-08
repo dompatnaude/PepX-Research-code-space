@@ -1049,18 +1049,30 @@ app.get(Object.keys(PAGE_ALIASES), (req, res) => {
 // what every login path sets. It grants nothing: it decides presentation, and
 // every gated route keeps its own auth check.
 const INDEX_HTML_PATH = path.join(__dirname, 'index.html');
-const INDEX_HTML_PUBLIC = fs.readFileSync(INDEX_HTML_PATH, 'utf8')
-  .replace('<html lang="en">', '<html lang="en" class="pepx-public">')
-  .replace('</body>', '<script src="/public-home.js"></script>\n</body>');
 
-if (!INDEX_HTML_PUBLIC.includes('class="pepx-public"') ||
-    !INDEX_HTML_PUBLIC.includes('public-home.js')) {
-  console.error('[startup] index.html no longer matches the signed-out homepage markers ' +
-    '(<html lang="en"> and </body>); signed-out visitors will be served the page unmodified.');
+// This read happens once at module load, so a throw here would abort the import
+// and take down every route in the application, not just the homepage. It must
+// not be able to. If the variant cannot be built, INDEX_HTML_PUBLIC stays null
+// and signed-out visitors are served index.html directly: the empty storefront
+// sections stop being hidden, which is a cosmetic regression, not an outage.
+let INDEX_HTML_PUBLIC = null;
+try {
+  INDEX_HTML_PUBLIC = fs.readFileSync(INDEX_HTML_PATH, 'utf8')
+    .replace('<html lang="en">', '<html lang="en" class="pepx-public">')
+    .replace('</body>', '<script src="/public-home.js"></script>\n</body>');
+
+  if (!INDEX_HTML_PUBLIC.includes('class="pepx-public"') ||
+      !INDEX_HTML_PUBLIC.includes('public-home.js')) {
+    console.error('[startup] index.html no longer matches the signed-out homepage markers ' +
+      '(<html lang="en"> and </body>); signed-out visitors will be served the page unmodified.');
+  }
+} catch (error) {
+  console.error('[startup] could not build the signed-out homepage variant; signed-out visitors ' +
+    'will be served index.html unmodified:', error && error.message ? error.message : error);
 }
 
 app.get(['/', '/index.html'], (req, res) => {
-  if (req.user || (req.session && req.session.userId)) {
+  if (INDEX_HTML_PUBLIC === null || req.user || (req.session && req.session.userId)) {
     return res.sendFile(INDEX_HTML_PATH);
   }
   res.type('html');
