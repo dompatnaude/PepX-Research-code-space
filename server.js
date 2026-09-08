@@ -19,6 +19,7 @@ const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
@@ -82,6 +83,15 @@ const PUBLIC_HTML_PATHS = new Set([
   '/reset-password.html',
   '/privacy-policy.html',
   '/terms-of-service.html',
+  // These three are already public in production: vercel.json serves them as
+  // static files, so requests for them never reach Express. Express itself
+  // still treated them as gated, so the app and the deployment disagreed and
+  // the pages redirected to login when run locally or on any non-Vercel host.
+  // Listing them here makes the two agree and makes the pages safe to publish
+  // in sitemap.xml. They are public legal text and expose no customer data.
+  '/terms-conditions.html',
+  '/refund-policy.html',
+  '/shipping-policy.html',
   '/coas.html'
 ]);
 const AUTH_HTML_PATHS = new Set([
@@ -437,6 +447,94 @@ async function createOrderByUserId(userId, payloadItems) {
     items: normalizedItems,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Search-engine files (robots.txt / sitemap.xml).
+//
+// These are registered here, ahead of the session, auth and static middleware,
+// and well ahead of the `app.get('*')` HTML fallback near the bottom of this
+// file. That fallback redirects any unauthenticated request to /login.html,
+// which is why GET /sitemap.xml used to answer with the login page's markup and
+// Search Console reported "Sitemap can be read, but has errors / Sitemap is
+// HTML". Keep these handlers above the auth middleware: moving them below it
+// reintroduces that bug.
+//
+// Serving these two files publicly does not weaken any protection. They contain
+// no private data, and every gated route keeps its existing auth check.
+// ---------------------------------------------------------------------------
+const CANONICAL_ORIGIN = String(process.env.CANONICAL_ORIGIN || 'https://pepxresearch.com')
+  .trim()
+  .replace(/\/+$/, '');
+
+// Only paths that already return 200 to a signed-out visitor belong here: a
+// sitemap entry that redirects or 404s is reported as an error by Search
+// Console. Deliberately excluded: /shop.html, /product.html, /account.html,
+// /checkout.html, the post-purchase confirmation page and /admin.html (all
+// auth-gated and redirect to /login.html), /login.html, /register.html,
+// /forgot-password.html and /reset-password.html (authentication pages, no
+// search value), every /api/* endpoint, /auth/* and the EasyPost webhook.
+const SITEMAP_ENTRIES = [
+  { loc: '/', changefreq: 'weekly', priority: '1.0' },
+  { loc: '/coas.html', changefreq: 'weekly', priority: '0.8' },
+  { loc: '/shipping-policy.html', changefreq: 'yearly', priority: '0.3' },
+  { loc: '/privacy-policy.html', changefreq: 'yearly', priority: '0.3' },
+  { loc: '/refund-policy.html', changefreq: 'yearly', priority: '0.3' },
+  { loc: '/terms-conditions.html', changefreq: 'yearly', priority: '0.3' },
+  { loc: '/terms-of-service.html', changefreq: 'yearly', priority: '0.3' }
+];
+
+function buildSitemapXml(origin) {
+  const urls = SITEMAP_ENTRIES.map((entry) => {
+    return [
+      '  <url>',
+      '    <loc>' + origin + entry.loc + '</loc>',
+      '    <changefreq>' + entry.changefreq + '</changefreq>',
+      '    <priority>' + entry.priority + '</priority>',
+      '  </url>'
+    ].join('\n');
+  }).join('\n');
+
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls + '\n' +
+    '</urlset>\n';
+}
+
+function buildRobotsTxt(origin) {
+  return [
+    'User-agent: *',
+    'Allow: /',
+    '',
+    '# Authenticated and transactional areas. These already redirect signed-out',
+    '# visitors to the login page; this only saves crawlers the round trip.',
+    'Disallow: /api/',
+    'Disallow: /auth/',
+    'Disallow: /uploads/',
+    'Disallow: /account.html',
+    'Disallow: /checkout.html',
+    'Disallow: /forgot-password.html',
+    'Disallow: /reset-password.html',
+    '',
+    '# Login redirects append a returnTo parameter; crawling those produces',
+    '# endless duplicates of the same login page.',
+    'Disallow: /*?returnTo=',
+    '',
+    'Sitemap: ' + origin + '/sitemap.xml',
+    ''
+  ].join('\n');
+}
+
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain; charset=utf-8');
+  res.set('Cache-Control', 'public, max-age=3600');
+  return res.status(200).send(buildRobotsTxt(CANONICAL_ORIGIN));
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  res.type('application/xml; charset=utf-8');
+  res.set('Cache-Control', 'public, max-age=3600');
+  return res.status(200).send(buildSitemapXml(CANONICAL_ORIGIN));
+});
 
 app.use('/api/webhooks/easypost', express.raw({ type: 'application/json' }), createEasyPostWebhookRouter({ pool }));
 app.use(express.json());
@@ -932,16 +1030,41 @@ app.get(Object.keys(PAGE_ALIASES), (req, res) => {
   return res.redirect(targetPath + query);
 });
 
-app.get(['/', '/index.html'], async (req, res, next) => {
-  try {
-    const user = await hydrateAuthenticatedUser(req);
-    if (!user) {
-      return res.redirect(buildLoginRedirectTarget(req));
-    }
-    return res.sendFile(path.join(__dirname, 'index.html'));
-  } catch (error) {
-    return next(error);
+// The marketing homepage is public. It is the only page Google can use to
+// associate the "PepX Research" brand with this domain, and a crawler that is
+// bounced to /login.html never sees it. Only this page is opened up: the
+// catalogue (/shop.html, /product.html), the account area, checkout, order
+// confirmation, the admin tools and every /api/* endpoint keep exactly the auth
+// checks they had before, in the middleware below.
+//
+// Signed-out visitors get a variant of the same file marked `pepx-public`.
+// script.js is served to signed-in visitors only, so for everyone else the
+// sections it would populate (best sellers, the product grid, the review
+// collage and the review form) would otherwise render as empty shells. The
+// class lets styles.css hide them, and pulls in public-home.js, which restores
+// the FAQ accordion and mobile menu that script.js would normally wire up.
+// Signed-in visitors are served the file unchanged.
+//
+// The check reads the session cookie only - no database lookup - and matches
+// what every login path sets. It grants nothing: it decides presentation, and
+// every gated route keeps its own auth check.
+const INDEX_HTML_PATH = path.join(__dirname, 'index.html');
+const INDEX_HTML_PUBLIC = fs.readFileSync(INDEX_HTML_PATH, 'utf8')
+  .replace('<html lang="en">', '<html lang="en" class="pepx-public">')
+  .replace('</body>', '<script src="/public-home.js"></script>\n</body>');
+
+if (!INDEX_HTML_PUBLIC.includes('class="pepx-public"') ||
+    !INDEX_HTML_PUBLIC.includes('public-home.js')) {
+  console.error('[startup] index.html no longer matches the signed-out homepage markers ' +
+    '(<html lang="en"> and </body>); signed-out visitors will be served the page unmodified.');
+}
+
+app.get(['/', '/index.html'], (req, res) => {
+  if (req.user || (req.session && req.session.userId)) {
+    return res.sendFile(INDEX_HTML_PATH);
   }
+  res.type('html');
+  return res.send(INDEX_HTML_PUBLIC);
 });
 
 app.use(async (req, res, next) => {

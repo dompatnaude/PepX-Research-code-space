@@ -709,7 +709,19 @@ nav.menu a:hover{color:var(--blue);}
 .qa .q{padding:20px 24px;font-weight:700;font-size:17px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;}
 .qa .q .ico{color:var(--blue);font-size:22px;transition:.2s;}
 .qa .a{max-height:0;overflow:hidden;transition:max-height .3s ease;color:var(--muted);padding:0 24px;}
-.qa.open .a{max-height:200px;padding:0 24px 22px;}
+/* The ceiling has to clear the longest answer or the text is silently clipped
+   (the return-policy answer overflowed the previous 200px, worst on narrow
+   screens where it wraps to ~20 lines). This value is only an animation bound,
+   not a layout box: the element still sizes to its own content. */
+.qa.open .a{max-height:1500px;padding:0 24px 22px;}
+/* Where the browser can interpolate to an intrinsic size, animate to the
+   content's own height instead, so no answer can be clipped at any length.
+   Scoped to this element -- interpolate-size inherits, and setting it globally
+   would change every other size transition on the site. */
+@supports (interpolate-size: allow-keywords){
+  .qa .a{interpolate-size: allow-keywords;}
+  .qa.open .a{max-height:max-content;}
+}
 .qa.open .q .ico{transform:rotate(45deg);}
 .contact{background:var(--dark);color:#fff;}
 .contact h2{color:#fff;}
@@ -1943,3 +1955,18 @@ body.dark-mode tr.admin-order-detail-row > td.admin-order-detail-cell{background
 .account-order-inline-detail .account-timeline strong,
 .account-order-inline-detail .account-order-status,
 .account-order-inline-detail .account-order-eyebrow{overflow-wrap:break-word;word-break:normal;}
+
+/* Signed-out homepage (server.js adds `pepx-public` to <html> when there is no
+   session). script.js is served to signed-in visitors only, so the sections it
+   fills stay empty for everyone else -- hide the shells rather than render them
+   empty. The hero copy, brand, FAQ, About and footer are static HTML and remain
+   visible and crawlable. */
+html.pepx-public .hero-best,
+html.pepx-public .review-collage,
+html.pepx-public .featured-category-title,
+html.pepx-public .featured-category-strip,
+html.pepx-public #productGrid,
+html.pepx-public #reviews{display:none;}
+/* The hero is a two-column grid; with the best-seller rail hidden the copy would
+   otherwise sit in a half-width column. */
+html.pepx-public .hero{grid-template-columns:minmax(0,1fr);}
