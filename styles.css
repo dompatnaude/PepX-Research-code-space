@@ -1970,3 +1970,10 @@ html.pepx-public #reviews{display:none;}
 /* The hero is a two-column grid; with the best-seller rail hidden the copy would
    otherwise sit in a half-width column. */
 html.pepx-public .hero{grid-template-columns:minmax(0,1fr);}
+
+/* Signed-out homepage variant.
+   server.js serves "/" and "/index.html" to anonymous visitors with
+   <html lang="en" class="pepx-public">; signed-in visitors get index.html
+   unmodified. So "no class" is the signed-in state and stays the default. */
+html.pepx-public .auth-in-only { display: none !important; }
+html:not(.pepx-public) .auth-out-only { display: none !important; }
