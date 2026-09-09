@@ -7,3 +7,7 @@ data/*.db-*
 .env.development
 .env.production
 .vercel
+
+# COA uploads. Durable copies live in Postgres (coa_files); uploads/ is a local
+# disk cache only and is not part of the Vercel bundle.
+uploads/
