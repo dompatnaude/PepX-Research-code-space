@@ -1,12 +1,88 @@
 node_modules/
+.vercel
+
+# Environment files and credentials. .env.example is the only one that belongs
+# in git, and it must never hold a real value.
 .env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+credentials
+credentials.*
+secrets
+secrets.*
+.htpasswd
+
+# Local databases and database dumps.
 data/*.db
 data/*.db-*
-.env.local
-.env.*.local
-.env.development
-.env.production
-.vercel
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+*.sql.gz
+*.dump
+
+# Customer records and data exports. Order, user and COA data belongs in
+# Postgres, never in the repo -- an exported copy here is both a duplicate of
+# the source of truth and a file the web server would happily hand out.
+*backup*.json
+*-export.json
+*-export.csv
+backups/
+exports/
+
+# Editor, merge and patch leftovers, and the "keep a copy beside the original"
+# habit this repo used to follow (*.bak, *.orderbak, *.inventorybak.<stamp>).
+# Git is the backup; a second copy on disk only widens what can leak.
+*.bak
+*.bak_*
+*.orderbak
+*.sessbak
+*.authbak
+*.preorderbak
+*.cartbak
+*.guestcartbak
+*.ordersbak
+*.adminbak
+*.accountdiagbak
+*.apibak
+*.apicartbak
+*.checkoutbak
+*.diagbak
+*bluebak*
+*inventorybak*
+*productbak*
+*discountbak*
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+
+# Logs and process files.
+*.log
+npm-debug.log*
+logs/
+*.pid
+
+# Build archives.
+*.zip
+*.tar
+*.tar.gz
+*.tgz
 
 # COA uploads. Durable copies live in Postgres (coa_files); uploads/ is a local
 # disk cache only and is not part of the Vercel bundle.
