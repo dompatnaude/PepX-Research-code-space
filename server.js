@@ -36,6 +36,7 @@ const { isAgeConfirmed, asyncHandler } = require('./services/auth-validation');
 const { ensureBootstrapAdmin } = require('./services/admin-bootstrap');
 const { loadProjectEnv } = require('./services/runtime-config');
 const { resolveGoogleCallbackUrl } = require('./services/google-config');
+const { classifyStaticRequest } = require('./services/static-exposure-policy');
 
 loadProjectEnv({ cwd: __dirname });
 require('dotenv').config();
@@ -1119,27 +1120,36 @@ app.use(async (req, res, next) => {
   }
 });
 
-// express.static below serves this whole directory, which also contains the
-// server source. Refuse anything that is not a client asset so route handlers,
-// SQL, config and stored uploads are not downloadable.
-const NON_PUBLIC_PREFIXES = [
-  '/routes/', '/services/', '/db/', '/scripts/', '/test/', '/uploads/',
-  '/node_modules/', '/.git/', '/api/', '/wordpress-plugin/', '/wordpress-theme/',
-  '/shopify-theme/', '/.devcontainer/', '/.vscode/'
-];
-const NON_PUBLIC_FILES = new Set([
-  '/package.json', '/package-lock.json', '/vercel.json', '/server.js', '/deploy.sh'
-]);
-app.use((req, res, next) => {
-  const requested = req.path.toLowerCase();
-  if (NON_PUBLIC_FILES.has(requested) ||
-      NON_PUBLIC_PREFIXES.some((prefix) => requested.startsWith(prefix))) {
-    return res.status(404).end();
-  }
-  return next();
+// express.static below serves this whole project directory, which also holds
+// the server source, old backups and operational files. The guard that used to
+// stand here was a list of five exact filenames plus a set of directory
+// prefixes, and the HTML auth gate above only inspects paths ending in `.html`,
+// so every *.bak, *.orderbak, .env.example, orders_backup_*.json and build
+// archive in the project root was publicly downloadable.
+//
+// services/static-exposure-policy.js now decides what may be read off disk. It
+// keeps the original deny-list, adds patterns for file shapes that are never
+// client assets (backups, dumps, databases, archives, keys, logs), and puts an
+// extension allowlist behind both so that an unrecognised file type answers 404
+// instead of being served. That last layer is what makes a future accidental
+// commit safe. See that file for the reasoning behind each layer.
+const serveStaticAssets = express.static(path.join(__dirname), {
+  dotfiles: 'deny',
+  index: false
 });
 
-app.use(express.static(path.join(__dirname)));
+app.use((req, res, next) => {
+  const verdict = classifyStaticRequest(req.path);
+
+  // 404 rather than 403: a wrong guess should not confirm the file is there.
+  if (verdict === 'deny') return res.status(404).end();
+
+  // Not a static asset request (no file extension). It belongs to the routes
+  // above and to the app.get('*') fallback, so express.static never sees it.
+  if (verdict === 'skip') return next();
+
+  return serveStaticAssets(req, res, next);
+});
 
 app.get('*', async (req, res, next) => {
   try {
