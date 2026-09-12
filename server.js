@@ -37,6 +37,12 @@ const { ensureBootstrapAdmin } = require('./services/admin-bootstrap');
 const { loadProjectEnv } = require('./services/runtime-config');
 const { resolveGoogleCallbackUrl } = require('./services/google-config');
 const { classifyStaticRequest } = require('./services/static-exposure-policy');
+const { createPublicCatalog, isIndexable } = require('./services/public-catalog');
+const {
+  renderShopPage,
+  renderProductPage,
+  renderNotFoundPage
+} = require('./services/public-page');
 
 loadProjectEnv({ cwd: __dirname });
 require('dotenv').config();
@@ -474,30 +480,62 @@ const CANONICAL_ORIGIN = String(process.env.CANONICAL_ORIGIN || 'https://pepxres
 // auth-gated and redirect to /login.html), /login.html, /register.html,
 // /forgot-password.html and /reset-password.html (authentication pages, no
 // search value), every /api/* endpoint, /auth/* and the EasyPost webhook.
-const SITEMAP_ENTRIES = [
-  { loc: '/', changefreq: 'weekly', priority: '1.0' },
-  { loc: '/coas.html', changefreq: 'weekly', priority: '0.8' },
-  { loc: '/shipping-policy.html', changefreq: 'yearly', priority: '0.3' },
-  { loc: '/privacy-policy.html', changefreq: 'yearly', priority: '0.3' },
-  { loc: '/refund-policy.html', changefreq: 'yearly', priority: '0.3' },
-  { loc: '/terms-conditions.html', changefreq: 'yearly', priority: '0.3' },
-  { loc: '/terms-of-service.html', changefreq: 'yearly', priority: '0.3' }
+const publicCatalog = createPublicCatalog({ pool });
+
+// Deliberately narrow: the homepage, the catalogue, and the COA page. Category
+// and eligible product URLs are appended from the database in buildSitemapXml.
+//
+// The policy pages (shipping, privacy, refund, terms) are NOT listed. They stay
+// indexable - each keeps its own canonical and index,follow - they are simply
+// not submitted, so the sitemap stays focused on the pages that are meant to
+// earn search traffic rather than diluted with boilerplate.
+const STATIC_SITEMAP_PATHS = [
+  '/',
+  '/shop',
+  '/coas.html'
 ];
 
-function buildSitemapXml(origin) {
-  const urls = SITEMAP_ENTRIES.map((entry) => {
-    return [
-      '  <url>',
-      '    <loc>' + origin + entry.loc + '</loc>',
-      '    <changefreq>' + entry.changefreq + '</changefreq>',
-      '    <priority>' + entry.priority + '</priority>',
-      '  </url>'
-    ].join('\n');
-  }).join('\n');
+function sitemapEntry(origin, loc, lastmod) {
+  const lines = ['  <url>', '    <loc>' + origin + loc + '</loc>'];
+  if (lastmod) {
+    const date = lastmod instanceof Date ? lastmod : new Date(lastmod);
+    if (!Number.isNaN(date.getTime())) {
+      lines.push('    <lastmod>' + date.toISOString().slice(0, 10) + '</lastmod>');
+    }
+  }
+  lines.push('  </url>');
+  return lines.join('\n');
+}
+
+// changefreq and priority are gone: Google ignores both. lastmod it does use.
+//
+// Product URLs are filtered by isIndexable() - active, and carrying enough of
+// its own description to deserve a search result. A product page with an empty
+// description is still rendered and still linked from /shop, but it is marked
+// noindex and never announced here. That keeps a half-written catalogue from
+// being submitted to Google as a finished one, and it means the gate moves the
+// moment reviewed copy is written to products.description, with no code change.
+async function buildSitemapXml(origin) {
+  let entries = STATIC_SITEMAP_PATHS.map((loc) => sitemapEntry(origin, loc, null));
+
+  try {
+    const [categories, products] = await Promise.all([
+      publicCatalog.categories(),
+      publicCatalog.indexableProducts()
+    ]);
+    entries = entries
+      .concat(categories.map((category) => sitemapEntry(origin, category.path, null)))
+      .concat(products.map((product) => sitemapEntry(origin, product.path, product.updatedAt)));
+  } catch (error) {
+    // A sitemap that 500s is reported as an error in Search Console, so a
+    // database problem degrades to the static list rather than failing.
+    console.error('[sitemap] catalogue unavailable, serving static entries only:',
+      error && error.message ? error.message : error);
+  }
 
   return '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    urls + '\n' +
+    entries.join('\n') + '\n' +
     '</urlset>\n';
 }
 
@@ -516,8 +554,18 @@ function buildRobotsTxt(origin) {
     'Disallow: /forgot-password.html',
     'Disallow: /reset-password.html',
     '',
+    'Disallow: /admin.html',
+    '',
     '# Login redirects append a returnTo parameter; crawling those produces',
     '# endless duplicates of the same login page.',
+    '#',
+    '# Retained deliberately. It has a known side effect: a gated page redirects',
+    '# to /login.html?returnTo=..., so Search Console reports the gated page',
+    '# itself as "blocked by robots.txt" rather than merely gated. That was a',
+    '# real cost while /shop.html was the only catalogue; now that /shop and',
+    '# /products/<slug> are public and indexable, the pages still behind the',
+    '# gate are ones we do not want indexed anyway, so the report noise is',
+    '# cheaper than the duplicate login URLs this rule prevents.',
     'Disallow: /*?returnTo=',
     '',
     'Sitemap: ' + origin + '/sitemap.xml',
@@ -531,10 +579,10 @@ app.get('/robots.txt', (req, res) => {
   return res.status(200).send(buildRobotsTxt(CANONICAL_ORIGIN));
 });
 
-app.get('/sitemap.xml', (req, res) => {
+app.get('/sitemap.xml', async (req, res) => {
   res.type('application/xml; charset=utf-8');
   res.set('Cache-Control', 'public, max-age=3600');
-  return res.status(200).send(buildSitemapXml(CANONICAL_ORIGIN));
+  return res.status(200).send(await buildSitemapXml(CANONICAL_ORIGIN));
 });
 
 app.use('/api/webhooks/easypost', express.raw({ type: 'application/json' }), createEasyPostWebhookRouter({ pool }));
@@ -1024,6 +1072,114 @@ app.use('/api/*', (req, res) => {
   return res.status(404).json({ error: 'API endpoint not found' });
 });
 
+// ---------------------------------------------------------------------------
+// Public, server-rendered catalogue: /shop, /shop/:category, /products/:slug
+//
+// These are additive. /shop.html, /product.html, the cart, checkout, account,
+// admin and every /api/* endpoint keep exactly the auth checks they had - the
+// middleware below is untouched, and /api/products is still behind
+// requireApiAuth. The public pages read the database directly through
+// services/public-catalog.js, so opening pages to crawlers does not open the
+// API to anyone.
+//
+// Registered here, after the session middleware and before the HTML auth gate,
+// so a signed-in visitor can be handed back to the existing storefront while a
+// signed-out visitor gets HTML.
+//
+// The branch is on SESSION STATE, never on user-agent or IP. Googlebot sees
+// exactly what any signed-out human sees, which is what separates a public
+// page from cloaking. hydrateAuthenticatedUser() returns null without touching
+// the database when there is no session, so crawler traffic costs nothing.
+// ---------------------------------------------------------------------------
+function sendPublicHtml(res, html, status = 200) {
+  res.type('html');
+  // Vary: Cookie because the same URL answers with a redirect for signed-in
+  // visitors; without it a shared cache could serve one audience the other's
+  // response.
+  res.set('Vary', 'Cookie');
+  res.set('Cache-Control', 'public, max-age=300');
+  return res.status(status).send(html);
+}
+
+function sendSignedInRedirect(res, location) {
+  res.set('Cache-Control', 'private, no-store');
+  res.set('Vary', 'Cookie');
+  return res.redirect(302, location);
+}
+
+app.get('/shop', async (req, res, next) => {
+  try {
+    if (await hydrateAuthenticatedUser(req)) return sendSignedInRedirect(res, '/shop.html');
+
+    const [products, categories] = await Promise.all([
+      publicCatalog.listActive(),
+      publicCatalog.categories()
+    ]);
+    return sendPublicHtml(res, renderShopPage({
+      origin: CANONICAL_ORIGIN,
+      products,
+      categories
+    }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/shop/:category', async (req, res, next) => {
+  try {
+    const categories = await publicCatalog.categories();
+    const category = await publicCatalog.findCategory(req.params.category);
+
+    // Unknown category is a 404, not an empty page: no crawlable space of
+    // invented category URLs opens up.
+    if (!category) {
+      return sendPublicHtml(res, renderNotFoundPage({ origin: CANONICAL_ORIGIN, categories }), 404);
+    }
+
+    if (await hydrateAuthenticatedUser(req)) {
+      return sendSignedInRedirect(res, '/shop.html?category=' + encodeURIComponent(category.name));
+    }
+
+    const products = await publicCatalog.listByCategory(category.slug);
+    return sendPublicHtml(res, renderShopPage({
+      origin: CANONICAL_ORIGIN,
+      products,
+      categories,
+      category
+    }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/products/:slug', async (req, res, next) => {
+  try {
+    const categories = await publicCatalog.categories();
+    const product = await publicCatalog.findBySlug(req.params.slug);
+
+    if (!product) {
+      return sendPublicHtml(res, renderNotFoundPage({ origin: CANONICAL_ORIGIN, categories }), 404);
+    }
+
+    if (await hydrateAuthenticatedUser(req)) {
+      return sendSignedInRedirect(res, '/product.html?product=' + encodeURIComponent(product.id));
+    }
+
+    const siblings = await publicCatalog.listByCategory(product.categorySlug);
+    const related = siblings.filter((candidate) => candidate.slug !== product.slug).slice(0, 4);
+
+    return sendPublicHtml(res, renderProductPage({
+      origin: CANONICAL_ORIGIN,
+      product,
+      related,
+      categories,
+      indexable: isIndexable(product)
+    }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.get(Object.keys(PAGE_ALIASES), (req, res) => {
   const targetPath = PAGE_ALIASES[req.path] || '/index.html';
   const queryIndex = req.originalUrl.indexOf('?');
@@ -1090,9 +1246,9 @@ app.use(async (req, res, next) => {
       return res.status(404).end();
     }
 
-    if (req.path.startsWith('/assets/products/') && !(await hydrateAuthenticatedUser(req))) {
-      return res.status(404).end();
-    }
+    // Product images are public: they appear on the signed-out catalogue pages
+    // and in image search. /script.js above stays signed-in only - the public
+    // pages are server-rendered and need none of it.
 
     if (!req.path.endsWith('.html')) {
       return next();
