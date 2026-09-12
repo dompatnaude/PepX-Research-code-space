@@ -429,12 +429,17 @@ function renderProductPage({ origin, product, related = [], categories, indexabl
       '</section>'
     : '';
 
-  // Only shown when published COA records actually exist for this product.
+  // Only shown when published COA records actually exist for this product. The
+  // link is deep - coas.js reads ?product_id= and opens filtered to this
+  // product - so the pair of pages point at each other directly rather than at
+  // each other's index.
   const coaBlock = product.publishedCoaCount > 0
     ? '<section class="product-detail-coa"><h2>Certificates of analysis</h2>' +
       '<p>' + product.publishedCoaCount + ' published ' +
       plural(product.publishedCoaCount, 'certificate of analysis', 'certificates of analysis') +
-      ' for this product. <a href="/coas.html">View certificates of analysis</a>.</p></section>'
+      ' for this product. <a href="' + escapeHtml(coaPathForProduct(product)) +
+      '">View ' + plural(product.publishedCoaCount, 'the certificate', 'the certificates') +
+      ' for ' + escapeHtml(product.name) + '</a>.</p></section>'
     : '';
 
   const relatedBlock = related.length
@@ -482,6 +487,72 @@ function renderProductPage({ origin, product, related = [], categories, indexabl
   });
 }
 
+/**
+ * The COA page filtered to one product. coas.js reads ?product_id= on load and
+ * applies the filter, so this is a real deep link and not just the index.
+ */
+function coaPathForProduct(product) {
+  return product && product.id != null
+    ? '/coas.html?product_id=' + encodeURIComponent(String(product.id))
+    : '/coas.html';
+}
+
+/**
+ * Featured product cards for the signed-out homepage.
+ *
+ * script.js picks a random row for signed-in visitors. This selection is
+ * deterministic instead - in-stock first, then alphabetical - so the HTML a
+ * crawler is handed does not reshuffle between fetches, and so two anonymous
+ * visitors a second apart see the same page.
+ *
+ * Returns only the cards. server.js drops them inside the existing
+ * <div class="grid" id="productGrid"> so the signed-in markup is untouched.
+ */
+function renderFeaturedGrid({ products, limit = 8 }) {
+  const list = (products || []).slice();
+  list.sort((a, b) => {
+    if (a.inStock !== b.inStock) return a.inStock ? -1 : 1;
+    return String(a.name).localeCompare(String(b.name));
+  });
+  const featured = list.slice(0, Math.max(0, limit));
+  if (!featured.length) return '';
+  return featured.map(productCard).join('\n');
+}
+
+/**
+ * "Products with published certificates" for coas.html.
+ *
+ * The COA page itself is rendered entirely by coas.js from /api/coas, so a
+ * crawler sees an empty grid and finds no route from the certificates back into
+ * the catalogue. This block is the other half of requirement 6: static links
+ * from the COA page to each /products/<slug> that actually has a published
+ * certificate. Products with no published COA are left out, so the list never
+ * implies coverage that does not exist.
+ */
+function renderCoaIndex({ products }) {
+  const withCoas = (products || [])
+    .filter((p) => p.publishedCoaCount > 0 && p.slug)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+  if (!withCoas.length) return '';
+
+  const items = withCoas.map((p) =>
+    '<li><a href="' + escapeHtml(p.path) + '">' + escapeHtml(p.name) +
+    '<span class="public-coa-index-count">' + p.publishedCoaCount + ' published ' +
+    plural(p.publishedCoaCount, 'certificate', 'certificates') +
+    '</span></a></li>'
+  ).join('');
+
+  return [
+    '<section class="section public-coa-index" aria-label="Products with published certificates">',
+    '<h2>Products with published certificates</h2>',
+    '<p class="public-coa-index-sub">Certificates are published as third-party testing is completed, ' +
+      'so coverage varies by product and batch.</p>',
+    '<ul>' + items + '</ul>',
+    '</section>'
+  ].join('\n');
+}
+
 function renderNotFoundPage({ origin, categories = [] }) {
   const seo = {
     title: 'Page not found' + BRAND_SUFFIX,
@@ -503,6 +574,9 @@ module.exports = {
   renderShopPage,
   renderProductPage,
   renderNotFoundPage,
+  renderFeaturedGrid,
+  renderCoaIndex,
+  coaPathForProduct,
   buildShopSeo,
   buildProductSeo,
   productJsonLd,
