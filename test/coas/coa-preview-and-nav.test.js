@@ -114,7 +114,10 @@ test('every "View COA" link points at the same canonical, unfiltered COA page', 
     assert.ok(anchors.length > 0, page + ' should link to the COA page');
     for (const a of anchors) {
       const href = (a.match(/href="([^"]*)"/) || [])[1];
-      assert.equal(href, 'coas.html',
+      // Page-relative and root-relative both name the same canonical page.
+      // What must never appear here is a query string or a fragment: those are
+      // the filtered views, and a "View COA" link must open the full report set.
+      assert.ok(href === 'coas.html' || href === '/coas.html',
         page + ' links to "' + href + '"; every COA link must use the canonical page with no filter');
     }
   }
