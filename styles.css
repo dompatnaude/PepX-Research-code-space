@@ -2036,6 +2036,19 @@ body.dark-mode .breadcrumbs [aria-current="page"]{color:#e6edff;}
    --------------------------------------------------------------------------- */
 .page-blog .section,.page-article .section{padding:44px 0 0;}
 
+/* .blog-hero, .article-header and .article-foot are semantic <header> and
+   <footer> elements inside the page body, so the bare element rules written for
+   the sticky nav bar (line 286, 1247) and the dark page footer (line 741, 1251)
+   match them too. Left alone, the hero rendered as a white sticky panel cut off
+   at its 760px measure, and the article's end matter was painted navy with
+   near-unreadable text. Reset only what those rules impose; the blog's own
+   styling below still applies. */
+.blog-hero,.article-header{position:static;top:auto;z-index:auto;background:transparent;
+  backdrop-filter:none;-webkit-backdrop-filter:none;transition:none;}
+.blog-hero{border-bottom:0;}
+.article-foot{background:transparent;color:inherit;padding:22px 0 0;}
+.article-foot .footer-small{color:var(--muted);}
+
 .blog-hero{padding:36px 0 8px;max-width:760px;}
 .blog-hero h1{font-size:clamp(2rem,5.4vw,52px);line-height:1.05;font-weight:800;
   letter-spacing:-1.4px;margin:16px 0 10px;}
