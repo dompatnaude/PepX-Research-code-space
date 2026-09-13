@@ -2016,3 +2016,112 @@ body.dark-mode .product-card-image,body.dark-mode .product-card-orb{background:#
 .public-coa-index a .public-coa-index-count{display:block;font-weight:600;font-size:12px;
   color:var(--muted);margin-top:2px;}
 body.dark-mode .public-coa-index a{background:#111c30;border-color:#24365c;color:#e6edff;}
+
+/* ---------------------------------------------------------------------------
+   Breadcrumbs. Rendered by services/public-page.js on the catalogue pages and
+   by services/blog-page.js on the blog; they had no styles until now, so they
+   inherited default link colour and sat flush against the page.
+   --------------------------------------------------------------------------- */
+.breadcrumbs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:22px 0 0;
+  font-size:13px;color:var(--muted);}
+.breadcrumbs a{color:var(--muted);text-decoration:none;}
+.breadcrumbs a:hover{color:var(--blue);text-decoration:underline;}
+.breadcrumbs [aria-current="page"]{color:var(--dark);font-weight:600;}
+body.dark-mode .breadcrumbs [aria-current="page"]{color:#e6edff;}
+
+/* ---------------------------------------------------------------------------
+   Blog index (/blog) and article pages (/blog/<slug>).
+   Built from the same tokens, .card, .grid, .btn and .section conventions as
+   the rest of the site so the blog is the same site, not a second design.
+   --------------------------------------------------------------------------- */
+.page-blog .section,.page-article .section{padding:44px 0 0;}
+
+/* .blog-hero, .article-header and .article-foot are semantic <header> and
+   <footer> elements inside the page body, so the bare element rules written for
+   the sticky nav bar (line 286, 1247) and the dark page footer (line 741, 1251)
+   match them too. Left alone, the hero rendered as a white sticky panel cut off
+   at its 760px measure, and the article's end matter was painted navy with
+   near-unreadable text. Reset only what those rules impose; the blog's own
+   styling below still applies. */
+.blog-hero,.article-header{position:static;top:auto;z-index:auto;background:transparent;
+  backdrop-filter:none;-webkit-backdrop-filter:none;transition:none;}
+.blog-hero{border-bottom:0;}
+.article-foot{background:transparent;color:inherit;padding:22px 0 0;}
+.article-foot .footer-small{color:var(--muted);}
+
+.blog-hero{padding:36px 0 8px;max-width:760px;}
+.blog-hero h1{font-size:clamp(2rem,5.4vw,52px);line-height:1.05;font-weight:800;
+  letter-spacing:-1.4px;margin:16px 0 10px;}
+.blog-hero .hero-tagline{color:var(--blue);font-size:13px;font-weight:800;letter-spacing:2.4px;
+  text-transform:uppercase;margin:0;}
+.blog-hero-sub{font-size:20px;font-weight:600;color:var(--dark);margin:0 0 14px;}
+.blog-hero-intro{color:var(--muted);font-size:16px;line-height:1.7;margin:0;}
+body.dark-mode .blog-hero .hero-tagline{color:#7ea6e8;}
+body.dark-mode .blog-hero-sub{color:#e6edff;}
+
+.article-meta{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+  gap:12px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 10px;}
+.article-meta .article-category{color:var(--blue);}
+body.dark-mode .article-meta .article-category{color:#7ea6e8;}
+
+.blog-featured{padding:28px;border:1px solid #edf0f6;border-radius:20px;background:#fff;}
+.blog-featured h2{font-size:clamp(22px,3vw,30px);line-height:1.2;margin:0 0 12px;text-align:left;}
+.blog-featured h2 a{color:inherit;text-decoration:none;}
+.blog-featured h2 a:hover{color:var(--blue);}
+.blog-featured .btn{margin-top:18px;}
+body.dark-mode .blog-featured{background:#111c30;border-color:#24365c;}
+
+.blog-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:24px;}
+.blog-card{padding:24px;border:1px solid #edf0f6;border-radius:20px;background:#fff;
+  display:flex;flex-direction:column;transition:box-shadow .25s ease,transform .25s ease;}
+.blog-card:hover{box-shadow:0 18px 44px rgba(31,41,55,.10);transform:translateY(-4px);}
+.blog-card-title{font-size:19px;line-height:1.25;margin:0 0 10px;text-align:left;}
+.blog-card-title a{color:inherit;text-decoration:none;}
+.blog-card-title a:hover{color:var(--blue);}
+.blog-card-link{margin-top:auto;padding-top:14px;color:var(--blue);font-weight:700;
+  font-size:14px;text-decoration:none;}
+.blog-card-link:hover{text-decoration:underline;}
+.blog-excerpt{color:var(--muted);font-size:14.5px;line-height:1.7;margin:0;}
+body.dark-mode .blog-card{background:#111c30;border-color:#24365c;}
+
+.blog-list h2{font-size:22px;letter-spacing:-.4px;text-align:left;margin:0 0 18px;}
+.blog-outro{padding-bottom:56px;}
+.blog-outro .sub{margin-inline:0;text-align:left;max-width:640px;}
+
+/* --- article --- */
+.article{max-width:760px;margin:0 auto;padding:8px 0 8px;}
+.article-header{padding:24px 0 26px;border-bottom:1px solid #edf0f6;margin-bottom:30px;}
+.article-header h1{font-size:clamp(1.9rem,4.6vw,44px);line-height:1.1;font-weight:800;
+  letter-spacing:-1.1px;margin:6px 0 16px;}
+.article-standfirst{font-size:18px;line-height:1.65;color:var(--muted);margin:0 0 16px;}
+.article-byline{font-size:13px;color:var(--muted);margin:0;}
+.article-updated{white-space:nowrap;}
+body.dark-mode .article-header{border-color:#24365c;}
+
+.article-body{font-size:16.5px;line-height:1.8;}
+.article-body h2{font-size:clamp(21px,2.6vw,27px);line-height:1.25;margin:38px 0 12px;}
+.article-body h3{font-size:19px;line-height:1.3;margin:28px 0 10px;}
+.article-body p{margin:0 0 18px;}
+.article-body ul,.article-body ol{margin:0 0 20px;padding-left:24px;}
+.article-body li{margin:0 0 9px;}
+.article-body a{color:var(--blue);text-decoration:underline;text-underline-offset:2px;}
+.article-body a:hover{text-decoration:none;}
+.article-body .article-note{border-left:3px solid var(--blue);background:var(--soft);
+  padding:14px 18px;border-radius:0 12px 12px 0;color:var(--dark);margin:24px 0 22px;}
+body.dark-mode .article-body a{color:#7ea6e8;}
+body.dark-mode .article-body .article-note{background:#16233b;color:#e6edff;}
+
+.article-foot{margin-top:34px;padding-top:22px;border-top:1px solid #edf0f6;}
+.article-foot a{color:var(--blue);font-weight:700;text-decoration:none;}
+.article-foot a:hover{text-decoration:underline;}
+body.dark-mode .article-foot{border-color:#24365c;}
+
+@media(max-width:720px){
+  .blog-hero{padding:24px 0 4px;}
+  .blog-hero-sub{font-size:17px;}
+  .blog-featured{padding:22px;}
+  .blog-card{padding:20px;}
+  .article-body{font-size:16px;}
+  .article-meta{font-size:11px;}
+}
