@@ -335,7 +335,8 @@ test('homepage COA button links to coas.html', async () => {
   const fs = require('fs');
   const path = require('path');
   const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
-  assert.ok(html.includes('href="coas.html"'), 'Homepage button must link to coas.html');
+  assert.ok(html.includes('href="coas.html"') || html.includes('href="/coas.html"'),
+    'Homepage button must link to the canonical COA page');
 });
 
 // ---- public COA page exists ------------------------------------------

@@ -58,6 +58,54 @@
   ]
 }
 </script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What are peptides?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Peptides are short chains of amino acids, the fundamental building blocks of proteins. Typically containing between 2 and 50 amino acids, peptides are smaller than proteins and act as critical signaling molecules in the body, directing cells to perform specific tasks like regulating hormones or repairing tissue."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Are your peptides third-party tested?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Batches submitted for third-party analysis have their certificates of analysis published on our COA page. Certificates are added as testing is completed, so coverage varies by product and batch."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How should peptides be stored?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Lyophilized peptides should be kept in a freezer. Once reconstituted, store refrigerated and use within the recommended window."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How fast is shipping?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Orders placed before 12pm CST will be shipped same day via USPS."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is your return policy?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Due to the highly sensitive chemical nature of laboratory reagents and reference standards, all sales of PX Research LLC products are final. To maintain strict laboratory safety protocols and prevent cross-contamination, we absolutely cannot accept returns, exchanges, or refunds of opened, unsealed, or altered product vials under any circumstances. By completing your purchase, you acknowledge and agree that these products are raw chemical reagents and cannot be returned. If a shipment arrives physically damaged, broken, or incorrect due to a transit error, the buyer must contact our support team within 48 hours of delivery with photographic evidence to request a complimentary replacement shipment."
+      }
+    }
+  ]
+}
+</script>
 </head>
 <body>
 
@@ -65,7 +113,7 @@
 
 <header><div class="container nav">
 <a href="#top" class="logo" aria-label="PepX Research"><img src="assets/logo-pepx-navbar.png" alt="PepX Research" class="logo-image"></a>
-<nav class="menu" id="site-menu"><a href="#top">Home</a><div class="menu-item"><a href="shop.html" class="menu-link">Shop <span class="menu-caret">▼</span></a><div class="menu-dropdown"><a href="shop.html?category=all">All Products</a><a href="shop.html?category=Recovery">Recovery</a><a href="shop.html?category=Metabolic">Metabolic</a><a href="shop.html?category=Repair">Repair</a><a href="shop.html?category=Growth">Growth</a><a href="shop.html?category=Cellular">Cellular</a><a href="shop.html?category=Neuro">Neuro</a></div></div><a href="account.html">My Account</a><a href="#faq">FAQ</a><a href="#about">About</a><a href="coas.html">View COAs</a></nav>
+<nav class="menu" id="site-menu"><a href="#top">Home</a><div class="menu-item"><a href="/shop" class="menu-link">Shop <span class="menu-caret">▼</span></a><div class="menu-dropdown"><a href="/shop">All Products</a><a href="/shop/recovery">Recovery</a><a href="/shop/metabolic">Metabolic</a><a href="/shop/repair">Repair</a><a href="/shop/growth">Growth</a><a href="/shop/cellular">Cellular</a><a href="/shop/neuro">Neuro</a><a href="/shop/support">Support</a></div></div><a href="account.html" class="auth-in-only">My Account</a><a href="/login.html" class="auth-out-only">Log in</a><a href="#faq">FAQ</a><a href="#about">About</a><a href="/coas.html">View COAs</a></nav>
 <div class="icons">
   <button type="button" id="mobileMenuToggle" class="icon-btn mobile-nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-menu">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
@@ -73,7 +121,7 @@
   <button type="button" id="accountBtn" class="icon-btn" title="Account" aria-label="Account">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"></circle><path d="M4 20c1.5-3.2 4.2-4.8 8-4.8s6.5 1.6 8 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
   </button>
-  <a href="checkout.html" class="icon-btn cart-btn" id="cartBtn" title="Cart" aria-label="Cart" aria-haspopup="dialog" aria-controls="drawer">
+  <a href="checkout.html" class="icon-btn cart-btn auth-in-only" id="cartBtn" title="Cart" aria-label="Cart" aria-haspopup="dialog" aria-controls="drawer">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.4" fill="currentColor"></circle><circle cx="18" cy="20" r="1.4" fill="currentColor"></circle><path d="M2 4h2l2.2 9.2a1 1 0 0 0 1 .8h9.6a1 1 0 0 0 1-.8L17 7H6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
     <span class="cart-count" id="cartCount" style="display:none">0</span>
   </a>
@@ -89,13 +137,13 @@
 <section class="hero container">
 <div>
 <div class="badge"><span class="dot"></span>✓ Third-Party Lab Tested</div>
-<h1>PUSH. EXCEL. PREVAIL.</h1>
+<p class="hero-tagline">PUSH. EXCEL. PREVAIL.</p>
+<h1>PepX Research &mdash; Research Peptides &amp; Compounds</h1>
 <p>Explore a wide range of peptides for research purposes. Premium quality, certified laboratory testing, and fast shipping nationwide.</p>
 <div class="btns">
-  <a href="shop.html" class="btn primary auth-in-only">Browse Catalog &#8594;</a>
-  <a href="/login.html?returnTo=%2Fshop.html" class="btn primary auth-out-only">Login to View Catalog</a>
+  <a href="/shop" class="btn primary">Browse Catalog &#8594;</a>
   <a href="/register.html" class="btn ghost auth-out-only">Create Account</a>
-  <a href="coas.html" class="btn ghost">View COAs</a>
+  <a href="/coas.html" class="btn ghost">View COAs</a>
 </div>
 <div class="stats">
 <div><div class="n">99%</div><div class="l">Peptide Purity</div></div>
@@ -120,19 +168,20 @@
 <section class="section container" id="products">
 <p class="featured-category-title">Shop by category</p>
 <div class="category-strip featured-category-strip" aria-label="Shop by category">
-  <button type="button" class="pill" data-filter="all">All</button>
-  <button type="button" class="pill" data-filter="Recovery">Recovery</button>
-  <button type="button" class="pill" data-filter="Metabolic">Metabolic</button>
-  <button type="button" class="pill" data-filter="Repair">Repair</button>
-  <button type="button" class="pill" data-filter="Growth">Growth</button>
-  <button type="button" class="pill" data-filter="Cellular">Cellular</button>
-  <button type="button" class="pill" data-filter="Neuro">Neuro</button>
+  <a class="pill" href="/shop" data-filter="all">All</a>
+  <a class="pill" href="/shop/recovery" data-filter="Recovery">Recovery</a>
+  <a class="pill" href="/shop/metabolic" data-filter="Metabolic">Metabolic</a>
+  <a class="pill" href="/shop/repair" data-filter="Repair">Repair</a>
+  <a class="pill" href="/shop/growth" data-filter="Growth">Growth</a>
+  <a class="pill" href="/shop/cellular" data-filter="Cellular">Cellular</a>
+  <a class="pill" href="/shop/neuro" data-filter="Neuro">Neuro</a>
+  <a class="pill" href="/shop/support" data-filter="Support">Support</a>
 </div>
 <h2>Featured Research Peptides</h2>
 <p class="sub">Certified, lab-tested compounds for professional research applications.</p>
 <div class="grid" id="productGrid"></div>
 <div class="featured-products-foot">
-  <a href="shop.html" class="btn ghost auth-in-only">View all products</a><a href="/login.html?returnTo=%2Fshop.html" class="btn ghost auth-out-only">Login to View All Products</a>
+  <a href="/shop" class="btn ghost">View all products</a>
 </div>
 </section>
 
@@ -176,7 +225,7 @@
 <p class="sub">Everything you need to know about ordering and handling.</p>
 <div class="faq">
 <div class="qa"><div class="q">What are peptides?<span class="ico">+</span></div><div class="a">Peptides are short chains of amino acids, the fundamental building blocks of proteins. Typically containing between 2 and 50 amino acids, peptides are smaller than proteins and act as critical signaling molecules in the body, directing cells to perform specific tasks like regulating hormones or repairing tissue.</div></div>
-<div class="qa"><div class="q">Are your peptides third-party tested?<span class="ico">+</span></div><div class="a">Batches submitted for third-party analysis have their certificates of analysis published on our <a href="coas.html">COA page</a>. Certificates are added as testing is completed, so coverage varies by product and batch.</div></div>
+<div class="qa"><div class="q">Are your peptides third-party tested?<span class="ico">+</span></div><div class="a">Batches submitted for third-party analysis have their certificates of analysis published on our <a href="/coas.html">COA page</a>. Certificates are added as testing is completed, so coverage varies by product and batch.</div></div>
 <div class="qa"><div class="q">How should peptides be stored?<span class="ico">+</span></div><div class="a">Lyophilized peptides should be kept in a freezer. Once reconstituted, store refrigerated and use within the recommended window.</div></div>
 <div class="qa"><div class="q">How fast is shipping?<span class="ico">+</span></div><div class="a">Orders placed before 12pm CST will be shipped same day via USPS.</div></div>
 <div class="qa"><div class="q">What is your return policy?<span class="ico">+</span></div><div class="a">Due to the highly sensitive chemical nature of laboratory reagents and reference standards, all sales of PX Research LLC products are final. To maintain strict laboratory safety protocols and prevent cross-contamination, we absolutely cannot accept returns, exchanges, or refunds of opened, unsealed, or altered product vials under any circumstances. By completing your purchase, you acknowledge and agree that these products are raw chemical reagents and cannot be returned. If a shipment arrives physically damaged, broken, or incorrect due to a transit error, the buyer must contact our support team within 48 hours of delivery with photographic evidence to request a complimentary replacement shipment.</div></div>
@@ -210,6 +259,8 @@
       <h4>Quick Links</h4>
       <div class="footer-link-list">
         <a class="footer-inline-link" href="#top">Home</a>
+        <a class="footer-inline-link" href="/shop">Shop</a>
+        <a class="footer-inline-link" href="/coas.html">Certificates of Analysis</a>
         <a class="footer-inline-link" href="mailto:pepxaminos@gmail.com?subject=PepX%20Research%20Inquiry">Contact Us</a>
       </div>
     </div>

@@ -41,7 +41,9 @@ const { createPublicCatalog, isIndexable } = require('./services/public-catalog'
 const {
   renderShopPage,
   renderProductPage,
-  renderNotFoundPage
+  renderNotFoundPage,
+  renderFeaturedGrid,
+  renderCoaIndex
 } = require('./services/public-page');
 
 loadProjectEnv({ cwd: __dirname });
@@ -553,6 +555,13 @@ function buildRobotsTxt(origin) {
     'Disallow: /checkout.html',
     'Disallow: /forgot-password.html',
     'Disallow: /reset-password.html',
+    '',
+    // The signed-in storefront pages. /shop and /products/<slug> now serve the
+    // same catalogue publicly, so these two are gated duplicates: every crawl
+    // of them ends in a login redirect and the public route is the one meant to
+    // be indexed. No public page links to them any more.
+    'Disallow: /shop.html',
+    'Disallow: /product.html',
     '',
     'Disallow: /admin.html',
     '',
@@ -1213,6 +1222,15 @@ const INDEX_HTML_PATH = path.join(__dirname, 'index.html');
 // and signed-out visitors are served index.html directly: the empty storefront
 // sections stop being hidden, which is a cosmetic regression, not an outage.
 let INDEX_HTML_PUBLIC = null;
+
+// The signed-out homepage is also where the featured product cards are
+// injected, so the cached variant is kept split in two around the (empty)
+// grid script.js normally fills. Serving a request is then a concatenation
+// rather than a search-and-replace over the whole page.
+const FEATURED_GRID_MARKER = '<div class="grid" id="productGrid"></div>';
+let INDEX_HTML_PUBLIC_HEAD = null;   // everything up to and including the opening <div>
+let INDEX_HTML_PUBLIC_TAIL = null;   // the closing </div> and everything after
+
 try {
   INDEX_HTML_PUBLIC = fs.readFileSync(INDEX_HTML_PATH, 'utf8')
     .replace('<html lang="en">', '<html lang="en" class="pepx-public">')
@@ -1223,17 +1241,126 @@ try {
     console.error('[startup] index.html no longer matches the signed-out homepage markers ' +
       '(<html lang="en"> and </body>); signed-out visitors will be served the page unmodified.');
   }
+
+  const gridAt = INDEX_HTML_PUBLIC.indexOf(FEATURED_GRID_MARKER);
+  if (gridAt === -1) {
+    console.error('[startup] index.html no longer contains ' + FEATURED_GRID_MARKER +
+      '; the signed-out homepage will render without server-rendered featured products.');
+  } else {
+    INDEX_HTML_PUBLIC_HEAD = INDEX_HTML_PUBLIC.slice(0, gridAt) + '<div class="grid" id="productGrid">';
+    INDEX_HTML_PUBLIC_TAIL = '</div>' + INDEX_HTML_PUBLIC.slice(gridAt + FEATURED_GRID_MARKER.length);
+  }
 } catch (error) {
   console.error('[startup] could not build the signed-out homepage variant; signed-out visitors ' +
     'will be served index.html unmodified:', error && error.message ? error.message : error);
 }
 
-app.get(['/', '/index.html'], (req, res) => {
+// Rendered featured-card HTML, memoised for the same TTL as the catalogue
+// snapshot behind it. Googlebot arrives in bursts and this string does not
+// change between them.
+const FEATURED_GRID_TTL_MS = 60 * 1000;
+let featuredGridHtml = null;
+let featuredGridAt = 0;
+
+async function getFeaturedGridHtml() {
+  const now = Date.now();
+  if (featuredGridHtml !== null && now - featuredGridAt < FEATURED_GRID_TTL_MS) {
+    return featuredGridHtml;
+  }
+  const products = await publicCatalog.listActive();
+  featuredGridHtml = renderFeaturedGrid({ products });
+  featuredGridAt = now;
+  return featuredGridHtml;
+}
+
+app.get(['/', '/index.html'], async (req, res) => {
   if (INDEX_HTML_PUBLIC === null || req.user || (req.session && req.session.userId)) {
     return res.sendFile(INDEX_HTML_PATH);
   }
+
+  // No split markers: serve the signed-out variant exactly as before. An
+  // unchanged homepage is a worse homepage, never a broken one.
+  if (INDEX_HTML_PUBLIC_HEAD === null) {
+    res.type('html');
+    return res.send(INDEX_HTML_PUBLIC);
+  }
+
+  let grid = '';
+  try {
+    grid = await getFeaturedGridHtml();
+  } catch (error) {
+    // A database problem must not take the homepage down. Without the cards the
+    // page is the PR #15 homepage, which is still complete and crawlable.
+    console.error('[homepage] featured products unavailable:',
+      error && error.message ? error.message : error);
+  }
+
   res.type('html');
-  return res.send(INDEX_HTML_PUBLIC);
+  res.set('Vary', 'Cookie');
+  return res.send(INDEX_HTML_PUBLIC_HEAD + grid + INDEX_HTML_PUBLIC_TAIL);
+});
+
+// ---------------------------------------------------------------------------
+// /coas.html - the other half of the product <-> certificate link pair.
+//
+// The page's certificate grid is built entirely by coas.js from /api/coas, so a
+// crawler is handed an empty <div> and finds no way from the certificates back
+// into the catalogue. This route injects a static list of the products that
+// actually have a published certificate, each linking to its public product
+// page. Everything else about the page is untouched, and the file is still
+// served verbatim if anything goes wrong.
+//
+// Registered here, above the HTML auth gate and express.static, for the same
+// reason the catalogue routes are: whoever answers first wins.
+// ---------------------------------------------------------------------------
+const COAS_HTML_PATH = path.join(__dirname, 'coas.html');
+const COAS_INDEX_MARKER = '\n    <section class="section section-shop">';
+let COAS_HTML_HEAD = null;
+let COAS_HTML_TAIL = null;
+
+try {
+  const coasHtml = fs.readFileSync(COAS_HTML_PATH, 'utf8');
+  const at = coasHtml.indexOf(COAS_INDEX_MARKER);
+  if (at === -1) {
+    console.error('[startup] coas.html no longer contains the COA index injection point; ' +
+      'the page will be served unmodified.');
+  } else {
+    COAS_HTML_HEAD = coasHtml.slice(0, at);
+    COAS_HTML_TAIL = coasHtml.slice(at);
+  }
+} catch (error) {
+  console.error('[startup] could not read coas.html:', error && error.message ? error.message : error);
+}
+
+let coaIndexHtml = null;
+let coaIndexAt = 0;
+
+async function getCoaIndexHtml() {
+  const now = Date.now();
+  if (coaIndexHtml !== null && now - coaIndexAt < FEATURED_GRID_TTL_MS) return coaIndexHtml;
+  const products = await publicCatalog.listActive();
+  coaIndexHtml = renderCoaIndex({ products });
+  coaIndexAt = now;
+  return coaIndexHtml;
+}
+
+app.get('/coas.html', async (req, res, next) => {
+  if (COAS_HTML_HEAD === null) return next();
+
+  let block = '';
+  try {
+    block = await getCoaIndexHtml();
+  } catch (error) {
+    console.error('[coas] product index unavailable:',
+      error && error.message ? error.message : error);
+  }
+  if (!block) return next();
+
+  // The injected block is the same for everyone - it is public catalogue data
+  // and internal links - so unlike the catalogue routes this response does not
+  // vary by cookie.
+  res.type('html');
+  return res.send(COAS_HTML_HEAD + '\n' + block + COAS_HTML_TAIL);
 });
 
 app.use(async (req, res, next) => {

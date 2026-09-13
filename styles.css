@@ -362,7 +362,7 @@ nav.menu a:hover{color:var(--blue);}
 .section h2{font-size:38px;font-weight:800;letter-spacing:-1px;text-align:center;}
 .section .sub{text-align:center;color:var(--muted);margin:12px auto 46px;max-width:520px;}
 .featured-category-title{text-align:center;font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#1c4379;margin-bottom:12px;}
-.featured-category-strip.category-strip{width:100%;max-width:1240px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin:0 auto 18px;padding:0;overflow:visible;scroll-snap-type:none;}
+.featured-category-strip.category-strip{width:100%;max-width:1240px;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;margin:0 auto 18px;padding:0;overflow:visible;scroll-snap-type:none;}
 .featured-category-strip.category-strip .pill{min-width:0;text-align:center;white-space:normal;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:64px;line-height:1.1;padding:12px 8px;border-radius:12px;border:1px solid #dbe3f4;background:linear-gradient(180deg,#ffffff 0%,#f6f9ff 100%);font-size:13px;font-weight:700;color:#243045;box-shadow:0 6px 18px rgba(15,23,42,.06);scroll-snap-align:none;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease,color .18s ease;}
 .featured-category-strip.category-strip .pill:hover{transform:translateY(-2px);border-color:#b9c8eb;box-shadow:0 10px 24px rgba(  28,  67,  121,.14);}
 .featured-category-strip.category-strip .pill.active{background:linear-gradient(135deg,#1c4379 0%,#1c4379 100%);border-color:#1c4379;color:#fff;box-shadow:0 10px 26px rgba(  28,  67,  121,.35);}
@@ -1963,9 +1963,6 @@ body.dark-mode tr.admin-order-detail-row > td.admin-order-detail-cell{background
    visible and crawlable. */
 html.pepx-public .hero-best,
 html.pepx-public .review-collage,
-html.pepx-public .featured-category-title,
-html.pepx-public .featured-category-strip,
-html.pepx-public #productGrid,
 html.pepx-public #reviews{display:none;}
 /* The hero is a two-column grid; with the best-seller rail hidden the copy would
    otherwise sit in a half-width column. */
@@ -1977,3 +1974,45 @@ html.pepx-public .hero{grid-template-columns:minmax(0,1fr);}
    unmodified. So "no class" is the signed-in state and stays the default. */
 html.pepx-public .auth-in-only { display: none !important; }
 html:not(.pepx-public) .auth-out-only { display: none !important; }
+
+/* The hero brand line. The H1 now names the company and what it sells, so
+   "PUSH. EXCEL. PREVAIL." sits above it as an eyebrow instead of being the
+   only heading on the page. */
+.hero .hero-tagline{color:var(--blue);font-size:13px;font-weight:800;letter-spacing:2.4px;
+  text-transform:uppercase;margin:0;max-width:none;}
+body.dark-mode .hero .hero-tagline{color:#7ea6e8;}
+@media(max-width:600px){.hero .hero-tagline{font-size:11px;letter-spacing:1.8px;}}
+
+/* The category controls are anchors now (crawlable links to /shop/<category>)
+   rather than buttons, so they need the button look without link decoration. */
+a.pill{text-decoration:none;}
+a.pill:hover,a.pill:focus-visible{text-decoration:none;}
+
+/* Server-rendered product cards (services/public-page.js). They live inside the
+   existing .product-card shell, but the signed-out markup has no cart controls,
+   so the pieces script.js normally supplies need their own rules. */
+.product-card-link{display:block;text-decoration:none;color:inherit;}
+.product-card-image{width:100%;height:220px;object-fit:cover;object-position:center;display:block;
+  background:linear-gradient(135deg,#eef1fc,#f7f8fd);}
+.product-card-orb{height:220px;background:linear-gradient(135deg,#eef1fc,#f7f8fd);}
+.product-card-title{font-size:20px;line-height:1.2;margin:18px 20px 0;}
+.product-card .tag{margin:10px 20px 0;}
+.product-card-price{font-weight:800;font-size:17px;margin:10px 20px 0;}
+.product-card-stock{color:var(--muted);font-size:13px;margin:4px 20px 0;}
+.product-card > .btn.ghost{margin:16px 20px 20px;justify-content:center;text-align:center;}
+body.dark-mode .product-card-image,body.dark-mode .product-card-orb{background:#16233b;}
+
+/* "Products with published certificates" list injected into coas.html for
+   signed-out visitors, completing the product <-> COA link pair. */
+.public-coa-index{margin:28px 0 0;}
+.public-coa-index h2{font-size:20px;margin:0 0 6px;}
+.public-coa-index p.public-coa-index-sub{color:var(--muted);margin:0 0 14px;font-size:14px;}
+.public-coa-index ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:10px;margin:0;padding:0;}
+.public-coa-index a{display:block;padding:12px 14px;border:1px solid #dbe3f4;border-radius:12px;
+  background:#fff;color:#243045;font-weight:700;font-size:14px;text-decoration:none;
+  transition:border-color .18s ease,transform .18s ease;}
+.public-coa-index a:hover{border-color:#b9c8eb;transform:translateY(-2px);}
+.public-coa-index a .public-coa-index-count{display:block;font-weight:600;font-size:12px;
+  color:var(--muted);margin-top:2px;}
+body.dark-mode .public-coa-index a{background:#111c30;border-color:#24365c;color:#e6edff;}
