@@ -4,7 +4,7 @@
     {
       "src": "api/index.js",
       "use": "@vercel/node",
-      "config": { "includeFiles": ["**/*.html", "**/*.js", "**/*.css", "assets/**", "db/**", "routes/**", "services/**"] }
+      "config": { "includeFiles": ["**/*.html", "**/*.js", "**/*.css", "assets/**", "db/**", "routes/**", "services/**", "content/**", "favicon.ico"] }
     },
     { "src": "login.html", "use": "@vercel/static" },
     { "src": "register.html", "use": "@vercel/static" },

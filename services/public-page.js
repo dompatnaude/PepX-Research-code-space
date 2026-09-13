@@ -262,6 +262,7 @@ function header(categories) {
     '<a href="/">Home</a>',
     '<div class="menu-item"><a href="/shop" class="menu-link">Shop <span class="menu-caret">▼</span></a>',
     '<div class="menu-dropdown"><a href="/shop">All Products</a>' + dropdown + '</div></div>',
+    '<a href="/blog">Blog</a>',
     '<a href="/coas.html">View COAs</a>',
     '<a href="/#faq">FAQ</a>',
     '<a href="/#about">About</a>',
@@ -297,6 +298,7 @@ function footer(categories) {
     '<div class="footer-quick-links"><h4>Catalogue</h4><div class="footer-link-list">',
     '<a class="footer-inline-link" href="/shop">All Products</a>' + catLinks,
     '<a class="footer-inline-link" href="/coas.html">Certificates of Analysis</a>',
+    '<a class="footer-inline-link" href="/blog">Blog</a>',
     '</div></div>',
     '<div class="footer-policies" aria-label="Footer Policies"><h4>Policies</h4><div class="footer-link-list">',
     '<a class="footer-inline-link" href="/shipping-policy.html">Shipping Policy</a>',
@@ -571,6 +573,20 @@ function renderNotFoundPage({ origin, categories = [] }) {
 }
 
 module.exports = {
+  // Shared chrome. services/blog-page.js builds on these so the blog is the
+  // same site, not a second implementation of it.
+  head,
+  header,
+  footer,
+  document_,
+  breadcrumbNav,
+  jsonLdBlock,
+  absolute,
+  collapse,
+  plural,
+  BRAND_SUFFIX,
+  SHARE_IMAGE,
+  RESEARCH_USE_NOTICE,
   renderShopPage,
   renderProductPage,
   renderNotFoundPage,

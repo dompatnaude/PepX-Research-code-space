@@ -45,6 +45,12 @@ const {
   renderFeaturedGrid,
   renderCoaIndex
 } = require('./services/public-page');
+const blogContent = require('./content/blog');
+const {
+  renderBlogIndex,
+  renderArticlePage,
+  renderBlogNotFound
+} = require('./services/blog-page');
 
 loadProjectEnv({ cwd: __dirname });
 require('dotenv').config();
@@ -494,7 +500,8 @@ const publicCatalog = createPublicCatalog({ pool });
 const STATIC_SITEMAP_PATHS = [
   '/',
   '/shop',
-  '/coas.html'
+  '/coas.html',
+  '/blog'
 ];
 
 function sitemapEntry(origin, loc, lastmod) {
@@ -534,6 +541,14 @@ async function buildSitemapXml(origin) {
     console.error('[sitemap] catalogue unavailable, serving static entries only:',
       error && error.message ? error.message : error);
   }
+
+  // Blog articles come from a static module, not the database, so they are
+  // added outside the try/catch above: a database outage must not remove them.
+  // listIndexable() is published-only and drops anything marked noindex, so a
+  // draft can never be announced to Google.
+  entries = entries.concat(blogContent.listIndexable().map(
+    (article) => sitemapEntry(origin, article.path, article.dateUpdated || article.datePublished)
+  ));
 
   return '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
@@ -1298,6 +1313,108 @@ app.get(['/', '/index.html'], async (req, res) => {
   res.type('html');
   res.set('Vary', 'Cookie');
   return res.send(INDEX_HTML_PUBLIC_HEAD + grid + INDEX_HTML_PUBLIC_TAIL);
+});
+
+// ---------------------------------------------------------------------------
+// The blog. Public, server-rendered, and reachable without a session for the
+// same reason the catalogue is: a page Google cannot read is a page that does
+// not rank. Articles come from content/blog, a static module, so these routes
+// do not touch the database at all - publicCatalog.categories() is only read
+// to build the shared header and footer, and a failure there degrades to the
+// page without the category dropdown rather than to an error.
+// ---------------------------------------------------------------------------
+async function chromeCategories() {
+  try {
+    return await publicCatalog.categories();
+  } catch (error) {
+    console.error('[blog] category chrome unavailable:',
+      error && error.message ? error.message : error);
+    return [];
+  }
+}
+
+app.get('/blog', async (req, res, next) => {
+  try {
+    const categories = await chromeCategories();
+    return sendPublicHtml(res, renderBlogIndex({
+      origin: CANONICAL_ORIGIN,
+      articles: blogContent.listPublished(),
+      categories
+    }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get('/blog/:slug', async (req, res, next) => {
+  try {
+    const article = blogContent.findBySlug(req.params.slug);
+    const categories = await chromeCategories();
+
+    // Unknown slug is a real 404, not a redirect and not a soft 200: no
+    // crawlable space of invented article URLs opens up.
+    if (!article) {
+      return sendPublicHtml(res, renderBlogNotFound({ origin: CANONICAL_ORIGIN, categories }), 404);
+    }
+
+    const related = blogContent.listPublished()
+      .filter((a) => a.slug !== article.slug)
+      .slice(0, 3);
+
+    return sendPublicHtml(res, renderArticlePage({
+      origin: CANONICAL_ORIGIN,
+      article,
+      related,
+      categories
+    }));
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Anything deeper than /blog/<slug> - a stray extra path segment, or a slash
+// inside what was meant to be one segment - is an article that does not exist.
+// Without this it falls through to the app.get('*') login redirect, which sends
+// a crawler following a broken link into a robots-disallowed URL instead of
+// giving it a clean 404.
+app.get('/blog/*', async (req, res, next) => {
+  try {
+    return sendPublicHtml(res, renderBlogNotFound({
+      origin: CANONICAL_ORIGIN,
+      categories: await chromeCategories()
+    }), 404);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Root-level icon conventions.
+//
+// Browsers and crawlers request /favicon.ico and /apple-touch-icon.png whether
+// or not a page declares them. favicon.ico sits in the repository root, which
+// no vercel.json includeFiles glob covered, and apple-touch-icon.png lives
+// under assets/ - so both probes fell through express.static to the
+// app.get('*') fallback and were answered with a redirect to the login page.
+//
+// This serves them directly, and vercel.json now ships favicon.ico with the
+// function. A missing file answers 404 rather than falling through, because a
+// login redirect is the wrong answer to any icon request.
+// ---------------------------------------------------------------------------
+const ROOT_ICONS = {
+  '/favicon.ico': 'favicon.ico',
+  '/apple-touch-icon.png': path.join('assets', 'apple-touch-icon.png'),
+  '/apple-touch-icon-precomposed.png': path.join('assets', 'apple-touch-icon.png')
+};
+
+app.get(Object.keys(ROOT_ICONS), (req, res) => {
+  res.set('Cache-Control', 'public, max-age=604800');
+  return res.sendFile(path.join(__dirname, ROOT_ICONS[req.path]), (error) => {
+    if (!error) return;
+    console.error('[icons] could not serve ' + req.path + ':',
+      error && error.message ? error.message : error);
+    if (!res.headersSent) res.status(404).end();
+  });
 });
 
 // ---------------------------------------------------------------------------
