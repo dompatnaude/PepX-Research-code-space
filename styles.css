@@ -2065,6 +2065,13 @@ body.dark-mode .blog-hero-sub{color:#e6edff;}
 .article-meta .article-category{color:var(--blue);}
 body.dark-mode .article-meta .article-category{color:#7ea6e8;}
 
+/* In a card column the meta row is narrow enough that a long category wraps the
+   date onto a second line while a short one does not, so card titles started at
+   different heights depending on the length of the category name. Stacking the
+   two puts every card on the same baseline. Scoped to .blog-card: the featured
+   card and the article page header keep the space-between row above. */
+.blog-card .article-meta{flex-direction:column;align-items:flex-start;gap:4px;}
+
 .blog-featured{padding:28px;border:1px solid #edf0f6;border-radius:20px;background:#fff;}
 .blog-featured h2{font-size:clamp(22px,3vw,30px);line-height:1.2;margin:0 0 12px;text-align:left;}
 .blog-featured h2 a{color:inherit;text-decoration:none;}

@@ -18,7 +18,17 @@
 // Adding an article is: write content/blog/<slug>.js, add it to ARTICLES.
 // ---------------------------------------------------------------------------
 
+// Order matters only as a tie-break: load() sorts by datePublished, newest
+// first, and the sort is stable, so articles sharing a date keep the order they
+// appear in here. The first entry is therefore the featured article on /blog
+// whenever it is among the newest.
 const ARTICLE_MODULES = [
+  require('./peptide-purity-vs-identity-testing'),
+  require('./what-hplc-testing-measures'),
+  require('./mass-spectrometry-compound-identification'),
+  require('./what-third-party-testing-means'),
+  require('./batch-numbers-research-compound-documentation'),
+  require('./what-does-lyophilized-mean'),
   require('./how-to-read-a-certificate-of-analysis')
 ];
 
