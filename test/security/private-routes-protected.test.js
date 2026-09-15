@@ -135,18 +135,19 @@ test('product images are public but nothing else about assets changed', () => {
     'the static exposure policy from PR #14 must stay wired in');
 });
 
-test('the sitemap only ever announces content-eligible product URLs', () => {
-  assert.match(SERVER, /publicCatalog\.indexableProducts\(\)/);
-  assert.doesNotMatch(SERVER, /publicCatalog\.listActive\(\)[\s\S]{0,200}sitemapEntry/,
-    'the sitemap must not be built from the full product list');
-  assert.match(CATALOG, /function isIndexable\(product\)/);
+test('the sitemap announces no catalogue URL at all', () => {
+  const start = SERVER.indexOf('async function buildSitemapXml');
+  assert.ok(start !== -1, 'buildSitemapXml should still exist');
+  const block = SERVER.slice(start, SERVER.indexOf('\n}', start));
+  assert.doesNotMatch(block, /publicCatalog\./,
+    'the catalogue is signed-in only, so no catalogue URL belongs in the sitemap');
 });
 
 test('the sitemap stays focused on the pages meant to earn traffic', () => {
   const start = SERVER.indexOf('const STATIC_SITEMAP_PATHS = [');
   const block = SERVER.slice(start, SERVER.indexOf('];', start));
 
-  for (const wanted of ['/', '/shop', '/coas.html']) {
+  for (const wanted of ['/', '/coas.html', '/blog']) {
     assert.ok(block.includes("'" + wanted + "'"), 'sitemap should list ' + wanted);
   }
   for (const excluded of [
@@ -155,7 +156,38 @@ test('the sitemap stays focused on the pages meant to earn traffic', () => {
   ]) {
     assert.ok(!block.includes("'" + excluded + "'"), 'sitemap should not list ' + excluded);
   }
-  for (const never of ['/shop.html', '/product.html', '/account.html', '/checkout.html', '/admin.html', '/login.html']) {
+  for (const never of ['/shop', '/products/', '/shop.html', '/product.html', '/account.html', '/checkout.html', '/admin.html', '/login.html']) {
     assert.ok(!block.includes("'" + never + "'"), 'sitemap must never list ' + never);
   }
+});
+test('the catalogue routes gate before they touch the catalogue', () => {
+  const routes = ["app.get('/shop',", "app.get('/shop/:category',", "app.get('/products/:slug',"];
+  for (const route of routes) {
+    const start = SERVER.indexOf(route);
+    assert.ok(start !== -1, route + ' should still be registered');
+    const block = SERVER.slice(start, SERVER.indexOf('\n});', start));
+
+    const gate = block.indexOf('hydrateAuthenticatedUser');
+    assert.ok(gate !== -1, route + ' must check the session');
+    assert.match(
+      block,
+      /if \(!\(await hydrateAuthenticatedUser\(req\)\)\) \{[\s\S]{0,120}buildLoginRedirectTarget\(req\)/,
+      route + ' must send a signed-out visitor to the login page'
+    );
+
+    const lookup = block.indexOf('publicCatalog.');
+    if (lookup !== -1) {
+      assert.ok(lookup > gate, route + ' must not read the catalogue before the gate');
+    }
+    assert.ok(!block.includes('sendPublicHtml'), route + ' must not render catalogue HTML');
+  }
+});
+
+test('no route server-renders the catalogue for a signed-out visitor', () => {
+  assert.doesNotMatch(SERVER, /sendPublicHtml\(res, renderShopPage/,
+    'the public shop page must not be served any more');
+  assert.doesNotMatch(SERVER, /sendPublicHtml\(res, renderProductPage/,
+    'the public product page must not be served any more');
+  assert.doesNotMatch(SERVER, /FEATURED_GRID_MARKER/,
+    'the homepage must not inject server-rendered product cards');
 });

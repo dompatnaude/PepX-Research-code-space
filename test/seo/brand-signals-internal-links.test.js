@@ -66,29 +66,28 @@ function product(over = {}) {
 
 // --- 1. homepage H1 ---------------------------------------------------------
 
-test('the homepage H1 names the brand and what the site sells', () => {
+test('the homepage H1 is the brand slogan', () => {
   const h1s = INDEX.match(/<h1[^>]*>([\s\S]*?)<\/h1>/g) || [];
   assert.equal(h1s.length, 1, 'a page should have exactly one H1');
 
   const text = h1s[0]
     .replace(/<[^>]+>/g, '')
-    .replace(/&mdash;/g, '\u2014')
+    .replace(/&mdash;/g, '—')
     .replace(/&amp;/g, '&')
     .trim();
 
-  assert.match(text, /PepX Research/, 'the H1 must identify the brand');
-  assert.match(text, /Research (Peptides|Compounds)/i, 'the H1 must say what the site is');
-  // The old H1 was the tagline alone, which told Google nothing.
-  assert.doesNotMatch(text, /PUSH\. EXCEL\. PREVAIL\./);
+  assert.equal(text, 'PUSH. EXCEL. PREVAIL.',
+    'the hero H1 is the brand slogan; what the site sells is carried by the title, meta description and body copy');
 });
 
-test('the tagline is preserved as visible supporting brand copy', () => {
-  assert.match(INDEX, /<p class="hero-tagline">PUSH\. EXCEL\. PREVAIL\.<\/p>/);
-  // Preserved visually means styled, not merely present.
-  assert.match(STYLES, /\.hero \.hero-tagline\{/);
-  // And never hidden from the signed-out page.
-  const hideRule = STYLES.slice(STYLES.indexOf('html.pepx-public .hero-best,'));
-  assert.doesNotMatch(hideRule.slice(0, 400), /hero-tagline/);
+test('the slogan is presented once, not duplicated above the H1', () => {
+  const heroStart = INDEX.indexOf('<section class="hero container">');
+  assert.ok(heroStart !== -1, 'the hero section should still exist');
+  const hero = INDEX.slice(heroStart, INDEX.indexOf('</section>', heroStart));
+
+  const hits = hero.match(/PUSH\. EXCEL\. PREVAIL\./g) || [];
+  assert.equal(hits.length, 1, 'the hero presents the slogan exactly once');
+  assert.ok(!hero.includes('hero-tagline'), 'no eyebrow copy of the slogan above the H1');
 });
 
 // --- 2. category controls are crawlable links -------------------------------
@@ -178,19 +177,21 @@ test('renderFeaturedGrid is honest about an empty catalogue', () => {
   assert.equal(renderFeaturedGrid({ products: null }), '');
 });
 
-test('the homepage route injects the cards into the existing grid', () => {
-  assert.match(SERVER, /const FEATURED_GRID_MARKER = '<div class="grid" id="productGrid"><\/div>';/);
+test('the homepage never server-renders catalogue data', () => {
+  const start = SERVER.indexOf("app.get(['/', '/index.html']");
+  assert.ok(start !== -1, 'the homepage route should still exist');
+  const block = SERVER.slice(start, SERVER.indexOf('\n});', start));
+
+  assert.ok(!block.includes('publicCatalog.'), 'the homepage must not read the catalogue');
   assert.ok(INDEX.includes('<div class="grid" id="productGrid"></div>'),
-    'index.html must still carry the marker server.js splits on');
-  assert.match(SERVER, /INDEX_HTML_PUBLIC_HEAD \+ grid \+ INDEX_HTML_PUBLIC_TAIL/);
+    'the grid stays in index.html and is filled client-side from the gated API');
 });
 
-test('a database failure degrades the homepage instead of breaking it', () => {
+test('the homepage falls back to the file when the public variant is unavailable', () => {
   const start = SERVER.indexOf("app.get(['/', '/index.html']");
-  const block = SERVER.slice(start, SERVER.indexOf('// ---', start));
-  // Missing markers -> the PR #15 page. A failed query -> the page without cards.
-  assert.match(block, /if \(INDEX_HTML_PUBLIC_HEAD === null\)[\s\S]{0,160}send\(INDEX_HTML_PUBLIC\)/);
-  assert.match(block, /catch \(error\) \{[\s\S]{0,300}\}\s*\n\s*res\.type\('html'\)/);
+  const block = SERVER.slice(start, SERVER.indexOf('\n});', start));
+
+  assert.match(block, /if \(INDEX_HTML_PUBLIC === null[\s\S]{0,160}sendFile\(INDEX_HTML_PATH\)/);
 });
 
 test('the signed-out homepage still varies on cookie and signed-in visitors still get the file', () => {

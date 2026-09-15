@@ -377,10 +377,10 @@ test('the blog never reads a session and never branches on the crawler', () => {
 test('the sitemap announces /blog and published articles, and nothing else new', () => {
   const start = SERVER.indexOf('const STATIC_SITEMAP_PATHS = [');
   const block = SERVER.slice(start, SERVER.indexOf('];', start));
-  for (const wanted of ['/', '/shop', '/coas.html', '/blog']) {
+  for (const wanted of ['/', '/coas.html', '/blog']) {
     assert.ok(block.includes("'" + wanted + "'"), 'sitemap should list ' + wanted);
   }
-  for (const never of ['/shop.html', '/product.html', '/account.html', '/login.html', '/register.html']) {
+  for (const never of ['/shop', '/products/', '/shop.html', '/product.html', '/account.html', '/login.html', '/register.html']) {
     assert.ok(!block.includes("'" + never + "'"), 'sitemap must never list ' + never);
   }
   assert.match(SERVER, /blogContent\.listIndexable\(\)/);
