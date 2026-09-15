@@ -531,18 +531,23 @@ function renderFeaturedGrid({ products, limit = 8 }) {
  * certificate. Products with no published COA are left out, so the list never
  * implies coverage that does not exist.
  */
-function renderCoaIndex({ products }) {
-  const withCoas = (products || [])
-    .filter((p) => p.publishedCoaCount > 0 && p.slug)
+// Names and counts only, and never a link. The public certificate index is a
+// verification resource: it must not carry price, stock, slug or any route
+// into the gated catalogue, and a product with no published COA never appears.
+function renderCoaIndex({ subjects }) {
+  const listed = (subjects || [])
+    .filter((subject) => subject && subject.name && subject.publishedCoaCount > 0)
     .sort((a, b) => String(a.name).localeCompare(String(b.name)));
 
-  if (!withCoas.length) return '';
+  if (!listed.length) return '';
 
-  const items = withCoas.map((p) =>
-    '<li><a href="' + escapeHtml(p.path) + '">' + escapeHtml(p.name) +
-    '<span class="public-coa-index-count">' + p.publishedCoaCount + ' published ' +
-    plural(p.publishedCoaCount, 'certificate', 'certificates') +
-    '</span></a></li>'
+  const items = listed.map((subject) =>
+    '<li><div class="public-coa-index-item">' +
+      '<span class="public-coa-index-name">' + escapeHtml(subject.name) + '</span>' +
+      '<span class="public-coa-index-count">' + subject.publishedCoaCount + ' published ' +
+        plural(subject.publishedCoaCount, 'certificate', 'certificates') +
+      '</span>' +
+    '</div></li>'
   ).join('');
 
   return [

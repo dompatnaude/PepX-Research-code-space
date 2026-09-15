@@ -280,24 +280,29 @@ test('coas.js still reads the query parameter the deep link uses', () => {
   assert.match(read('coas.js'), /get\('product_id'\)/);
 });
 
-test('renderCoaIndex links back to only the products that have a certificate', () => {
+test('renderCoaIndex lists only the names that have a published certificate', () => {
   const html = renderCoaIndex({
-    products: [
-      product({ id: 1, slug: 'tb-500', name: 'TB-500', path: '/products/tb-500', publishedCoaCount: 3 }),
-      product({ id: 2, slug: 'no-coa', name: 'No COA', path: '/products/no-coa', publishedCoaCount: 0 })
+    subjects: [
+      { name: 'TB-500', publishedCoaCount: 3 },
+      { name: 'No COA', publishedCoaCount: 0 }
     ]
   });
-  assert.match(html, /href="\/products\/tb-500"/);
-  assert.doesNotMatch(html, /no-coa/);
+
+  assert.match(html, /TB-500/);
+  assert.doesNotMatch(html, /No COA/);
   assert.match(html, /3 published certificates/);
   // It must not imply coverage the site does not have.
   assert.match(html, /coverage varies by product and batch/);
   assert.doesNotMatch(html, /every (batch|product)/i);
+  // And it is a verification list, not a storefront: no route back into the
+  // gated catalogue, from a page that answers signed-out requests.
+  assert.doesNotMatch(html, /<a /);
+  assert.doesNotMatch(html, /\/products\//);
 });
 
 test('renderCoaIndex emits nothing when no certificate is published', () => {
-  assert.equal(renderCoaIndex({ products: [product({ publishedCoaCount: 0 })] }), '');
-  assert.equal(renderCoaIndex({ products: [] }), '');
+  assert.equal(renderCoaIndex({ subjects: [{ name: 'No COA', publishedCoaCount: 0 }] }), '');
+  assert.equal(renderCoaIndex({ subjects: [] }), '');
 });
 
 test('the /coas.html route injects that list above the client-rendered grid', () => {

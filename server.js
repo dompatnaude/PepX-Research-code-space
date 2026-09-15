@@ -38,6 +38,7 @@ const { loadProjectEnv } = require('./services/runtime-config');
 const { resolveGoogleCallbackUrl } = require('./services/google-config');
 const { classifyStaticRequest } = require('./services/static-exposure-policy');
 const { createPublicCatalog, isIndexable } = require('./services/public-catalog');
+const { createCoaIndex } = require('./services/coa-index');
 const {
   renderShopPage,
   renderProductPage,
@@ -489,6 +490,7 @@ const CANONICAL_ORIGIN = String(process.env.CANONICAL_ORIGIN || 'https://pepxres
 // /forgot-password.html and /reset-password.html (authentication pages, no
 // search value), every /api/* endpoint, /auth/* and the EasyPost webhook.
 const publicCatalog = createPublicCatalog({ pool });
+const coaIndex = createCoaIndex({ pool });
 
 // Deliberately narrow: the homepage, the COA page, and the blog. The catalogue
 // is signed-in only, so no catalogue URL belongs in the sitemap.
@@ -1368,8 +1370,8 @@ let coaIndexAt = 0;
 async function getCoaIndexHtml() {
   const now = Date.now();
   if (coaIndexHtml !== null && now - coaIndexAt < COA_INDEX_TTL_MS) return coaIndexHtml;
-  const products = await publicCatalog.listActive();
-  coaIndexHtml = renderCoaIndex({ products });
+  const subjects = await coaIndex.publishedSubjects();
+  coaIndexHtml = renderCoaIndex({ subjects });
   coaIndexAt = now;
   return coaIndexHtml;
 }
