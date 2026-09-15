@@ -1201,7 +1201,9 @@ let INDEX_HTML_PUBLIC = null;
 try {
   INDEX_HTML_PUBLIC = fs.readFileSync(INDEX_HTML_PATH, 'utf8')
     .replace('<html lang="en">', '<html lang="en" class="pepx-public">')
-    .replace('</body>', '<script src="/public-home.js"></script>\n</body>');
+    .replace('</body>',
+      '<script src="/public-home.js"></script>\n' +
+      '<script src="/public-nav.js" defer></script>\n</body>');
 
   if (!INDEX_HTML_PUBLIC.includes('class="pepx-public"') ||
       !INDEX_HTML_PUBLIC.includes('public-home.js')) {

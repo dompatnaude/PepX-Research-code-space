@@ -16,7 +16,12 @@
 <body>
   <header><div class="container nav">
     <a href="index.html" class="logo" aria-label="PepX Research"><img src="assets/logo-pepx-navbar.png" alt="PepX Research" class="logo-image"></a>
-    <nav class="menu"><a href="index.html">Home</a><div class="menu-item"><a href="/shop" class="menu-link">Shop <span class="menu-caret">▼</span></a><div class="menu-dropdown"><a href="/shop">All Products</a><a href="/shop/recovery">Recovery</a><a href="/shop/metabolic">Metabolic</a><a href="/shop/repair">Repair</a><a href="/shop/growth">Growth</a><a href="/shop/cellular">Cellular</a><a href="/shop/neuro">Neuro</a><a href="/shop/support">Support</a></div></div><a href="index.html#faq">FAQ</a><a href="index.html#about">About</a><a href="/blog">Blog</a><a href="/coas.html">View COAs</a></nav>
+    <nav class="menu" id="site-menu"><a href="index.html">Home</a><div class="menu-item"><a href="/shop" class="menu-link">Shop <span class="menu-caret">▼</span></a><div class="menu-dropdown"><a href="/shop">All Products</a><a href="/shop/recovery">Recovery</a><a href="/shop/metabolic">Metabolic</a><a href="/shop/repair">Repair</a><a href="/shop/growth">Growth</a><a href="/shop/cellular">Cellular</a><a href="/shop/neuro">Neuro</a><a href="/shop/support">Support</a></div></div><a href="index.html#faq">FAQ</a><a href="index.html#about">About</a><a href="/blog">Blog</a><a href="/coas.html">View COAs</a></nav>
+    <div class="icons">
+      <button type="button" id="mobileMenuToggle" class="icon-btn mobile-nav-toggle" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+      </button>
+    </div>
   </div></header>
 
   <main class="container policy-page-shell">
@@ -78,5 +83,6 @@
 
     <div class="copy">&copy; 2026 PepX Research. All rights reserved.</div>
   </div></footer>
+<script src="/public-nav.js" defer></script>
 </body>
 </html>

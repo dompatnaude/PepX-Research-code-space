@@ -22,24 +22,9 @@
     if (q) q.parentElement.classList.toggle('open');
   });
 
-  // Mobile navigation. Below 900px styles.css hides nav.menu unless it carries
-  // the `open` class, so without this the menu cannot be opened at all.
-  var toggle = document.getElementById('mobileMenuToggle');
-  var nav = document.getElementById('site-menu');
-  if (toggle && nav) {
-    toggle.setAttribute('aria-expanded', 'false');
-
-    toggle.addEventListener('click', function () {
-      var isOpen = nav.classList.toggle('open');
-      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    });
-
-    document.addEventListener('click', function (e) {
-      if (nav.contains(e.target) || toggle.contains(e.target)) return;
-      nav.classList.remove('open');
-      toggle.setAttribute('aria-expanded', 'false');
-    });
-  }
+  // Mobile navigation lives in public-nav.js, which the signed-out homepage
+  // loads alongside this file. It used to be duplicated here and in coas.js;
+  // one copy means one behaviour, including Escape to close.
 
   // The account icon is driven by script.js for signed-in visitors. For everyone
   // else it is inert, so point it at the login page.

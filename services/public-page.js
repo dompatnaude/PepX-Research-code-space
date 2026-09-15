@@ -268,6 +268,17 @@ function header(categories) {
     '<a href="/#about">About</a>',
     '<a href="/login.html">Log in</a>',
     '</nav>',
+    // Below 900px styles.css hides nav.menu unless it carries `open`. This is
+    // the control that puts it there; /public-nav.js binds it. The markup
+    // matches the button the static pages already carry, so both share one set
+    // of styles.
+    '<div class="icons">',
+    '<button type="button" id="mobileMenuToggle" class="icon-btn mobile-nav-toggle"' +
+      ' aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-menu">',
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"' +
+      ' fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>',
+    '</button>',
+    '</div>',
     '</div></header>'
   ].join('\n');
 }
@@ -323,6 +334,7 @@ function document_({ seo, origin, ogType, jsonLd, categories, body }) {
     header(categories),
     body,
     footer(categories),
+    '<script src="/public-nav.js" defer></script>',
     '</body>',
     '</html>',
     ''
