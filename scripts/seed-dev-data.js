@@ -8,12 +8,14 @@
 // record would have: an order line, a promo redemption and a COA.
 
 require('dotenv').config();
-const { isLocalConnection, connectionHost } = require('../db/is-local-connection');
+const { connectionHost } = require('../db/is-local-connection');
 
-if (!isLocalConnection(process.env.DATABASE_URL)) {
-  console.error('Refusing to seed: DATABASE_URL is not local (' + connectionHost(process.env.DATABASE_URL) + ').');
-  process.exit(1);
-}
+// Seeds obviously fake records. There is no version of this that should
+// run against real data, so it stays local even in a production runtime.
+require('../db/require-local-db').requireLocalDatabase({
+  context: 'the dev-data seeder',
+  allowDeployed: false
+});
 
 const pool = require('../db/connection');
 

@@ -1,4 +1,14 @@
 require('dotenv').config();
+
+// Every process that reaches Postgres comes through this module, so the guard
+// sits here too: a script or test that forgets to ask still cannot open a pool
+// against a database that is not on this machine.
+require('./require-local-db').requireLocalDatabase({
+  context: 'a database connection',
+  hostedAllowed: true,
+  hostedCommand: 'hosted:server'
+});
+
 const { Pool } = require("pg");
 const { isLocalConnection } = require('./is-local-connection');
 

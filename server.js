@@ -1,3 +1,14 @@
+// Fail closed before anything here can open a connection pool. A plain
+// `node server.js`, `npm run dev`, a VS Code task or a preview runner must not
+// be able to reach the hosted database; only the deployment may, and Vercel
+// marks itself with NODE_ENV=production and VERCEL=1.
+require('dotenv').config();
+require('./db/require-local-db').requireLocalDatabase({
+  context: 'the PepX server',
+  hostedAllowed: true,
+  hostedCommand: 'hosted:server'
+});
+
 const express = require('express');
 const productsRouter = require("./routes/products");
 const createCartRouter = require("./routes/cart");

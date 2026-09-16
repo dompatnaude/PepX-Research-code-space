@@ -38,6 +38,14 @@ require.cache[easypostPath] = {
   },
 };
 
+require('dotenv').config();
+
+// Writes throwaway orders and promo redemptions. Local only, always.
+require('../db/require-local-db').requireLocalDatabase({
+  context: 'the discount checkout repro',
+  allowDeployed: false
+});
+
 const pool = require('../db/connection');
 const createOrdersRouter = require('../routes/orders');
 
