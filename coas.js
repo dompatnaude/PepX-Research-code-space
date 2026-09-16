@@ -521,16 +521,7 @@ function openCoaModal(id) {
     var urlParams = new URLSearchParams(window.location.search);
     var openId = parseInt(urlParams.get('id'), 10);
 
-    // Mobile nav toggle (reuse same pattern as shop.html / script.js)
-    var mobileToggle = $('mobileMenuToggle');
-    var siteMenu = $('site-menu');
-    if (mobileToggle && siteMenu) {
-      mobileToggle.addEventListener('click', function () {
-        var expanded = mobileToggle.getAttribute('aria-expanded') === 'true';
-        mobileToggle.setAttribute('aria-expanded', String(!expanded));
-        siteMenu.classList.toggle('open', !expanded);
-      });
-    }
+    // Mobile nav toggle lives in public-nav.js, which this page loads.
 
     applyStateFromUrl();
     state.loading = true;
