@@ -38,6 +38,7 @@ const { loadProjectEnv } = require('./services/runtime-config');
 const { resolveGoogleCallbackUrl } = require('./services/google-config');
 const { classifyStaticRequest } = require('./services/static-exposure-policy');
 const { createPublicCatalog, isIndexable } = require('./services/public-catalog');
+const { createCoaIndex } = require('./services/coa-index');
 const {
   renderShopPage,
   renderProductPage,
@@ -489,9 +490,10 @@ const CANONICAL_ORIGIN = String(process.env.CANONICAL_ORIGIN || 'https://pepxres
 // /forgot-password.html and /reset-password.html (authentication pages, no
 // search value), every /api/* endpoint, /auth/* and the EasyPost webhook.
 const publicCatalog = createPublicCatalog({ pool });
+const coaIndex = createCoaIndex({ pool });
 
-// Deliberately narrow: the homepage, the catalogue, and the COA page. Category
-// and eligible product URLs are appended from the database in buildSitemapXml.
+// Deliberately narrow: the homepage, the COA page, and the blog. The catalogue
+// is signed-in only, so no catalogue URL belongs in the sitemap.
 //
 // The policy pages (shipping, privacy, refund, terms) are NOT listed. They stay
 // indexable - each keeps its own canonical and index,follow - they are simply
@@ -499,7 +501,6 @@ const publicCatalog = createPublicCatalog({ pool });
 // earn search traffic rather than diluted with boilerplate.
 const STATIC_SITEMAP_PATHS = [
   '/',
-  '/shop',
   '/coas.html',
   '/blog'
 ];
@@ -527,20 +528,8 @@ function sitemapEntry(origin, loc, lastmod) {
 async function buildSitemapXml(origin) {
   let entries = STATIC_SITEMAP_PATHS.map((loc) => sitemapEntry(origin, loc, null));
 
-  try {
-    const [categories, products] = await Promise.all([
-      publicCatalog.categories(),
-      publicCatalog.indexableProducts()
-    ]);
-    entries = entries
-      .concat(categories.map((category) => sitemapEntry(origin, category.path, null)))
-      .concat(products.map((product) => sitemapEntry(origin, product.path, product.updatedAt)));
-  } catch (error) {
-    // A sitemap that 500s is reported as an error in Search Console, so a
-    // database problem degrades to the static list rather than failing.
-    console.error('[sitemap] catalogue unavailable, serving static entries only:',
-      error && error.message ? error.message : error);
-  }
+  // No catalogue URLs. Categories and products are signed-in only, so every
+  // one of them would answer a crawler with a login redirect.
 
   // Blog articles come from a static module, not the database, so they are
   // added outside the try/catch above: a database outage must not remove them.
@@ -571,11 +560,12 @@ function buildRobotsTxt(origin) {
     'Disallow: /forgot-password.html',
     'Disallow: /reset-password.html',
     '',
-    // The signed-in storefront pages. /shop and /products/<slug> now serve the
-    // same catalogue publicly, so these two are gated duplicates: every crawl
-    // of them ends in a login redirect and the public route is the one meant to
-    // be indexed. No public page links to them any more.
+    // The catalogue, in both URL shapes. /shop, /shop/<category> and
+    // /products/<slug> answer a signed-out request with a login redirect, so
+    // there is nothing behind them for a crawler to index.
+    'Disallow: /shop',
     'Disallow: /shop.html',
+    'Disallow: /products/',
     'Disallow: /product.html',
     '',
     'Disallow: /admin.html',
@@ -583,13 +573,11 @@ function buildRobotsTxt(origin) {
     '# Login redirects append a returnTo parameter; crawling those produces',
     '# endless duplicates of the same login page.',
     '#',
-    '# Retained deliberately. It has a known side effect: a gated page redirects',
-    '# to /login.html?returnTo=..., so Search Console reports the gated page',
-    '# itself as "blocked by robots.txt" rather than merely gated. That was a',
-    '# real cost while /shop.html was the only catalogue; now that /shop and',
-    '# /products/<slug> are public and indexable, the pages still behind the',
-    '# gate are ones we do not want indexed anyway, so the report noise is',
-    '# cheaper than the duplicate login URLs this rule prevents.',
+    '# Retained deliberately. Side effect: a gated page redirects to',
+    '# /login.html?returnTo=..., so Search Console reports it as blocked by',
+    '# robots.txt rather than merely gated. Nothing behind the gate is meant',
+    '# to be indexed, so that noise is cheaper than the duplicate login URLs',
+    '# this rule prevents.',
     'Disallow: /*?returnTo=',
     '',
     'Sitemap: ' + origin + '/sitemap.xml',
@@ -1131,19 +1119,15 @@ function sendSignedInRedirect(res, location) {
   return res.redirect(302, location);
 }
 
+// The catalogue is gated. /shop, /shop/:category and /products/:slug are the
+// pretty URLs for it, so each one checks the session before it touches the
+// catalogue at all and sends signed-out visitors to the login page.
 app.get('/shop', async (req, res, next) => {
   try {
-    if (await hydrateAuthenticatedUser(req)) return sendSignedInRedirect(res, '/shop.html');
-
-    const [products, categories] = await Promise.all([
-      publicCatalog.listActive(),
-      publicCatalog.categories()
-    ]);
-    return sendPublicHtml(res, renderShopPage({
-      origin: CANONICAL_ORIGIN,
-      products,
-      categories
-    }));
+    if (!(await hydrateAuthenticatedUser(req))) {
+      return sendSignedInRedirect(res, buildLoginRedirectTarget(req));
+    }
+    return sendSignedInRedirect(res, '/shop.html');
   } catch (error) {
     return next(error);
   }
@@ -1151,26 +1135,14 @@ app.get('/shop', async (req, res, next) => {
 
 app.get('/shop/:category', async (req, res, next) => {
   try {
-    const categories = await publicCatalog.categories();
+    if (!(await hydrateAuthenticatedUser(req))) {
+      return sendSignedInRedirect(res, buildLoginRedirectTarget(req));
+    }
     const category = await publicCatalog.findCategory(req.params.category);
-
-    // Unknown category is a 404, not an empty page: no crawlable space of
-    // invented category URLs opens up.
     if (!category) {
-      return sendPublicHtml(res, renderNotFoundPage({ origin: CANONICAL_ORIGIN, categories }), 404);
+      return sendSignedInRedirect(res, '/shop.html');
     }
-
-    if (await hydrateAuthenticatedUser(req)) {
-      return sendSignedInRedirect(res, '/shop.html?category=' + encodeURIComponent(category.name));
-    }
-
-    const products = await publicCatalog.listByCategory(category.slug);
-    return sendPublicHtml(res, renderShopPage({
-      origin: CANONICAL_ORIGIN,
-      products,
-      categories,
-      category
-    }));
+    return sendSignedInRedirect(res, '/shop.html?category=' + encodeURIComponent(category.name));
   } catch (error) {
     return next(error);
   }
@@ -1178,27 +1150,14 @@ app.get('/shop/:category', async (req, res, next) => {
 
 app.get('/products/:slug', async (req, res, next) => {
   try {
-    const categories = await publicCatalog.categories();
+    if (!(await hydrateAuthenticatedUser(req))) {
+      return sendSignedInRedirect(res, buildLoginRedirectTarget(req));
+    }
     const product = await publicCatalog.findBySlug(req.params.slug);
-
     if (!product) {
-      return sendPublicHtml(res, renderNotFoundPage({ origin: CANONICAL_ORIGIN, categories }), 404);
+      return sendSignedInRedirect(res, '/shop.html');
     }
-
-    if (await hydrateAuthenticatedUser(req)) {
-      return sendSignedInRedirect(res, '/product.html?product=' + encodeURIComponent(product.id));
-    }
-
-    const siblings = await publicCatalog.listByCategory(product.categorySlug);
-    const related = siblings.filter((candidate) => candidate.slug !== product.slug).slice(0, 4);
-
-    return sendPublicHtml(res, renderProductPage({
-      origin: CANONICAL_ORIGIN,
-      product,
-      related,
-      categories,
-      indexable: isIndexable(product)
-    }));
+    return sendSignedInRedirect(res, '/product.html?product=' + encodeURIComponent(product.id));
   } catch (error) {
     return next(error);
   }
@@ -1238,13 +1197,6 @@ const INDEX_HTML_PATH = path.join(__dirname, 'index.html');
 // sections stop being hidden, which is a cosmetic regression, not an outage.
 let INDEX_HTML_PUBLIC = null;
 
-// The signed-out homepage is also where the featured product cards are
-// injected, so the cached variant is kept split in two around the (empty)
-// grid script.js normally fills. Serving a request is then a concatenation
-// rather than a search-and-replace over the whole page.
-const FEATURED_GRID_MARKER = '<div class="grid" id="productGrid"></div>';
-let INDEX_HTML_PUBLIC_HEAD = null;   // everything up to and including the opening <div>
-let INDEX_HTML_PUBLIC_TAIL = null;   // the closing </div> and everything after
 
 try {
   INDEX_HTML_PUBLIC = fs.readFileSync(INDEX_HTML_PATH, 'utf8')
@@ -1256,63 +1208,22 @@ try {
     console.error('[startup] index.html no longer matches the signed-out homepage markers ' +
       '(<html lang="en"> and </body>); signed-out visitors will be served the page unmodified.');
   }
-
-  const gridAt = INDEX_HTML_PUBLIC.indexOf(FEATURED_GRID_MARKER);
-  if (gridAt === -1) {
-    console.error('[startup] index.html no longer contains ' + FEATURED_GRID_MARKER +
-      '; the signed-out homepage will render without server-rendered featured products.');
-  } else {
-    INDEX_HTML_PUBLIC_HEAD = INDEX_HTML_PUBLIC.slice(0, gridAt) + '<div class="grid" id="productGrid">';
-    INDEX_HTML_PUBLIC_TAIL = '</div>' + INDEX_HTML_PUBLIC.slice(gridAt + FEATURED_GRID_MARKER.length);
-  }
 } catch (error) {
   console.error('[startup] could not build the signed-out homepage variant; signed-out visitors ' +
     'will be served index.html unmodified:', error && error.message ? error.message : error);
 }
 
-// Rendered featured-card HTML, memoised for the same TTL as the catalogue
-// snapshot behind it. Googlebot arrives in bursts and this string does not
-// change between them.
-const FEATURED_GRID_TTL_MS = 60 * 1000;
-let featuredGridHtml = null;
-let featuredGridAt = 0;
-
-async function getFeaturedGridHtml() {
-  const now = Date.now();
-  if (featuredGridHtml !== null && now - featuredGridAt < FEATURED_GRID_TTL_MS) {
-    return featuredGridHtml;
-  }
-  const products = await publicCatalog.listActive();
-  featuredGridHtml = renderFeaturedGrid({ products });
-  featuredGridAt = now;
-  return featuredGridHtml;
-}
-
 app.get(['/', '/index.html'], async (req, res) => {
+  // The homepage stays public. What it must not do is server-render catalogue
+  // data for signed-out visitors: the product grid is filled client-side from
+  // /api/products, which requires a session.
   if (INDEX_HTML_PUBLIC === null || req.user || (req.session && req.session.userId)) {
     return res.sendFile(INDEX_HTML_PATH);
   }
 
-  // No split markers: serve the signed-out variant exactly as before. An
-  // unchanged homepage is a worse homepage, never a broken one.
-  if (INDEX_HTML_PUBLIC_HEAD === null) {
-    res.type('html');
-    return res.send(INDEX_HTML_PUBLIC);
-  }
-
-  let grid = '';
-  try {
-    grid = await getFeaturedGridHtml();
-  } catch (error) {
-    // A database problem must not take the homepage down. Without the cards the
-    // page is the PR #15 homepage, which is still complete and crawlable.
-    console.error('[homepage] featured products unavailable:',
-      error && error.message ? error.message : error);
-  }
-
   res.type('html');
   res.set('Vary', 'Cookie');
-  return res.send(INDEX_HTML_PUBLIC_HEAD + grid + INDEX_HTML_PUBLIC_TAIL);
+  return res.send(INDEX_HTML_PUBLIC);
 });
 
 // ---------------------------------------------------------------------------
@@ -1449,14 +1360,18 @@ try {
   console.error('[startup] could not read coas.html:', error && error.message ? error.message : error);
 }
 
+// Rendered COA index HTML, memoised so a burst of crawler hits does not
+// re-render it for every request.
+const COA_INDEX_TTL_MS = 60 * 1000;
+
 let coaIndexHtml = null;
 let coaIndexAt = 0;
 
 async function getCoaIndexHtml() {
   const now = Date.now();
-  if (coaIndexHtml !== null && now - coaIndexAt < FEATURED_GRID_TTL_MS) return coaIndexHtml;
-  const products = await publicCatalog.listActive();
-  coaIndexHtml = renderCoaIndex({ products });
+  if (coaIndexHtml !== null && now - coaIndexAt < COA_INDEX_TTL_MS) return coaIndexHtml;
+  const subjects = await coaIndex.publishedSubjects();
+  coaIndexHtml = renderCoaIndex({ subjects });
   coaIndexAt = now;
   return coaIndexHtml;
 }

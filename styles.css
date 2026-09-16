@@ -2009,13 +2009,13 @@ body.dark-mode .product-card-image,body.dark-mode .product-card-orb{background:#
 .public-coa-index p.public-coa-index-sub{color:var(--muted);margin:0 0 14px;font-size:14px;}
 .public-coa-index ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
   gap:10px;margin:0;padding:0;}
-.public-coa-index a{display:block;padding:12px 14px;border:1px solid #dbe3f4;border-radius:12px;
+.public-coa-index .public-coa-index-item{display:block;padding:12px 14px;border:1px solid #dbe3f4;border-radius:12px;
   background:#fff;color:#243045;font-weight:700;font-size:14px;text-decoration:none;
   transition:border-color .18s ease,transform .18s ease;}
-.public-coa-index a:hover{border-color:#b9c8eb;transform:translateY(-2px);}
-.public-coa-index a .public-coa-index-count{display:block;font-weight:600;font-size:12px;
+.public-coa-index .public-coa-index-item:hover{border-color:#b9c8eb;transform:translateY(-2px);}
+.public-coa-index .public-coa-index-item .public-coa-index-count{display:block;font-weight:600;font-size:12px;
   color:var(--muted);margin-top:2px;}
-body.dark-mode .public-coa-index a{background:#111c30;border-color:#24365c;color:#e6edff;}
+body.dark-mode .public-coa-index .public-coa-index-item{background:#111c30;border-color:#24365c;color:#e6edff;}
 
 /* ---------------------------------------------------------------------------
    Breadcrumbs. Rendered by services/public-page.js on the catalogue pages and
