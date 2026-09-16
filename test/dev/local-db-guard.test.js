@@ -74,7 +74,7 @@ test('the guard refuses a hosted DATABASE_URL', () => {
     }),
     (error) => {
       assert.equal(error.status, 1, 'the guard must exit non-zero');
-      assert.match(String(error.stderr), /does not point at a local database/);
+      assert.match(String(error.stderr), /does not point at a database on this machine/);
       assert.doesNotMatch(String(error.stderr), /secret/, 'the password must not be printed');
       return true;
     }
@@ -107,9 +107,12 @@ test('the local env file pins DATABASE_URL to loopback and its own port', () => 
 
 test('the seeder refuses to write to a hosted database', () => {
   const source = readSource('scripts', 'seed-dev-data.js');
-  assert.match(source, /if \(!isLocalConnection\(process\.env\.DATABASE_URL\)\)/);
-  assert.match(source, /process\.exit\(1\)/);
-  const guardIndex = source.indexOf('isLocalConnection(process.env.DATABASE_URL)');
+  // The check moved into db/require-local-db.js, but it still has to be the
+  // first thing this script does, and it still has no hosted mode.
+  assert.match(source, /requireLocalDatabase\(\{/);
+  assert.match(source, /allowDeployed: false/);
+  assert.doesNotMatch(source, /hostedAllowed/, 'the seeder must never reach a hosted database');
+  const guardIndex = source.indexOf('requireLocalDatabase(');
   const poolIndex = source.indexOf("require('../db/connection')");
   assert.ok(guardIndex < poolIndex, 'the guard must run before a connection pool is created');
 });
@@ -119,8 +122,9 @@ test('npm exposes the local dev commands', () => {
   assert.equal(pkg.scripts['dev:local'], 'bash scripts/dev-local.sh');
   assert.equal(pkg.scripts['dev:local:seed'], 'bash scripts/dev-local-seed.sh');
   assert.match(pkg.scripts['dev:local:down'], /docker rm -f/);
-  assert.equal(pkg.scripts.dev, 'npm run migrate && node server.js',
-    'the existing dev command must be left alone');
+  // `npm run dev` is now the guarded local path; the unguarded one is gone.
+  assert.equal(pkg.scripts.dev, 'bash scripts/dev-local.sh',
+    'the plain dev command must use the local container');
   assert.equal(pkg.scripts.start, 'npm run migrate && node server.js',
     'the production start command must be left alone');
 });

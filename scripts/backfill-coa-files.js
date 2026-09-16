@@ -12,6 +12,14 @@
 
 require('dotenv').config();
 const fs = require('fs');
+// A genuine production maintenance task, so it has a hosted mode - but only
+// through the named command, never from a plain run.
+require('../db/require-local-db').requireLocalDatabase({
+  context: 'the COA file backfill',
+  hostedAllowed: true,
+  hostedCommand: 'hosted:backfill-coa-files'
+});
+
 const pool = require('../db/connection');
 const coaStorage = require('../services/coa-storage');
 

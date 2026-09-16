@@ -35,4 +35,15 @@ function connectionHost(url) {
   }
 }
 
-module.exports = { isLocalConnection, connectionHost };
+/** Database name of a connection string, with credentials stripped. Safe to print. */
+function connectionDatabase(url) {
+  if (!url) return '(unset)';
+  try {
+    const name = new URL(url).pathname.replace(/^\//, '');
+    return name || '(none)';
+  } catch (error) {
+    return '(unparseable)';
+  }
+}
+
+module.exports = { isLocalConnection, connectionHost, connectionDatabase };
