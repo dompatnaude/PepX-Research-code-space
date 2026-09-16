@@ -19,7 +19,8 @@ const {
   CONFIRM_VAR,
   CONFIRM_VALUE,
   hostedDatabaseRefusal,
-  isDeployedRuntime
+  isDeployedRuntime,
+  describeTarget
 } = require(path.join(REPO, 'db', 'require-local-db.js'));
 
 const HOSTED = 'postgresql://u:p@aws-0-us-east-1.pooler.supabase.com:5432/postgres';
@@ -174,5 +175,102 @@ test('npm run dev is the guarded local path, and the hosted commands are named',
   for (const name of ['hosted:server', 'hosted:migrate', 'hosted:backfill-coa-files']) {
     assert.ok(pkg.scripts[name], name + ' should exist as the explicit way in');
     assert.match(pkg.scripts[name], new RegExp(CONFIRM_VAR + '=' + CONFIRM_VALUE));
+  }
+});
+
+// --- the explicit hosted path ----------------------------------------------
+
+// A connection string with an obvious user and password in it, so a leak in a
+// message would be unmistakable.
+const SECRETFUL = 'postgresql://pepx_admin:sup3r-s3cret-pw@aws-0-us-east-1.pooler.supabase.com:5432/postgres';
+
+test('the confirmation must match exactly; set-but-wrong never counts', () => {
+  const wrong = [
+    '', ' ', '1', 'true', 'yes', 'prod', 'Production', 'PRODUCTION', 'production ',
+    ' production', 'i-understand-this-is-the-hosted-database'
+  ];
+  for (const value of wrong) {
+    const env = { DATABASE_URL: HOSTED, [CONFIRM_VAR]: value };
+    assert.ok(
+      hostedDatabaseRefusal({ env, hostedAllowed: true, hostedCommand: 'hosted:server' }),
+      JSON.stringify(value) + ' must not count as confirmation'
+    );
+  }
+
+  assert.equal(
+    hostedDatabaseRefusal({
+      env: { DATABASE_URL: HOSTED, [CONFIRM_VAR]: CONFIRM_VALUE },
+      hostedAllowed: true,
+      hostedCommand: 'hosted:server'
+    }),
+    null,
+    'only the exact value opens the door'
+  );
+});
+
+test('a set-but-wrong confirmation is called out, not silently ignored', () => {
+  const refusal = hostedDatabaseRefusal({
+    context: 'the PepX server',
+    env: { DATABASE_URL: HOSTED, [CONFIRM_VAR]: 'prod' },
+    hostedAllowed: true,
+    hostedCommand: 'hosted:server'
+  });
+  assert.match(refusal, new RegExp(CONFIRM_VAR + ' is set, but not to the value'));
+});
+
+test('a wrong confirmation still cannot start the server', () => {
+  const result = run(['server.js'], { DATABASE_URL: HOSTED, [CONFIRM_VAR]: 'prod' });
+  assert.equal(result.status, 1, 'a near-miss confirmation must not start the server');
+  assert.match(result.stderr, /Refusing to run the PepX server/);
+});
+
+test('messages name the host and database, never the credentials', () => {
+  const target = describeTarget(SECRETFUL);
+  assert.equal(target.host, 'aws-0-us-east-1.pooler.supabase.com:5432');
+  assert.equal(target.database, 'postgres');
+
+  const refusal = hostedDatabaseRefusal({ env: { DATABASE_URL: SECRETFUL } });
+  assert.match(refusal, /host: {5}aws-0-us-east-1\.pooler\.supabase\.com:5432/);
+  assert.match(refusal, /database: postgres/);
+  for (const secret of ['pepx_admin', 'sup3r-s3cret-pw', 'postgresql://', '@aws-0']) {
+    assert.ok(!refusal.includes(secret), 'the refusal must not contain ' + secret);
+  }
+});
+
+test('a confirmed hosted run announces the host and database, and only those', () => {
+  const result = run(
+    ['-e', "require('./db/require-local-db').requireLocalDatabase({ context: 'the COA file backfill', hostedAllowed: true, hostedCommand: 'hosted:backfill-coa-files' }); console.log('PROCEEDED');"],
+    { DATABASE_URL: SECRETFUL, [CONFIRM_VAR]: CONFIRM_VALUE }
+  );
+
+  assert.equal(result.status, 0, 'the confirmed run should proceed');
+  assert.match(result.stdout, /PROCEEDED/);
+  assert.match(result.stderr, /\[hosted\] Running the COA file backfill against the hosted database/);
+  assert.match(result.stderr, /\[hosted\] {3}host: {5}aws-0-us-east-1\.pooler\.supabase\.com:5432/);
+  assert.match(result.stderr, /\[hosted\] {3}database: postgres/);
+
+  for (const secret of ['pepx_admin', 'sup3r-s3cret-pw', 'postgresql://']) {
+    assert.ok(!result.stderr.includes(secret), 'the banner must not contain ' + secret);
+    assert.ok(!result.stdout.includes(secret), 'the banner must not contain ' + secret);
+  }
+});
+
+test('every hosted command sets the exact confirmation and nothing looser', () => {
+  const pkg = JSON.parse(read('package.json'));
+  const hosted = Object.keys(pkg.scripts).filter((name) => name.startsWith('hosted:'));
+  assert.ok(hosted.length >= 3, 'the hosted commands should still be there');
+
+  for (const name of hosted) {
+    assert.match(
+      pkg.scripts[name],
+      new RegExp('^' + CONFIRM_VAR + '=' + CONFIRM_VALUE + ' '),
+      name + ' must set the confirmation explicitly, as the whole value'
+    );
+  }
+
+  // And nothing outside those commands hands the confirmation out.
+  for (const [name, value] of Object.entries(pkg.scripts)) {
+    if (name.startsWith('hosted:')) continue;
+    assert.ok(!value.includes(CONFIRM_VAR), name + ' must not set the confirmation');
   }
 });

@@ -15,9 +15,9 @@
     "test": "node --test --require ./test/setup/no-production-db.js",
     "test:auth": "node --test --require ./test/setup/no-production-db.js test/auth/**/*.test.js",
     "pretest": "node test/setup/no-production-db.js",
-    "hosted:server": "PEPX_HOSTED_DB_CONFIRM=i-understand-this-is-the-hosted-database node server.js",
-    "hosted:migrate": "PEPX_HOSTED_DB_CONFIRM=i-understand-this-is-the-hosted-database node scripts/migrate.js",
-    "hosted:backfill-coa-files": "PEPX_HOSTED_DB_CONFIRM=i-understand-this-is-the-hosted-database node scripts/backfill-coa-files.js"
+    "hosted:server": "PEPX_HOSTED_DB_CONFIRM=production node server.js",
+    "hosted:migrate": "PEPX_HOSTED_DB_CONFIRM=production node scripts/migrate.js",
+    "hosted:backfill-coa-files": "PEPX_HOSTED_DB_CONFIRM=production node scripts/backfill-coa-files.js"
   },
   "dependencies": {
     "@easypost/api": "^8.9.0",
