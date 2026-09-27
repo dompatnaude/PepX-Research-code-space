@@ -2787,3 +2787,35 @@ body.dark-mode .article-foot{border-color:#24365c;}
   [data-pepx-home] .hero-best.pepx-cf .hero-best-rail .product-card-meta .price { font-size: 17px; }
   [data-pepx-home] .hero-best.pepx-cf .hero-best-rail .product-card-actions .btn { padding: 8px 12px; font-size: 13px; }
 }
+
+/* ==========================================================================
+   Hero headline "PUSH. EXCEL. PREVAIL." - gradient text (adapted from the
+   Gradient Text component): a fixed navy-to-logo-blue gradient clipped into
+   the letters, drifting very slowly and constantly across the headline.
+   ========================================================================== */
+[data-pepx-home] .hero > div:first-of-type > h1 {
+  color: transparent;
+  background-image: linear-gradient(100deg,
+    #0f172a 0%, #0f172a 10%,
+    #003070 20%, #0070b0 30%, #0891c9 38%, #0070b0 46%,
+    #0f172a 56%, #0f172a 64%,
+    #1d4ed8 74%, #0070b0 84%, #0f172a 94%, #0f172a 100%);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-position: 14% 50%;
+  background-repeat: repeat-x;
+  /* Very slow, constant drift: one full gradient width every 40s, looping
+     seamlessly (both ends of the gradient are the same navy). */
+  animation:
+    pepx-rise .8s ease-in-out .4s backwards,
+    pepx-gradient-drift 40s linear infinite;
+}
+@keyframes pepx-gradient-drift {
+  from { background-position: 14% 50%; }
+  to   { background-position: -136% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-pepx-home] .hero > div:first-of-type > h1 { animation: none; }
+}
