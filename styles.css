@@ -2819,3 +2819,15 @@ body.dark-mode .article-foot{border-color:#24365c;}
 @media (prefers-reduced-motion: reduce) {
   [data-pepx-home] .hero > div:first-of-type > h1 { animation: none; }
 }
+
+/* Best Sellers carousel: no View Details button (tapping the centre card
+   already opens the product). Name, stock and price each on one line. */
+.hero-best.pepx-cf .hero-best-rail .product-card-actions { display: none; }
+.hero-best.pepx-cf .hero-best-rail .product-card-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "name"
+    "stock"
+    "price";
+}
+.hero-best.pepx-cf .hero-best-rail > .product-card[data-pepx-pos="0"] { cursor: pointer; }

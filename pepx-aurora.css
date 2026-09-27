@@ -313,3 +313,21 @@ body.dark-mode > .pepx-aurora { display: none; }
 @media (max-width: 768px) {
   [data-pepx-aurora="page"] .pepx-aurora__ribbon  { filter: blur(28px) saturate(1.7); }
 }
+
+/* ==========================================================================
+   Grid background (from the Background Snippets component) - replaces the
+   aurora visuals on the homepage and shop page: white base, faint #f0f0f0
+   grid (6rem x 4rem) and a subtle logo-X-blue glow at the top right. Fixed to
+   the viewport, so the grid covers the whole page while scrolling.
+   ========================================================================== */
+[data-pepx-aurora="page"] { background-color: #fff; }
+[data-pepx-aurora="page"] > .pepx-aurora {
+  background-color: #fff;
+  background-image:
+    radial-gradient(circle 800px at 100% 200px, rgba(0, 150, 220, .2), rgba(0, 150, 220, 0)),
+    linear-gradient(to right, #f0f0f0 1px, transparent 1px),
+    linear-gradient(to bottom, #f0f0f0 1px, transparent 1px);
+  background-size: auto, 6rem 4rem, 6rem 4rem;
+}
+/* The aurora ribbons, beams, spotlight etc. are no longer shown. */
+[data-pepx-aurora="page"] > .pepx-aurora > * { display: none; }
