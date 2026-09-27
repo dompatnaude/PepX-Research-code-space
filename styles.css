@@ -2831,3 +2831,15 @@ body.dark-mode .article-foot{border-color:#24365c;}
     "price";
 }
 .hero-best.pepx-cf .hero-best-rail > .product-card[data-pepx-pos="0"] { cursor: pointer; }
+/* Visually hidden, still read by screen readers and search engines. */
+.pepx-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
