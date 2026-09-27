@@ -2467,3 +2467,137 @@ body.dark-mode .article-foot{border-color:#24365c;}
   [data-pepx-home] .pepx-pc-track > .product-card,
   [data-pepx-home] .pepx-pc-track .product-card-media img { transition: none; }
 }
+
+/* Featured Research Peptides: no card background - just the product image,
+   then name, stock, price and View Details sitting on the page. */
+[data-pepx-home] .pepx-pc-track > .product-card,
+[data-pepx-home] .pepx-pc-track > .product-card:hover {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
+[data-pepx-home] .pepx-pc-track .product-card-media {
+  background: none;
+  border-radius: 14px;
+}
+[data-pepx-home] .pepx-pc-track .product-card-media img {
+  padding: 0;
+  border-radius: 14px;
+}
+[data-pepx-home] .pepx-pc-track .product-card-body {
+  padding: 12px 2px 4px;
+  background: none;
+}
+
+/* Featured: frosted-glass panel under each image so the name, price and
+   View Details stand out against the aurora. */
+[data-pepx-home] .pepx-pc-track .product-card-body {
+  margin-top: 10px;
+  padding: 12px 12px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+          backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, .65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), 0 8px 22px -14px rgba(15, 40, 80, .35);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-pepx-home] .pepx-pc-track .product-card-body { background: rgba(255, 255, 255, .85); }
+}
+
+/* Featured: join the glass panel to the bottom of the image (one piece). */
+[data-pepx-home] .pepx-pc-track .product-card-media {
+  height: auto;
+  display: block;
+  border-radius: 14px 14px 0 0;
+}
+[data-pepx-home] .pepx-pc-track .product-card-media img {
+  display: block;
+  height: auto;
+  border-radius: 14px 14px 0 0;
+}
+[data-pepx-home] .pepx-pc-track .product-card-body {
+  margin-top: 0;
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+}
+
+/* ==========================================================================
+   Shop page product cards - same look as the homepage Featured cards:
+   no card background; the image on top, joined to a frosted-glass panel
+   with name, stock, then price + View Details. The grid layout is kept.
+   ========================================================================== */
+#productGrid.grid-shop > .product-card,
+#productGrid.grid-shop > .product-card:hover {
+  display: flex;
+  flex-direction: column;
+  background: none;
+  border: 0;
+  border-radius: 14px;
+  box-shadow: none;
+  overflow: visible;
+  padding: 0;
+}
+#productGrid.grid-shop .product-card-media {
+  height: auto;
+  display: block;
+  background: none;
+  overflow: hidden;
+  border-radius: 14px 14px 0 0;
+}
+#productGrid.grid-shop .product-card-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  border-radius: 14px 14px 0 0;
+  transition: transform .3s ease;
+}
+#productGrid.grid-shop > .product-card:hover .product-card-media img { transform: scale(1.04); }
+#productGrid.grid-shop .product-card-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name name"
+    "stock stock"
+    "price action";
+  align-items: center;
+  row-gap: 8px;
+  column-gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border-radius: 0 0 14px 14px;
+  background: rgba(255, 255, 255, .5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+          backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-top: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), 0 8px 22px -14px rgba(15, 40, 80, .35);
+}
+#productGrid.grid-shop .product-card-body h3 {
+  grid-area: name;
+  margin: 0;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#productGrid.grid-shop .product-card-body .stock-note { grid-area: stock; margin: 0; font-size: 12px; }
+#productGrid.grid-shop .product-card-meta { grid-area: price; margin: 0; align-self: end; }
+#productGrid.grid-shop .product-card-meta .price { font-size: 16px; font-weight: 700; }
+#productGrid.grid-shop .product-card-actions { grid-area: action; margin: 0; align-self: end; }
+#productGrid.grid-shop .product-card-actions .btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  min-height: 0;
+  white-space: nowrap;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  #productGrid.grid-shop .product-card-body { background: rgba(255, 255, 255, .85); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #productGrid.grid-shop .product-card-media img { transition: none; }
+}
