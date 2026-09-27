@@ -1,0 +1,315 @@
+/* ==========================================================================
+   PepX Aurora - atmospheric animated background (light theme by default)
+   Pairs with pepx-aurora.js.
+
+   Whole page:   <body data-pepx-aurora="page">   (replaces the flat white bg)
+   One section:  <section data-pepx-aurora>
+   Dark variant: add  data-pepx-theme="dark"  to the same element.
+
+   Every effect layer is pointer-events:none and sits behind the content
+   (z-index:-1 inside an isolated stacking context), so nothing in your
+   interface - layout, nav, buttons, links - changes.
+   ========================================================================== */
+
+[data-pepx-aurora] {
+  /* Light theme (default): white base + blue aurora */
+  --pepx-base: #fbfcfe;
+  --pepx-base-top: #f3f7fd;
+  --pepx-a1: 96 165 250;     /* PepX light blue #60a5fa */
+  --pepx-a2: 147 197 253;    /* soft sky blue   */
+  --pepx-a3: 186 230 253;    /* ice blue        */
+  --pepx-line: 28 67 121;    /* PepX navy #1c4379 (grid / beams) */
+  --pepx-spot: 255 255 255;  /* headline glow   */
+  --pepx-ribbon-opacity: .85;
+  --pepx-grid-alpha: .05;
+  --pepx-beam-alpha: .35;
+  --pepx-grain-opacity: .035;
+  --pepx-speed: 1;           /* >1 = slower */
+}
+
+[data-pepx-aurora][data-pepx-theme="dark"] {
+  --pepx-base: #050607;
+  --pepx-base-top: #0d0f12;
+  --pepx-a1: 196 222 255;
+  --pepx-a2: 235 240 246;
+  --pepx-a3: 140 170 205;
+  --pepx-line: 196 222 255;
+  --pepx-spot: 196 222 255;
+  --pepx-ribbon-opacity: .9;
+  --pepx-grid-alpha: .045;
+  --pepx-beam-alpha: .55;
+  --pepx-grain-opacity: .05;
+}
+
+/* Section mode */
+[data-pepx-aurora]:not([data-pepx-aurora="page"]) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* Page mode: body keeps normal scrolling; the layer is fixed to the viewport */
+[data-pepx-aurora="page"] {
+  isolation: isolate;
+  background-color: var(--pepx-base);
+}
+
+.pepx-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+  background: linear-gradient(to bottom, var(--pepx-base-top) 0%, var(--pepx-base) 60%);
+}
+[data-pepx-aurora="page"] > .pepx-aurora { position: fixed; }
+.pepx-aurora * { pointer-events: none; }
+
+/* ---- Parallax wrapper (JS writes --pepx-px / --pepx-py, -1..1) --------- */
+.pepx-aurora__drift {
+  position: absolute;
+  inset: -6%;
+  transform: translate3d(calc(var(--pepx-px, 0) * -14px), calc(var(--pepx-py, 0) * -10px), 0);
+  transition: transform 1.2s cubic-bezier(.2,.7,.2,1);
+  will-change: transform;
+}
+
+/* ---- Aurora ribbons (transform-only animation; blur rasterised once) --- */
+.pepx-aurora__ribbon {
+  position: absolute;
+  top: -20%;
+  left: -50%;
+  width: 200%;
+  height: 90%;
+  filter: blur(42px);
+  opacity: var(--pepx-ribbon-opacity);
+  will-change: transform;
+  -webkit-mask-image: radial-gradient(ellipse 60% 70% at 60% 15%, #000 30%, transparent 85%);
+          mask-image: radial-gradient(ellipse 60% 70% at 60% 15%, #000 30%, transparent 85%);
+}
+
+.pepx-aurora__ribbon--a {
+  background-image: repeating-linear-gradient(
+    100deg,
+    rgb(var(--pepx-a2) / 0)   0%,
+    rgb(var(--pepx-a2) / .80) 6%,
+    rgb(var(--pepx-a1) / .45) 9%,
+    rgb(var(--pepx-a3) / 0)   14%,
+    rgb(var(--pepx-a3) / .85) 19%,
+    rgb(var(--pepx-a2) / 0)   25%
+  );
+  animation: pepx-ribbon-a calc(48s * var(--pepx-speed)) ease-in-out infinite alternate;
+}
+
+.pepx-aurora__ribbon--b {
+  top: -10%;
+  height: 80%;
+  opacity: calc(var(--pepx-ribbon-opacity) * .7);
+  filter: blur(60px);
+  background-image: repeating-linear-gradient(
+    78deg,
+    rgb(var(--pepx-a3) / 0)   0%,
+    rgb(var(--pepx-a3) / .80) 8%,
+    rgb(var(--pepx-a1) / .18) 12%,
+    rgb(var(--pepx-a3) / 0)   20%
+  );
+  animation: pepx-ribbon-b calc(64s * var(--pepx-speed)) ease-in-out infinite alternate;
+}
+
+@keyframes pepx-ribbon-a {
+  0%   { transform: translate3d(-4%, -2%, 0) rotate(-2deg) scaleY(1); }
+  50%  { transform: translate3d( 6%,  3%, 0) rotate( 1deg) scaleY(1.12); }
+  100% { transform: translate3d(14%, -1%, 0) rotate( 3deg) scaleY(.95); }
+}
+@keyframes pepx-ribbon-b {
+  0%   { transform: translate3d(10%, 2%, 0) rotate(2deg); }
+  100% { transform: translate3d(-8%, -3%, 0) rotate(-2deg); }
+}
+
+/* ---- Precision grid (static, faint, fades from centre) ----------------- */
+.pepx-aurora__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(var(--pepx-line) / var(--pepx-grid-alpha)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--pepx-line) / var(--pepx-grid-alpha)) 1px, transparent 1px);
+  background-size: 72px 72px;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 35%, #000 0%, transparent 80%);
+          mask-image: radial-gradient(ellipse 70% 60% at 50% 35%, #000 0%, transparent 80%);
+}
+
+/* ---- Vertical light beams --------------------------------------------- */
+.pepx-aurora__beam {
+  position: absolute;
+  top: -10%;
+  width: 1px;
+  height: 70%;
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    rgb(var(--pepx-line) / var(--pepx-beam-alpha)) 45%,
+    rgb(var(--pepx-a2) / .15) 70%,
+    transparent 100%);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: pepx-beam calc(14s * var(--pepx-speed)) ease-in-out infinite;
+}
+.pepx-aurora__beam:nth-child(1) { left: 18%; }
+.pepx-aurora__beam:nth-child(2) { left: 64%; animation-delay: -5s;  animation-duration: calc(18s * var(--pepx-speed)); }
+.pepx-aurora__beam:nth-child(3) { left: 86%; animation-delay: -10s; animation-duration: calc(22s * var(--pepx-speed)); }
+
+@keyframes pepx-beam {
+  0%   { opacity: 0;   transform: translate3d(0, -12%, 0); }
+  30%  { opacity: .7; }
+  60%  { opacity: .45; }
+  100% { opacity: 0;   transform: translate3d(0, 18%, 0); }
+}
+
+/* ---- Spotlight behind main content ------------------------------------ */
+.pepx-aurora__spotlight {
+  position: absolute;
+  left: var(--pepx-spot-x, 50%);
+  top: var(--pepx-spot-y, 46%);
+  width: min(1100px, 130vw);
+  aspect-ratio: 1.6 / 1;
+  transform: translate3d(calc(-50% + var(--pepx-px, 0) * 22px), calc(-50% + var(--pepx-py, 0) * 16px), 0);
+  transition: transform 1.4s cubic-bezier(.2,.7,.2,1);
+  background: radial-gradient(closest-side,
+    rgb(var(--pepx-spot) / .55) 0%,
+    rgb(var(--pepx-spot) / .20) 45%,
+    transparent 100%);
+  will-change: transform;
+}
+[data-pepx-theme="dark"] .pepx-aurora__spotlight {
+  background: radial-gradient(closest-side, rgb(var(--pepx-spot) / .16) 0%, rgb(var(--pepx-spot) / .07) 35%, transparent 100%);
+}
+
+/* ---- Edge light: top hairline ------------------------------------------ */
+.pepx-aurora__edge {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--pepx-a1) / .35) 50%, transparent);
+}
+
+/* ---- Film grain -------------------------------------------------------- */
+.pepx-aurora__grain {
+  position: absolute;
+  inset: 0;
+  opacity: var(--pepx-grain-opacity);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .55  0 0 0 0 .65  0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* ---- Fade to base at the bottom (keeps lower content clean) ------------ */
+.pepx-aurora__vignette {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 55%, var(--pepx-base) 100%);
+}
+[data-pepx-theme="dark"] .pepx-aurora__vignette {
+  background:
+    linear-gradient(to bottom, transparent 55%, var(--pepx-base) 100%),
+    radial-gradient(ellipse 90% 70% at 50% 45%, transparent 40%, rgb(0 0 0 / .45) 100%);
+}
+
+/* ---- The site's own dark mode keeps its existing background ---------- */
+body.dark-mode > .pepx-aurora { display: none; }
+
+/* ---- Paused when off-screen or tab hidden (set by JS) ------------------ */
+.pepx-aurora.is-paused * { animation-play-state: paused !important; }
+
+/* ---- Tablet / mobile: cheaper blur, fewer layers, no parallax ---------- */
+@media (max-width: 768px) {
+  .pepx-aurora__ribbon    { filter: blur(28px); height: 70%; }
+  .pepx-aurora__ribbon--b { display: none; }
+  .pepx-aurora__beam:nth-child(3) { display: none; }
+  .pepx-aurora__grid      { background-size: 48px 48px; }
+  .pepx-aurora__spotlight { width: 160vw; }
+  .pepx-aurora__drift,
+  .pepx-aurora__spotlight { transition: none; }
+}
+
+/* ---- Reduced motion: a still, composed frame --------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .pepx-aurora *,
+  .pepx-aurora *::before,
+  .pepx-aurora *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .pepx-aurora__beam { opacity: .4; transform: none; }
+}
+
+/* ---- Page mode tuning for the PepX site: sit the aurora below the header
+        + ticker bar, and keep the spotlight behind the left-aligned hero -- */
+[data-pepx-aurora="page"] .pepx-aurora__ribbon {
+  top: 4%;
+  height: 95%;
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 62% 32%, #000 30%, transparent 85%);
+          mask-image: radial-gradient(ellipse 75% 65% at 62% 32%, #000 30%, transparent 85%);
+}
+[data-pepx-aurora="page"] .pepx-aurora__ribbon--b { top: 10%; }
+[data-pepx-aurora="page"] .pepx-aurora__spotlight {
+  --pepx-spot-x: 26%;
+  --pepx-spot-y: 50%;
+  background: radial-gradient(closest-side, rgb(255 255 255 / .45) 0%, rgb(255 255 255 / .15) 50%, transparent 100%);
+}
+[data-pepx-aurora="page"] .pepx-aurora__vignette {
+  background: linear-gradient(to bottom, transparent 70%, var(--pepx-base) 100%);
+}
+
+/* ---- Hero entrance (same feel as the Aurora demo: fade + rise 40px,
+        0.3s delay, 0.8s ease-in-out), lightly staggered. `backwards` fill
+        means no transform is left on the elements once it finishes. ----- */
+@keyframes pepx-rise {
+  from { opacity: 0; transform: translate3d(0, 40px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+[data-pepx-aurora="page"] .hero > div:first-of-type > *,
+[data-pepx-aurora="page"] .hero > .hero-best {
+  animation: pepx-rise .8s ease-in-out .3s backwards;
+}
+[data-pepx-aurora="page"] .hero > div:first-of-type > :nth-child(2) { animation-delay: .4s; }
+[data-pepx-aurora="page"] .hero > div:first-of-type > :nth-child(3) { animation-delay: .5s; }
+[data-pepx-aurora="page"] .hero > div:first-of-type > :nth-child(4) { animation-delay: .6s; }
+[data-pepx-aurora="page"] .hero > div:first-of-type > :nth-child(n+5),
+[data-pepx-aurora="page"] .hero > .hero-best { animation-delay: .7s; }
+@media (prefers-reduced-motion: reduce) {
+  [data-pepx-aurora="page"] .hero > div:first-of-type > *,
+  [data-pepx-aurora="page"] .hero > .hero-best { animation: none; }
+}
+
+/* ---- More noticeable motion on the homepage: ~2x faster, wider drift,
+        fuller color, brighter beams --------------------------------------- */
+[data-pepx-aurora="page"] {
+  --pepx-speed: .45;
+  --pepx-ribbon-opacity: 1;
+  --pepx-beam-alpha: .5;
+}
+@keyframes pepx-ribbon-a-bold {
+  0%   { transform: translate3d(-12%, -3%, 0) rotate(-3deg) scaleY(1); }
+  50%  { transform: translate3d(  4%,  5%, 0) rotate( 1deg) scaleY(1.22); }
+  100% { transform: translate3d( 20%, -2%, 0) rotate( 4deg) scaleY(.9); }
+}
+@keyframes pepx-ribbon-b-bold {
+  0%   { transform: translate3d( 16%,  3%, 0) rotate( 3deg); }
+  100% { transform: translate3d(-14%, -4%, 0) rotate(-3deg); }
+}
+[data-pepx-aurora="page"] .pepx-aurora__ribbon--a { animation-name: pepx-ribbon-a-bold; }
+[data-pepx-aurora="page"] .pepx-aurora__ribbon--b { animation-name: pepx-ribbon-b-bold; }
+
+/* ---- Deeper blue sampled from the X in the PX logo
+        (#003070 deep -> #0070B0 mid -> #00A8D8 bright) -------------------- */
+[data-pepx-aurora="page"] {
+  --pepx-a1: 0 72 150;      /* deep X blue   */
+  --pepx-a2: 0 150 210;     /* bright X blue */
+  --pepx-a3: 0 112 176;     /* mid X blue    */
+  --pepx-line: 0 48 112;    /* darkest X blue (grid / beams) */
+  --pepx-ribbon-opacity: .7;
+}
+[data-pepx-aurora="page"] .pepx-aurora__ribbon    { filter: blur(42px) saturate(1.7); }
+[data-pepx-aurora="page"] .pepx-aurora__ribbon--b { filter: blur(60px) saturate(1.7); }
+@media (max-width: 768px) {
+  [data-pepx-aurora="page"] .pepx-aurora__ribbon  { filter: blur(28px) saturate(1.7); }
+}
