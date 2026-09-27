@@ -2655,3 +2655,135 @@ body.dark-mode .article-foot{border-color:#24365c;}
   align-content: start;
 }
 #productGrid.grid-shop .product-card-meta { align-self: end; padding-top: 4px; }
+
+/* Homepage review form: frosted glass panel, matching the product cards. */
+[data-pepx-home] .review-form {
+  background: rgba(255, 255, 255, .5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+          backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, .65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), 0 12px 32px -16px rgba(15, 40, 80, .35);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-pepx-home] .review-form { background: rgba(255, 255, 255, .85); }
+}
+
+/* Homepage review carousel: no white band behind it, and frosted-glass
+   review cards matching the product cards and the review form. */
+[data-pepx-home] .review-collage {
+  background: none;
+  border-top: 0;
+  border-bottom: 0;
+}
+[data-pepx-home] .hero-review-card {
+  background: rgba(255, 255, 255, .5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+          backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, .65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), 0 10px 26px -14px rgba(15, 40, 80, .35);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-pepx-home] .hero-review-card { background: rgba(255, 255, 255, .85); }
+}
+
+/* ==========================================================================
+   Best Sellers carousel cards - same look as the other product cards:
+   no card background, image on top joined to a frosted-glass panel.
+   Info reads on single lines: name, stock, then price + View Details.
+   ========================================================================== */
+.hero-best.pepx-cf .hero-best-rail > .product-card {
+  display: flex;
+  flex-direction: column;
+  background: none;
+  border: 0;
+  border-radius: 14px;
+  overflow: visible;
+  padding: 0;
+}
+.hero-best.pepx-cf .hero-best-rail > .product-card[data-pepx-pos="0"] {
+  box-shadow: none;
+}
+.hero-best.pepx-cf .hero-best-rail .product-card-media {
+  height: auto;
+  display: block;
+  background: none;
+  overflow: hidden;
+  border-radius: 14px 14px 0 0;
+}
+.hero-best.pepx-cf .hero-best-rail .product-card-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  border-radius: 14px 14px 0 0;
+}
+.hero-best.pepx-cf .hero-best-rail .product-card-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name name"
+    "stock stock"
+    "price action";
+  align-items: center;
+  row-gap: 6px;
+  column-gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border-radius: 0 0 14px 14px;
+  background: rgba(255, 255, 255, .5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+          backdrop-filter: blur(14px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-top: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), 0 10px 26px -14px rgba(15, 40, 80, .35);
+}
+.hero-best.pepx-cf .hero-best-rail .product-card-body h3 {
+  grid-area: name;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hero-best.pepx-cf .hero-best-rail .product-card-body .stock-note {
+  grid-area: stock;
+  margin: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.hero-best.pepx-cf .hero-best-rail .product-card-meta { grid-area: price; margin: 0; min-width: 0; }
+.hero-best.pepx-cf .hero-best-rail .product-card-meta .price {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.hero-best.pepx-cf .hero-best-rail .product-card-actions { grid-area: action; margin: 0; }
+.hero-best.pepx-cf .hero-best-rail .product-card-actions .btn {
+  padding: 7px 10px;
+  font-size: 12px;
+  min-height: 0;
+  white-space: nowrap;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .hero-best.pepx-cf .hero-best-rail .product-card-body { background: rgba(255, 255, 255, .85); }
+}
+
+/* Best Sellers: slightly bigger on desktop only (phones/tablets unchanged).
+   The hero text column and headline stay exactly as they were. */
+@media (min-width: 1025px) {
+  [data-pepx-home] .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
+  }
+  [data-pepx-home] .hero-best.pepx-cf .hero-best-rail,
+  [data-pepx-home] .hero-best.pepx-cf .hero-best-rail.is-exit-left,
+  [data-pepx-home] .hero-best.pepx-cf .hero-best-rail.is-exit-right,
+  [data-pepx-home] .hero-best.pepx-cf .hero-best-rail.is-enter-left,
+  [data-pepx-home] .hero-best.pepx-cf .hero-best-rail.is-enter-right {
+    grid-template-columns: minmax(0, 66%);
+  }
+  [data-pepx-home] .hero-best.pepx-cf .hero-best-rail .product-card-body h3 { font-size: 16px; }
+  [data-pepx-home] .hero-best.pepx-cf .hero-best-rail .product-card-meta .price { font-size: 17px; }
+  [data-pepx-home] .hero-best.pepx-cf .hero-best-rail .product-card-actions .btn { padding: 8px 12px; font-size: 13px; }
+}
