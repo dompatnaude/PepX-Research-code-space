@@ -2211,3 +2211,104 @@ body.dark-mode .article-foot{border-color:#24365c;}
   [data-pepx-aurora="page"] .btn:not(.pepx-x),
   [data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x) { transition: none; }
 }
+
+/* ==========================================================================
+   Best Sellers coverflow carousel (pepx-bestsellers.js adds .pepx-cf).
+   Centre card full size, neighbours smaller and dimmed on either side,
+   looping with dots. Only active while the carousel script is running.
+   ========================================================================== */
+.hero-best.pepx-cf .hero-best-slider {
+  padding: 6px 0 24px;
+  margin-bottom: -14px;
+  overflow: hidden;
+  overflow: clip;
+}
+.hero-best.pepx-cf .hero-best-rail,
+.hero-best.pepx-cf .hero-best-rail.is-exit-left,
+.hero-best.pepx-cf .hero-best-rail.is-exit-right,
+.hero-best.pepx-cf .hero-best-rail.is-enter-left,
+.hero-best.pepx-cf .hero-best-rail.is-enter-right {
+  display: grid;
+  grid-template-columns: minmax(0, 62%);
+  justify-content: center;
+  align-items: center;
+  transform: none;
+  opacity: 1;
+  transition: none;
+  touch-action: pan-y;
+}
+.hero-best.pepx-cf .hero-best-rail > .product-card {
+  grid-area: 1 / 1;
+  min-width: 0;
+  transform: translateX(calc(var(--pepx-o, 0) * 88%)) scale(.8);
+  opacity: 0;
+  z-index: 1;
+  pointer-events: none;
+  transition: transform .6s cubic-bezier(.22, 1, .36, 1), opacity .45s ease, box-shadow .3s ease;
+  will-change: transform, opacity;
+}
+.hero-best.pepx-cf .hero-best-rail > .product-card[data-pepx-pos="0"] {
+  transform: translateX(0) scale(1);
+  opacity: 1;
+  z-index: 3;
+  pointer-events: auto;
+  box-shadow: 0 18px 40px -18px rgba(0, 48, 112, .45);
+}
+.hero-best.pepx-cf .hero-best-rail > .product-card[data-pepx-pos="-1"],
+.hero-best.pepx-cf .hero-best-rail > .product-card[data-pepx-pos="1"] {
+  transform: translateX(calc(var(--pepx-o, 0) * 88%)) scale(.82);
+  opacity: .7;
+  z-index: 2;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.hero-best.pepx-cf .hero-best-arrow { z-index: 5; }
+
+.pepx-cf-dots {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 10px;
+}
+.pepx-cf-dot {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pepx-cf-dot::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .2);
+  transition: width .3s ease, background .3s ease;
+}
+.pepx-cf-dot[aria-current="true"]::after {
+  width: 18px;
+  background: #0070b0;
+}
+.pepx-cf-dot:focus-visible {
+  outline: 2px solid #0070b0;
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-best.pepx-cf .hero-best-rail > .product-card,
+  .pepx-cf-dot::after { transition: none; }
+}
+
+/* Best Sellers: no panel behind the carousel - just the products. */
+.hero-best.pepx-cf {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+}
