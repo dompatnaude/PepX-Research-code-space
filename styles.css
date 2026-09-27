@@ -2312,3 +2312,158 @@ body.dark-mode .article-foot{border-color:#24365c;}
   -webkit-backdrop-filter: none;
           backdrop-filter: none;
 }
+
+/* ==========================================================================
+   Homepage "Featured Research Peptides" as a horizontal product carousel
+   (pepx-featured-carousel.js). Same products and cards, laid out in a
+   scrollable row with round arrows; cards restyled like the component:
+   image on a soft grey panel, name, stock, then price + button in a row.
+   ========================================================================== */
+.pepx-pc {
+  position: relative;
+}
+[data-pepx-home] #productGrid.pepx-pc-track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 4px;
+  padding: 6px 4px 18px;
+  scrollbar-width: none;
+  grid-template-columns: none;
+}
+[data-pepx-home] #productGrid.pepx-pc-track::-webkit-scrollbar { display: none; }
+[data-pepx-home] #productGrid.pepx-pc-track:focus-visible {
+  outline: 2px solid #0070b0;
+  outline-offset: 4px;
+  border-radius: 12px;
+}
+
+/* Cards */
+[data-pepx-home] .pepx-pc-track > .product-card {
+  flex: 0 0 clamp(190px, 58vw, 232px);
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e5e9f2;
+  border-radius: 14px;
+  background: #fff;
+  overflow: hidden;
+  transition: box-shadow .3s ease, transform .3s ease;
+}
+[data-pepx-home] .pepx-pc-track > .product-card:hover {
+  box-shadow: 0 10px 26px -12px rgba(15, 40, 80, .28);
+}
+[data-pepx-home] .pepx-pc-track .product-card-media {
+  height: 176px;
+  background: #f3f5f8;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+[data-pepx-home] .pepx-pc-track .product-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 14px;
+  transition: transform .3s ease;
+}
+[data-pepx-home] .pepx-pc-track > .product-card:hover .product-card-media img {
+  transform: scale(1.05);
+}
+[data-pepx-home] .pepx-pc-track .product-card-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name name"
+    "stock stock"
+    "price action";
+  align-items: center;
+  row-gap: 8px;
+  column-gap: 10px;
+  padding: 14px;
+}
+[data-pepx-home] .pepx-pc-track .product-card-body h3 {
+  grid-area: name;
+  margin: 0;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-pepx-home] .pepx-pc-track .product-card-body .stock-note {
+  grid-area: stock;
+  margin: 0;
+  font-size: 12px;
+}
+[data-pepx-home] .pepx-pc-track .product-card-meta {
+  grid-area: price;
+  margin: 0;
+  align-self: end;
+}
+[data-pepx-home] .pepx-pc-track .product-card-meta .price {
+  font-size: 16px;
+  font-weight: 700;
+}
+[data-pepx-home] .pepx-pc-track .product-card-actions {
+  grid-area: action;
+  margin: 0;
+  align-self: end;
+}
+[data-pepx-home] .pepx-pc-track .product-card-actions .btn {
+  padding: 8px 12px;
+  font-size: 13px;
+  min-height: 0;
+  white-space: nowrap;
+}
+
+/* Staggered entrance */
+.pepx-pc .pepx-pc-track > .product-card { opacity: 0; transform: translateY(20px); }
+.pepx-pc.is-in .pepx-pc-track > .product-card {
+  animation: pepx-pc-in .5s ease-out calc(var(--pepx-i, 0) * 90ms) forwards;
+}
+@keyframes pepx-pc-in {
+  to { opacity: 1; transform: none; }
+}
+
+/* Round arrows */
+.pepx-pc-arrow {
+  position: absolute;
+  top: calc(50% - 6px);
+  z-index: 2;
+  width: 42px;
+  height: 42px;
+  min-height: 0;
+  padding: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 6px 18px -6px rgba(15, 40, 80, .35);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: opacity .3s ease, background .2s ease;
+}
+.pepx-pc.is-scrollable .pepx-pc-arrow { display: inline-flex; }
+.pepx-pc-arrow:hover { background: #f1f5fb; }
+.pepx-pc-arrow:focus-visible { outline: 2px solid #0070b0; outline-offset: 2px; }
+.pepx-pc-arrow--left { left: -10px; }
+.pepx-pc-arrow--right { right: -10px; }
+.pepx-pc-arrow:disabled { opacity: 0; pointer-events: none; }
+
+@media (max-width: 720px) {
+  .pepx-pc-arrow { width: 36px; height: 36px; }
+  .pepx-pc-arrow--left { left: -4px; }
+  .pepx-pc-arrow--right { right: -4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pepx-pc .pepx-pc-track > .product-card { opacity: 1; transform: none; animation: none; }
+  [data-pepx-home] .pepx-pc-track > .product-card,
+  [data-pepx-home] .pepx-pc-track .product-card-media img { transition: none; }
+}
