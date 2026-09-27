@@ -624,7 +624,7 @@ function shuffleProducts(products){
 }
 
 function getHomeFeaturedRowSize(){
-  return 4;
+  return 12;
 }
 
 function isHomepageFeaturedGrid(grid){
