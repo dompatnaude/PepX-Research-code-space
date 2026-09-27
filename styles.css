@@ -2601,3 +2601,57 @@ body.dark-mode .article-foot{border-color:#24365c;}
 @media (prefers-reduced-motion: reduce) {
   #productGrid.grid-shop .product-card-media img { transition: none; }
 }
+
+/* ==========================================================================
+   Product cards - mobile readability fixes
+   Shop page: no View Details button (the whole card already opens the
+   product), so name, stock and price each get a full line and the price
+   never wraps. Homepage Featured row on phones: price on its own line,
+   View Details full width underneath.
+   ========================================================================== */
+#productGrid.grid-shop .product-card-actions { display: none; }
+#productGrid.grid-shop .product-card-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "name"
+    "stock"
+    "price";
+  row-gap: 6px;
+}
+#productGrid.grid-shop > .product-card { cursor: pointer; }
+#productGrid.grid-shop .product-card-meta .price,
+[data-pepx-home] .pepx-pc-track .product-card-meta .price {
+  white-space: nowrap;
+}
+#productGrid.grid-shop .product-card-body h3 {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+@media (max-width: 720px) {
+  #productGrid.grid-shop .product-card-body { padding: 10px; }
+  #productGrid.grid-shop .product-card-body h3 { font-size: 14px; }
+  #productGrid.grid-shop .product-card-meta .price { font-size: 15px; }
+
+  [data-pepx-home] .pepx-pc-track .product-card-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "name"
+      "stock"
+      "price"
+      "action";
+    row-gap: 6px;
+  }
+  [data-pepx-home] .pepx-pc-track .product-card-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+/* Keep name + stock at the top and the price pinned to the bottom, so cards
+   of different name lengths line up evenly in each row. */
+#productGrid.grid-shop .product-card-body {
+  grid-template-rows: auto auto 1fr;
+  align-content: start;
+}
+#productGrid.grid-shop .product-card-meta { align-self: end; padding-top: 4px; }
