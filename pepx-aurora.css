@@ -266,18 +266,18 @@ body.dark-mode > .pepx-aurora { display: none; }
   from { opacity: 0; transform: translate3d(0, 40px, 0); }
   to   { opacity: 1; transform: translate3d(0, 0, 0); }
 }
-[data-pepx-aurora="page"] .hero > div:first-of-type > *,
-[data-pepx-aurora="page"] .hero > .hero-best {
+[data-pepx-home] .hero > div:first-of-type > *,
+[data-pepx-home] .hero > .hero-best {
   animation: pepx-rise .8s ease-in-out .3s backwards;
 }
-[data-pepx-aurora="page"] .hero > div:first-of-type > :nth-child(2) { animation-delay: .4s; }
-[data-pepx-aurora="page"] .hero > div:first-of-type > :nth-child(3) { animation-delay: .5s; }
-[data-pepx-aurora="page"] .hero > div:first-of-type > :nth-child(4) { animation-delay: .6s; }
-[data-pepx-aurora="page"] .hero > div:first-of-type > :nth-child(n+5),
-[data-pepx-aurora="page"] .hero > .hero-best { animation-delay: .7s; }
+[data-pepx-home] .hero > div:first-of-type > :nth-child(2) { animation-delay: .4s; }
+[data-pepx-home] .hero > div:first-of-type > :nth-child(3) { animation-delay: .5s; }
+[data-pepx-home] .hero > div:first-of-type > :nth-child(4) { animation-delay: .6s; }
+[data-pepx-home] .hero > div:first-of-type > :nth-child(n+5),
+[data-pepx-home] .hero > .hero-best { animation-delay: .7s; }
 @media (prefers-reduced-motion: reduce) {
-  [data-pepx-aurora="page"] .hero > div:first-of-type > *,
-  [data-pepx-aurora="page"] .hero > .hero-best { animation: none; }
+  [data-pepx-home] .hero > div:first-of-type > *,
+  [data-pepx-home] .hero > .hero-best { animation: none; }
 }
 
 /* ---- More noticeable motion on the homepage: ~2x faster, wider drift,
