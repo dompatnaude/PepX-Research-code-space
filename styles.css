@@ -2137,12 +2137,12 @@ body.dark-mode .article-foot{border-color:#24365c;}
    Frosted-glass buttons - HOMEPAGE ONLY
    Every .btn and the "Shop by category" pills on the homepage get a foggy,
    slightly see-through glass finish that lets the aurora show through.
-   Scoped to <body data-pepx-aurora="page">, which only index.html has, so
+   Scoped to <body data-pepx-home>, which only index.html has, so
    login, register and every other page keep their original buttons.
    Button sizes, text and links are unchanged.
    ========================================================================== */
-[data-pepx-aurora="page"] .btn:not(.pepx-x),
-[data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x) {
+[data-pepx-home] .btn:not(.pepx-x),
+[data-pepx-home] .category-strip .pill:not(.pepx-x) {
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -2160,8 +2160,8 @@ body.dark-mode .article-foot{border-color:#24365c;}
   transition: background .25s ease, border-color .25s ease, box-shadow .25s ease, transform .2s ease;
 }
 /* Soft top sheen, like light catching frosted glass */
-[data-pepx-aurora="page"] .btn:not(.pepx-x)::before,
-[data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x)::before {
+[data-pepx-home] .btn:not(.pepx-x)::before,
+[data-pepx-home] .category-strip .pill:not(.pepx-x)::before {
   content: "";
   position: absolute;
   inset: 0 0 50% 0;
@@ -2172,8 +2172,8 @@ body.dark-mode .article-foot{border-color:#24365c;}
   filter: none;
   transform: none;
 }
-[data-pepx-aurora="page"] .btn:not(.pepx-x):hover,
-[data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x):hover {
+[data-pepx-home] .btn:not(.pepx-x):hover,
+[data-pepx-home] .category-strip .pill:not(.pepx-x):hover {
   color: #0f172a;
   background: rgba(255, 255, 255, .55);
   border-color: rgba(255, 255, 255, .85);
@@ -2182,34 +2182,34 @@ body.dark-mode .article-foot{border-color:#24365c;}
     inset 0 -1px 0 rgba(15, 23, 42, .05),
     0 12px 28px -12px rgba(15, 40, 80, .4);
 }
-[data-pepx-aurora="page"] .btn:not(.pepx-x):hover::before,
-[data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x):hover::before {
+[data-pepx-home] .btn:not(.pepx-x):hover::before,
+[data-pepx-home] .category-strip .pill:not(.pepx-x):hover::before {
   opacity: 1;
   transform: none;
 }
-[data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x).active {
+[data-pepx-home] .category-strip .pill:not(.pepx-x).active {
   color: #0f172a;
   font-weight: 700;
   background: rgba(255, 255, 255, .7);
   border-color: rgba(0, 112, 176, .35);
 }
-[data-pepx-aurora="page"] .btn:not(.pepx-x):focus-visible,
-[data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x):focus-visible {
+[data-pepx-home] .btn:not(.pepx-x):focus-visible,
+[data-pepx-home] .category-strip .pill:not(.pepx-x):focus-visible {
   outline: 2px solid #0070b0;
   outline-offset: 2px;
 }
-[data-pepx-aurora="page"] .btn:not(.pepx-x):disabled {
+[data-pepx-home] .btn:not(.pepx-x):disabled {
   opacity: .5;
   pointer-events: none;
 }
 /* Browsers without backdrop blur: a more solid frosted white instead */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  [data-pepx-aurora="page"] .btn:not(.pepx-x),
-  [data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x) { background: rgba(255, 255, 255, .78); }
+  [data-pepx-home] .btn:not(.pepx-x),
+  [data-pepx-home] .category-strip .pill:not(.pepx-x) { background: rgba(255, 255, 255, .78); }
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-pepx-aurora="page"] .btn:not(.pepx-x),
-  [data-pepx-aurora="page"] .category-strip .pill:not(.pepx-x) { transition: none; }
+  [data-pepx-home] .btn:not(.pepx-x),
+  [data-pepx-home] .category-strip .pill:not(.pepx-x) { transition: none; }
 }
 
 /* ==========================================================================
