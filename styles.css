@@ -2875,3 +2875,9 @@ body.dark-mode .article-foot{border-color:#24365c;}
   body.cart-open { overscroll-behavior: none; }
   .drawer input { font-size: 16px; }
 }
+
+/* Mobile cart drawer: keep footer stacked when the savings line shows */
+@media(max-width:720px){
+.drawer-foot{flex-wrap:nowrap;}
+.drawer-foot .tot,.drawer-foot .cart-savings,.drawer-foot .mini-cart-actions{flex:0 0 auto;width:100%;}
+}
