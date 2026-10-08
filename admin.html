@@ -104,6 +104,8 @@
     .addr{white-space:pre-line;line-height:1.45;}
     .admin-section-title{margin:0 0 8px;font-size:16px;}
     .admin-subtle{font-size:12px;color:#64748b;}
+    .sale-bar-preview{background:linear-gradient(90deg,#16335e,#1c4379 50%,#16335e);color:#fff;text-align:center;font-size:14px;font-weight:700;letter-spacing:.03em;line-height:1.35;padding:10px 14px;border-radius:8px;overflow-wrap:anywhere;}
+    .sale-bar-preview.is-off{background:#eceff3;color:#5b6478;font-weight:600;}
     .chip-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
     .chip{padding:.25rem .52rem;border-radius:999px;background:#eef2f9;color:#334155;font-size:12px;font-weight:600;}
     .shipping-shell{display:grid;gap:12px;margin-top:1rem;padding:12px;border:1px solid #e2eaf7;border-radius:12px;background:#fff;}
@@ -181,6 +183,7 @@
         <button type="button" data-tab="orders">Orders</button>
         <button type="button" data-tab="products">Products</button>
         <button type="button" data-tab="promos">Discount Codes</button>
+        <button type="button" data-tab="sale">Site-wide Sale</button>
         <button type="button" data-tab="coas">COAs</button>
         <button type="button" data-tab="reviews">Reviews</button>
         <button type="button" data-tab="customers">Customers</button>
@@ -276,6 +279,29 @@
         </table>
 
         <div id="promoAnalytics" class="admin-panel hidden"></div>
+      </div>
+
+      <div id="saleSection" class="hidden">
+        <div class="admin-panel" id="saleLivePanel">
+          <div class="muted">Right now</div>
+          <div id="saleLiveSummary" style="margin-top:.35rem;"><strong>Loading&hellip;</strong></div>
+          <div id="saleLiveBannerWrap" class="hidden" style="margin-top:.8rem;">
+            <div class="admin-subtle" style="margin-bottom:.3rem;">Announcement bar customers see</div>
+            <div id="saleLiveBanner" class="sale-bar-preview"></div>
+          </div>
+        </div>
+
+        <div class="admin-bar admin-bar-between">
+          <div class="admin-subtle">A site-wide sale takes a percentage off every product automatically. Customers don't enter a code, and discount codes are switched off while a sale is live. Volume discounts still apply.</div>
+          <button type="button" class="btn-sm" id="btnAddSale">New Site-wide Sale</button>
+        </div>
+        <table class="admin-table">
+          <thead><tr>
+            <th>Sale</th><th>Discount</th><th>Status</th><th>Orders</th><th>Maximum Uses</th><th>Remaining</th>
+            <th>Customer Savings</th><th>Revenue</th><th>Starts</th><th>Ends</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="salesBody"><tr><td colspan="11" class="muted">Loading&hellip;</td></tr></tbody>
+        </table>
       </div>
 
       <div id="coasSection" class="hidden">
@@ -506,6 +532,69 @@
     </div>
   </div>
 
+  <!-- Site-wide sale create/edit modal -->
+  <div class="modal-backdrop hidden" id="saleModalWrap" role="dialog" aria-modal="true" aria-labelledby="saleModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="saleModalTitle" style="margin:0;">New Site-wide Sale</h3>
+        <button class="link-btn" type="button" id="saleModalClose">Close</button>
+      </div>
+      <form id="saleForm">
+        <div class="modal-body">
+          <div class="form-grid">
+            <label class="form-field">Sale name
+              <input type="text" name="name" required maxlength="60" placeholder="Fall Sale">
+            </label>
+            <label class="form-field">Percent off every product
+              <input type="number" name="discount_percent" required min="0.01" max="100" step="0.01" placeholder="25">
+            </label>
+            <label class="form-field">Start date
+              <input type="datetime-local" name="starts_at">
+              <span class="admin-subtle">Blank = starts as soon as it is turned on.</span>
+            </label>
+            <label class="form-field">End date
+              <input type="datetime-local" name="expires_at">
+              <span class="admin-subtle">Blank = runs until you turn it off.</span>
+            </label>
+            <label class="form-field">Maximum uses (orders)
+              <input type="number" name="usage_limit" min="0" step="1" placeholder="Blank = Unlimited">
+              <span class="admin-subtle">The sale ends by itself after this many orders.</span>
+            </label>
+            <label class="form-field">Sale is
+              <select name="active">
+                <option value="true">Turned on</option>
+                <option value="false">Turned off</option>
+              </select>
+            </label>
+            <label class="form-field full">Announcement bar text
+              <textarea name="banner_text" rows="2" maxlength="240" placeholder="Leave blank to use the automatic text"></textarea>
+              <span class="admin-subtle" id="saleBannerHint"></span>
+            </label>
+            <label class="form-field full" style="flex-direction:row;align-items:center;gap:.5rem;">
+              <input type="checkbox" name="show_banner" checked style="width:auto;"> Show the announcement bar across the top of the site
+            </label>
+            <label class="form-field full" style="flex-direction:row;align-items:center;gap:.5rem;">
+              <input type="checkbox" name="banner_scroll" style="width:auto;"> Scroll the text across the screen (instead of centered)
+            </label>
+            <div class="form-field full">
+              <span class="admin-subtle">Preview</span>
+              <div id="saleBannerPreview" class="sale-bar-preview"></div>
+            </div>
+            <div class="form-field full" id="saleStatsWrap" style="display:none;">
+              <span><strong>Results so far</strong></span>
+              <div class="muted" id="saleStatsText"></div>
+            </div>
+          </div>
+          <input type="hidden" name="sale_id">
+        </div>
+        <div class="modal-actions">
+          <button class="btn-sm secondary" type="button" id="saleModalCancel">Cancel</button>
+          <button class="btn-sm" type="submit" id="saleModalSave">Save Sale</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- COA create/edit modal -->
   <div class="modal-backdrop hidden" id="coaModalWrap" role="dialog" aria-modal="true" aria-labelledby="coaModalTitle">
     <div class="modal-card">
@@ -572,6 +661,7 @@
   </div>
 
   <script src="admin.js"></script>
+  <script src="admin-sale.js"></script>
     <div class="modal-backdrop hidden" id="customerDetailWrap" role="dialog" aria-modal="true">
       <div class="modal-card" style="max-width:820px;width:92vw;max-height:88vh;overflow:auto;">
         <div class="modal-head">

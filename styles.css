@@ -2881,3 +2881,16 @@ body.dark-mode .article-foot{border-color:#24365c;}
 .drawer-foot{flex-wrap:nowrap;}
 .drawer-foot .tot,.drawer-foot .cart-savings,.drawer-foot .mini-cart-actions{flex:0 0 auto;width:100%;}
 }
+
+/* ===== Site-wide sale prices (Admin Console -> Site-wide Sale) ===== */
+.price.on-sale{display:inline-flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;}
+.price.on-sale .price-normal{font-size:.68em;font-weight:700;color:#94a3b8;text-decoration:line-through;}
+.price.on-sale .price-discount{color:var(--blue);font-weight:800;}
+.checkout-summary-each .price-normal,
+.checkout-summary-price .price-normal{color:#94a3b8;text-decoration:line-through;font-weight:600;font-size:.86em;}
+.checkout-summary-price{text-align:right;}
+.cart-item .info .pr .price-normal{margin-right:6px;}
+body.dark-mode .price.on-sale .price-normal,
+body.dark-mode .checkout-summary-each .price-normal,
+body.dark-mode .checkout-summary-price .price-normal{color:#8fa3c8;}
+body.dark-mode .price.on-sale .price-discount{color:#93c5fd;}
