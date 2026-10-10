@@ -2894,3 +2894,30 @@ body.dark-mode .price.on-sale .price-normal,
 body.dark-mode .checkout-summary-each .price-normal,
 body.dark-mode .checkout-summary-price .price-normal{color:#8fa3c8;}
 body.dark-mode .price.on-sale .price-discount{color:#93c5fd;}
+
+/* MOBILE-SQUARE-PRODUCT-IMAGES
+   Phones only: product image slots are square and the photo fills the slot,
+   so square and wide product photos both show the whole vial, larger. */
+@media (max-width: 720px) {
+  html body .product-card .product-card-media,
+  html body #productGrid.grid-shop .product-card-media,
+  html body [data-pepx-home] .pepx-pc-track .product-card-media {
+    height: auto !important;
+    aspect-ratio: 1 / 1 !important;
+    padding: 0 !important;
+    display: block !important;
+    overflow: hidden !important;
+  }
+  html body .product-card .product-card-media img,
+  html body #productGrid.grid-shop .product-card-media img,
+  html body [data-pepx-home] .pepx-pc-track .product-card-media img {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    object-fit: cover !important;
+    object-position: center center !important;
+  }
+}
