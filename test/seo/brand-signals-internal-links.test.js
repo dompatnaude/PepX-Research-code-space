@@ -230,7 +230,7 @@ test('the links that remain to private pages are the signed-in ones, and are rob
 });
 
 test('the hero and featured calls to action point at public routes', () => {
-  const hero = INDEX.slice(INDEX.indexOf('<div class="btns">'), INDEX.indexOf('<div class="stats">'));
+  const hero = INDEX.slice(INDEX.indexOf('<div class="btns">'), INDEX.indexOf('<div class="hero-vials"'));
   assert.match(hero, /href="\/shop"/);
   assert.match(hero, /href="\/coas.html"/);
   // The old CTA carried a returnTo parameter, which robots.txt disallows.

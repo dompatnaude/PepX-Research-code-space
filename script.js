@@ -335,6 +335,33 @@ function getProductUrl(id){
   return 'product.html?product=' + encodeURIComponent(id);
 }
 
+// ---------- Site-wide sale ----------
+// The live sale comes from pepx-sale.js (Admin Console -> Site-wide Sale). These
+// helpers only shape what is displayed; the server recomputes the real charge.
+function getActiveSale(){
+  return (window.PepxSale && typeof window.PepxSale.get === 'function') ? window.PepxSale.get() : null;
+}
+
+function getSalePercent(){
+  var sale = getActiveSale();
+  var percent = sale ? Number(sale.percent) : 0;
+  return (percent > 0 && percent <= 100) ? percent : 0;
+}
+
+function applySalePrice(amount){
+  var percent = getSalePercent();
+  return percent ? Number(amount || 0) * (1 - percent / 100) : Number(amount || 0);
+}
+
+// What the sale takes off a cart subtotal, rounded the way the server rounds it.
+function getSaleDiscount(subtotal){
+  return (window.PepxSale && getSalePercent()) ? window.PepxSale.discountOn(subtotal) : 0;
+}
+
+function getSaleLabel(){
+  return (window.PepxSale && getSalePercent()) ? window.PepxSale.label() : '';
+}
+
 function getQuantityPricing(unitPrice, quantity){
   var parsedQty = parseInt(quantity, 10);
   var qty = Number.isFinite(parsedQty) ? Math.max(0, parsedQty) : 0;
@@ -342,18 +369,24 @@ function getQuantityPricing(unitPrice, quantity){
   var discountSteps = Math.max(0, Math.min(qty - 1, 4));
   var discountRate = qty >= 10 ? 0.20 : discountSteps * 0.03;
   var discountedTotal = normalTotal * (1 - discountRate);
+  var hasSale = getSalePercent() > 0;
   return {
     qty: qty,
     normalTotal: normalTotal,
+    // After the volume discount only. This is what the cart subtotal adds up.
     discountedTotal: discountedTotal,
-    hasDiscount: discountRate > 0
+    // After the volume discount AND the site-wide sale. This is what is shown.
+    saleTotal: applySalePrice(discountedTotal),
+    hasDiscount: discountRate > 0,
+    hasSale: hasSale,
+    hasReduction: discountRate > 0 || hasSale
   };
 }
 
 function setDualPriceMarkup(priceEl, pricing){
   if(!priceEl) return;
-  if(pricing.hasDiscount){
-    priceEl.innerHTML = '<span class="price-normal">$' + pricing.normalTotal.toFixed(2) + '</span><span class="price-discount">$' + pricing.discountedTotal.toFixed(2) + '</span>';
+  if(pricing.hasReduction){
+    priceEl.innerHTML = '<span class="price-normal">$' + pricing.normalTotal.toFixed(2) + '</span><span class="price-discount">$' + pricing.saleTotal.toFixed(2) + '</span>';
     return;
   }
   priceEl.textContent = '$' + pricing.normalTotal.toFixed(2);
@@ -370,8 +403,8 @@ function renderSavingsRows(product){
   rows.innerHTML = levels.map(function(level){
     var qty = level === '10+' ? 10 : level;
     var pricing = getQuantityPricing(product.price, qty);
-    var discountedLabel = level === '10+' ? ('$' + pricing.discountedTotal.toFixed(2) + '+') : ('$' + pricing.discountedTotal.toFixed(2));
-    var percentSaved = pricing.normalTotal > 0 ? Math.round(((pricing.normalTotal - pricing.discountedTotal) / pricing.normalTotal) * 100) : 0;
+    var discountedLabel = level === '10+' ? ('$' + pricing.saleTotal.toFixed(2) + '+') : ('$' + pricing.saleTotal.toFixed(2));
+    var percentSaved = pricing.normalTotal > 0 ? Math.round(((pricing.normalTotal - pricing.saleTotal) / pricing.normalTotal) * 100) : 0;
     return '<tr><td>' + level + '</td><td>' + discountedLabel + '</td><td>' + percentSaved + '%</td></tr>';
   }).join('');
 }
@@ -467,6 +500,15 @@ function renderProductCards(products, options){
         ? ('$' + minPrice.toFixed(2))
         : ('$' + minPrice.toFixed(2) + '-$' + maxPrice.toFixed(2));
     }
+    var displayPriceMarkup = displayPriceLabel;
+    if(getSalePercent() > 0){
+      var saleLow = applySalePrice(variants.length ? minPrice : displayPrice);
+      var saleHigh = applySalePrice(variants.length ? maxPrice : displayPrice);
+      var salePriceLabel = saleLow === saleHigh
+        ? ('$' + saleLow.toFixed(2))
+        : ('$' + saleLow.toFixed(2) + '-$' + saleHigh.toFixed(2));
+      displayPriceMarkup = '<span class="price-normal">' + displayPriceLabel + '</span><span class="price-discount">' + salePriceLabel + '</span>';
+    }
     var hasResolvedInventory = productsLoadedFromAPI;
     var stockMarkup = '<p class="stock-note loading">Checking availability...</p>';
     if(hasResolvedInventory){
@@ -477,7 +519,7 @@ function renderProductCards(products, options){
     }
     return '<div class="product-card" data-id="'+p.id+'" role="button" tabindex="0">'+
       '<div class="product-card-media"><img src="'+image+'" alt="'+p.name+' product image" loading="lazy"></div><div class="product-card-body">'+
-      '<div class="product-card-meta"><span class="price">'+displayPriceLabel+'</span></div>'+
+      '<div class="product-card-meta"><span class="price'+(getSalePercent() > 0 ? ' on-sale' : '')+'">'+displayPriceMarkup+'</span></div>'+
       '<h3>'+getProductDisplayName(p)+'</h3>'+
       stockMarkup+
       '<div class="product-card-actions"><button class="btn ghost quick-btn" type="button" data-id="'+p.id+'">'+viewLabel+'</button></div>'+
@@ -1359,6 +1401,29 @@ function updateCheckoutActionState(hasItems){
   syncCheckoutAgreementHint();
 }
 
+// While a site-wide sale is live the promo code box is replaced by a note: the
+// sale is already applied and codes are not accepted on top of it.
+function syncSalePromoBox(saleIsLive){
+  var box = document.querySelector('.checkout-promo');
+  if(!box) return;
+  var wasLive = box.getAttribute('data-sale-live') === '1';
+  if(saleIsLive === wasLive && (!saleIsLive || box.getAttribute('data-sale-label') === getSaleLabel())) return;
+  box.setAttribute('data-sale-live', saleIsLive ? '1' : '0');
+  box.setAttribute('data-sale-label', saleIsLive ? getSaleLabel() : '');
+  var label = box.querySelector('label');
+  var row = box.querySelector('.checkout-promo-row');
+  var input = document.getElementById('promoCodeInput');
+  var msg = document.getElementById('promoCodeMessage');
+  if(label){ label.style.display = saleIsLive ? 'none' : ''; }
+  if(row){ row.style.display = saleIsLive ? 'none' : ''; }
+  if(saleIsLive && input){ input.value = ''; }
+  if(msg){
+    msg.textContent = saleIsLive
+      ? (getSaleLabel() + ' is already applied to your order \u2014 no code needed. Discount codes can\'t be combined with this sale.')
+      : 'Volume discounts are applied automatically when eligible.';
+  }
+}
+
 function syncPromoAppliedState(){
   var wrap = document.getElementById('checkoutPromoApplied');
   var codeEl = document.getElementById('checkoutPromoAppliedCode');
@@ -1617,7 +1682,17 @@ function renderCart(){
     }
   }
 
-  var effectiveSubtotal = Math.max(0, total - promoDiscount);
+  // A site-wide sale replaces discount codes: it is already on every price.
+  var saleDiscount = getSaleDiscount(total);
+  var saleIsLive = getSalePercent() > 0;
+  if(saleIsLive){
+    promoDiscount = 0;
+    checkoutState.appliedPromo = null;
+    checkoutState.appliedPromoCode = null;
+  }
+  syncSalePromoBox(saleIsLive);
+
+  var effectiveSubtotal = Math.max(0, total - promoDiscount - saleDiscount);
   // Recompute shipping cost on every cart update so it always reflects the current subtotal.
   if(checkoutState.selectedRate && items.length > 0){
     var isGroundAdv = checkoutState.selectedRate.canonicalService === 'USPS Ground Advantage';
@@ -1637,9 +1712,13 @@ function renderCart(){
   var checkoutPromoRow = document.getElementById('checkoutPromoRow');
   var checkoutPromoDiscount = document.getElementById('checkoutPromoDiscount');
   if (checkoutPromoRow && checkoutPromoDiscount) {
-    if (promoDiscount > 0) {
+    var discountLabelEl = checkoutPromoRow.querySelector('span');
+    if (discountLabelEl) {
+      discountLabelEl.textContent = saleDiscount > 0 ? getSaleLabel() : 'Discount';
+    }
+    if (promoDiscount + saleDiscount > 0) {
       checkoutPromoRow.style.display = '';
-      checkoutPromoDiscount.textContent = '-' + formatMoney(promoDiscount);
+      checkoutPromoDiscount.textContent = '-' + formatMoney(promoDiscount + saleDiscount);
     } else {
       checkoutPromoRow.style.display = 'none';
       checkoutPromoDiscount.textContent = '-' + formatMoney(0);
@@ -1654,7 +1733,7 @@ function renderCart(){
     }
   }
   var savingsEl = document.getElementById('cartSavings');
-  var savedAmount = Math.max(0, fullTotal - total);
+  var savedAmount = Math.max(0, fullTotal - total + saleDiscount);
   if(savingsEl){
     if(savedAmount > 0.004){
       savingsEl.textContent = 'You saved ' + formatMoney(savedAmount);
@@ -1692,8 +1771,8 @@ function renderCart(){
     if(item.variant_name){
       displayName += ' (' + item.variant_name + ')';
     }
-    var linePriceMarkup = pricing.hasDiscount
-      ? '<span class="price-normal">' + formatMoney(pricing.normalTotal) + '</span><span class="price-discount">' + formatMoney(pricing.discountedTotal) + '</span>'
+    var linePriceMarkup = pricing.hasReduction
+      ? '<span class="price-normal">' + formatMoney(pricing.normalTotal) + '</span><span class="price-discount">' + formatMoney(pricing.saleTotal) + '</span>'
       : formatMoney(pricing.discountedTotal);
     return '<div class="cart-item"><div class="thumb" style="background-image:url(\'' + escapeHtml(imageUrl) + '\')"></div><div class="info">'+
       '<div class="nm">'+escapeHtml(displayName)+'</div><div class="pr">'+linePriceMarkup+'</div>'+
@@ -1723,7 +1802,9 @@ function renderCart(){
       + '<div class="checkout-summary-content' + pendingClass + '">'
       + '<p class="checkout-summary-name">' + displayName + '</p>'
       + variantLine
-      + '<p class="checkout-summary-each">Each: ' + formatMoney(unitPrice) + '</p>'
+      + '<p class="checkout-summary-each">Each: ' + (pricing.hasSale
+          ? ('<span class="price-normal">' + formatMoney(unitPrice) + '</span> ' + formatMoney(applySalePrice(unitPrice)))
+          : formatMoney(unitPrice)) + '</p>'
       + stockWarning
       + '<div class="checkout-summary-qty">'
       + '<button type="button" aria-label="Decrease quantity for ' + displayName + '" data-dec="' + itemId + '"' + disabledAttr + '>−</button>'
@@ -1732,7 +1813,9 @@ function renderCart(){
       + '</div>'
       + '<button type="button" class="checkout-summary-remove" aria-label="Remove ' + displayName + ' from cart" data-rm="' + itemId + '"' + disabledAttr + '>Remove</button>'
       + '</div>'
-      + '<strong class="checkout-summary-price">' + formatMoney(pricing.discountedTotal) + '</strong>'
+      + '<strong class="checkout-summary-price">' + (pricing.hasSale
+          ? ('<span class="price-normal">' + formatMoney(pricing.discountedTotal) + '</span> ' + formatMoney(pricing.saleTotal))
+          : formatMoney(pricing.discountedTotal)) + '</strong>'
       + '</article>';
   }).join('');
   if(body) body.innerHTML = drawerItemsHtml;
@@ -3437,7 +3520,9 @@ function initCheckoutPage(){
     if(checkoutState.appliedPromo && Number(checkoutState.appliedPromo.discount || 0) > 0){
       promoDiscount = Number(checkoutState.appliedPromo.discount || 0);
     }
-    return Math.max(0, total - promoDiscount);
+    var saleDiscount = getSaleDiscount(total);
+    if(saleDiscount > 0){ promoDiscount = 0; }
+    return Math.max(0, total - promoDiscount - saleDiscount);
   }
 
   function loadShippingRates(confirmVerifiedAddress){
@@ -3667,7 +3752,11 @@ function initCheckoutPage(){
       shipping_country: String((document.getElementById('shipping_country') || {}).value || '').trim(),
       shipping_phone: String((document.getElementById('shipping_phone') || {}).value || '').trim(),
       payment_method: isWalletPay ? 'card' : (paymentMethodEl ? paymentMethodEl.value : 'zelle'),
-      promo_code: checkoutState.appliedPromoCode || null,
+      promo_code: getSalePercent() > 0 ? null : (checkoutState.appliedPromoCode || null),
+      // Which sale price this page showed. The server refuses the order if the
+      // sale has since ended or changed, instead of charging a different total.
+      sitewide_sale_id: getActiveSale() ? getActiveSale().id : null,
+      sitewide_sale_percent: getActiveSale() ? getSalePercent() : null,
       easypost_shipment_id: checkoutState.easypostShipmentId,
       easypost_rate_id: checkoutState.selectedRate.rateId
     };
@@ -3752,6 +3841,11 @@ function initCheckoutPage(){
         announceCartLive('Please sign in to place your order.');
         openAuthModal('login');
         return;
+      }
+      if(err && (err.code === 'sale_changed' || err.code === 'sale_active') && window.PepxSale){
+        // The sale ended or changed while this page was open: pull the current
+        // sale so the totals on screen match what the server will charge.
+        window.PepxSale.refresh().then(function(){ renderCart(); });
       }
       setCheckoutMessage(err.message || 'Failed to place order. Please review your details and try again.', true);
       showToast(err.message || 'Failed to place order.');
@@ -3847,6 +3941,17 @@ async function loadProductsFromAPI(options){
 window.addEventListener('DOMContentLoaded', function(){
   if(appBootstrapInitialized) return;
   appBootstrapInitialized = true;
+
+  // Prices are drawn before the live sale has been fetched on the first page
+  // view of a visit; redraw them when it arrives or changes.
+  if(window.PepxSale && typeof window.PepxSale.onChange === 'function'){
+    window.PepxSale.onChange(function(){
+      renderProducts(getInitialProductSearchQuery());
+      renderHeroBestSellers();
+      renderProductDetailPage();
+      renderCart();
+    });
+  }
 
   var initialSearchQuery = getInitialProductSearchQuery();
   loadBackendCart();

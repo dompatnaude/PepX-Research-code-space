@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../db/connection");
 const { money, validatePromoCode } = require("../services/promo-service");
+const sitewideSale = require("../services/sitewide-sale");
 const { getEasyPostClient, classifyUspsService } = require("../services/easypost");
 
 function getQuantityDiscountRate(quantity) {
@@ -328,6 +329,17 @@ async function validatePromoForCheckout(req, res) {
 
   const client = await pool.connect();
   try {
+    // A site-wide sale is already on every price, so codes are not accepted
+    // on top of it.
+    const liveSale = await sitewideSale.getLiveSale(client);
+    if (liveSale) {
+      return res.status(400).json({
+        valid: false,
+        code: "sale_active",
+        error: `Discount codes can't be combined with the ${sitewideSale.saleLabel(liveSale)} — your sale price is already applied.`,
+      });
+    }
+
     const cart = await buildUserCartSubtotal(client, userId);
     if (!cart.pricedItems.length) {
       return res.status(400).json({ valid: false, error: "Your cart is empty." });
@@ -389,7 +401,46 @@ async function createOrder(req, res) {
     let subtotalAfterDiscount = subtotalBeforeDiscount;
 
     const submittedPromoCode = String(body.promo_code || "").trim();
-    if (submittedPromoCode) {
+
+    // A live site-wide sale prices the whole order with no code. The browser
+    // says which sale (and percentage) it showed the customer; if that is no
+    // longer what is live, the order is refused rather than charged at a price
+    // the customer never saw.
+    let appliedSale = null;
+    const liveSale = await sitewideSale.getLiveSale(client);
+    const expectedSaleId = body.sitewide_sale_id == null || body.sitewide_sale_id === ""
+      ? null
+      : Number(body.sitewide_sale_id);
+    const expectedSalePercent = body.sitewide_sale_percent == null || body.sitewide_sale_percent === ""
+      ? null
+      : Number(body.sitewide_sale_percent);
+    const saleMatchesExpectation = liveSale
+      && Number(liveSale.id) === expectedSaleId
+      && (expectedSalePercent == null
+        || Math.abs(Number(liveSale.discount_percent) - expectedSalePercent) < 0.005);
+
+    if (expectedSaleId != null && !saleMatchesExpectation) {
+      await client.query("ROLLBACK");
+      sitewideSale.clearPublicSaleCache();
+      return res.status(409).json({
+        code: "sale_changed",
+        error: "The sale pricing on your order has changed. Your cart has been updated — please review the new total and place your order again.",
+      });
+    }
+
+    if (liveSale) {
+      if (submittedPromoCode) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          code: "sale_active",
+          error: `Discount codes can't be combined with the ${sitewideSale.saleLabel(liveSale)} — your sale price is already applied. Please review your total and place your order again.`,
+        });
+      }
+      appliedSale = liveSale;
+      promoCode = sitewideSale.saleLabel(liveSale);
+      discountAmount = sitewideSale.computeSaleDiscount(liveSale, subtotalBeforeDiscount);
+      subtotalAfterDiscount = money(subtotalBeforeDiscount - discountAmount);
+    } else if (submittedPromoCode) {
       const promoResult = await validatePromoCode(client, submittedPromoCode, subtotalBeforeDiscount, { forUpdate: true, userId });
       if (!promoResult.valid) {
         await client.query("ROLLBACK");
@@ -595,6 +646,40 @@ async function createOrder(req, res) {
       );
     }
 
+    if (appliedSale) {
+      // Count the use and re-check the limit in one statement, so two orders
+      // racing for the last use cannot both get the sale price.
+      const usedRes = await client.query(
+        `UPDATE sitewide_sales
+            SET total_used = total_used + 1,
+                total_discount_given = total_discount_given + $1,
+                total_revenue_generated = total_revenue_generated + $2,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = $3
+            AND active = true
+            AND (usage_limit IS NULL OR total_used < usage_limit)
+          RETURNING id, usage_limit, total_used`,
+        [discountAmount, total, appliedSale.id]
+      );
+      if (!usedRes.rows.length) {
+        await client.query("ROLLBACK");
+        sitewideSale.clearPublicSaleCache();
+        return res.status(409).json({
+          code: "sale_changed",
+          error: "The sale pricing on your order has changed. Your cart has been updated — please review the new total and place your order again.",
+        });
+      }
+      await client.query(
+        "UPDATE orders SET sitewide_sale_id = $1 WHERE id = $2",
+        [appliedSale.id, order.id]
+      );
+      const used = usedRes.rows[0];
+      if (used.usage_limit != null && Number(used.total_used) >= Number(used.usage_limit)) {
+        // That was the last use: stop advertising the sale straight away.
+        sitewideSale.clearPublicSaleCache();
+      }
+    }
+
     await client.query("DELETE FROM cart_items WHERE cart_id = $1", [cartId]);
     await client.query(
       "UPDATE carts SET updated_at = CURRENT_TIMESTAMP WHERE id = $1",
@@ -620,6 +705,7 @@ async function createOrder(req, res) {
         subtotal_after_discount: subtotalAfterDiscount,
         discount_amount: discountAmount,
         promo_code: promoCode,
+        sitewide_sale_id: appliedSale ? Number(appliedSale.id) : null,
         shipping_cost: shippingCost,
         total,
       },

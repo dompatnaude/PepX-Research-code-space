@@ -315,33 +315,16 @@ body.dark-mode > .pepx-aurora { display: none; }
 }
 
 /* ==========================================================================
-   Grid background (from the Background Snippets component) - replaces the
-   aurora visuals on the homepage and shop page: white base, faint #f0f0f0
-   grid (6rem x 4rem) and a subtle logo-X-blue glow at the top right. Fixed to
-   the viewport, so the grid covers the whole page while scrolling.
+   Page background on the homepage and shop page: a flat ice blue, the same
+   colour the homepage hero fades into and that styles.css sets as --bg for
+   every other page. (This replaced the white base with a faint grey grid and
+   a blue glow at the top right.)
    ========================================================================== */
-[data-pepx-aurora="page"] { background-color: #fff; }
+[data-pepx-aurora="page"] { background-color: #e6f5fb; }
 [data-pepx-aurora="page"] > .pepx-aurora {
-  background-color: #fff;
-  background-image:
-    radial-gradient(circle 800px at 100% 200px, rgba(0, 150, 220, .2), rgba(0, 150, 220, 0)),
-    linear-gradient(to right, #f0f0f0 1px, transparent 1px),
-    linear-gradient(to bottom, #f0f0f0 1px, transparent 1px);
-  background-size: auto, 6rem 4rem, 6rem 4rem;
+  background-color: #e6f5fb;
+  background-image: none;
 }
 /* The aurora ribbons, beams, spotlight etc. are no longer shown. */
 [data-pepx-aurora="page"] > .pepx-aurora > * { display: none; }
 
-/* Grid background on phones/tablets: the 800px glow is wider than the
-   screen and tints everything blue, so scale it to the viewport to keep
-   the same proportions as desktop (glow in the top-right corner, fading
-   to white/grid across the rest). */
-@media (max-width: 900px) {
-  [data-pepx-aurora="page"] > .pepx-aurora {
-    background-image:
-      radial-gradient(circle 60vw at 100% 120px, rgba(0, 150, 220, .2), rgba(0, 150, 220, 0)),
-      linear-gradient(to right, #f0f0f0 1px, transparent 1px),
-      linear-gradient(to bottom, #f0f0f0 1px, transparent 1px);
-    background-size: auto, 4rem 3rem, 4rem 3rem;
-  }
-}

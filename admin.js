@@ -79,7 +79,9 @@
     var productOpen = !!(productWrap && !productWrap.classList.contains('hidden'));
     var promoOpen = !!(promoWrap && !promoWrap.classList.contains('hidden'));
     var coaOpen = !!(coaWrap && !coaWrap.classList.contains('hidden'));
-    document.body.classList.toggle('modal-open', productOpen || promoOpen || coaOpen);
+    var saleWrap = $('saleModalWrap');
+    var saleOpen = !!(saleWrap && !saleWrap.classList.contains('hidden'));
+    document.body.classList.toggle('modal-open', productOpen || promoOpen || coaOpen || saleOpen);
   }
 
   // Thin API wrapper. Sends cookies; throws Error with .status on non-2xx.
@@ -1134,7 +1136,7 @@
   }
 
   function switchTab(tab) {
-    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos' || tab === 'coas' || tab === 'reviews' || tab === 'customers') {
+    if (tab === 'home' || tab === 'products' || tab === 'orders' || tab === 'promos' || tab === 'sale' || tab === 'coas' || tab === 'reviews' || tab === 'customers') {
       state.tab = tab;
     } else {
       state.tab = 'home';
@@ -1149,6 +1151,7 @@
     if ($('ordersSection')) $('ordersSection').classList.toggle('hidden', state.tab !== 'orders');
     if ($('productsSection')) $('productsSection').classList.toggle('hidden', state.tab !== 'products');
     if ($('promosSection')) $('promosSection').classList.toggle('hidden', state.tab !== 'promos');
+    if ($('saleSection')) $('saleSection').classList.toggle('hidden', state.tab !== 'sale');
     if ($('coasSection')) $('coasSection').classList.toggle('hidden', state.tab !== 'coas');
       if ($('reviewsSection')) $('reviewsSection').classList.toggle('hidden', state.tab !== 'reviews');
     if ($('customersSection')) $('customersSection').classList.toggle('hidden', state.tab !== 'customers');
@@ -1158,6 +1161,9 @@
       loadProducts();
     } else if (state.tab === 'promos') {
       loadPromos();
+    } else if (state.tab === 'sale') {
+      // The Site-wide Sale tab lives in admin-sale.js.
+      if (window.PepxAdminSale) window.PepxAdminSale.load();
     } else if (state.tab === 'coas') {
       loadCoas();
     } else if (state.tab === 'reviews') {

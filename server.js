@@ -17,6 +17,8 @@ const createAdminRouter = require("./routes/admin");
 const createAdminProductsRouter = require('./routes/admin-products');
 const createAdminVariantsRouter = require('./routes/admin-variants');
 const createAdminPromosRouter = require('./routes/admin-promos');
+const createAdminSalesRouter = require('./routes/admin-sales');
+const sitewideSale = require('./services/sitewide-sale');
 const createEasyPostWebhookRouter = require('./routes/easypost-webhooks');
 const createCoasRouter = require('./routes/coas');
 const { createReviewsRouter, createAdminReviewsRouter } = require('./routes/reviews');
@@ -1076,6 +1078,21 @@ app.post('/api/account/orders', function (req, res, next) {
   }
 });
 
+// The live site-wide sale, for the announcement bar and sale prices. Public on
+// purpose: the bar shows on signed-out pages too. It exposes only what the bar
+// itself prints (name, percentage, text, end date) -- never product prices.
+// A failure here must not break a page, so it degrades to "no sale".
+app.get('/api/sale', async (req, res) => {
+  let sale = null;
+  try {
+    sale = await sitewideSale.getPublicSale(pool);
+  } catch (error) {
+    console.error('[sale] could not load the live sale:', error && error.message ? error.message : error);
+  }
+  res.set('Cache-Control', 'no-store');
+  return res.json({ sale });
+});
+
 app.use("/api/products", requireApiAuth, productsRouter);
 app.use("/api/cart", requireApiAuth, createCartRouter(requireAuth));
 app.use('/api/checkout/shipping', requireApiAuth, createCheckoutShippingRouter(requireAuth));
@@ -1084,6 +1101,7 @@ app.use("/api/orders", requireApiAuth, createOrdersRouter(requireAuth));
 app.use('/api/admin/products', createAdminProductsRouter(requireAuth));
 app.use('/api/admin', createAdminVariantsRouter(requireAuth));
 app.use('/api/admin', createAdminPromosRouter(requireAuth));
+app.use('/api/admin', createAdminSalesRouter(requireAuth));
 app.use('/api/admin', createAdminCoasRouter(requireAuth));
 app.use("/api/admin", createAdminRouter(requireAuth));
 app.use('/api/coas', createCoasRouter());
