@@ -183,7 +183,7 @@
   - Card 02 is a batch lookup that sends people to coas.html?batch=...
   Everything is scoped to .pxc so it can't affect the rest of the page.
 ============================================================= -->
-<section class="pxc" aria-labelledby="pxcTitle">
+<section class="pxc auth-in-only" aria-labelledby="pxcTitle">
   <style>
     .pxc{--ink:#0d1117;--ink2:#3b4452;--muted:#64748b;--line:#dfe7f1;--card:#ffffff;--soft:#f3f7fb;--ice:#7dd3fc;--navy:#14254a;--ok:#15803d;--okbg:#e7f6ec;--blue:#1c4379;
       max-width:1180px;margin:0 auto;padding:56px 20px;display:grid;grid-template-columns:1.35fr 1fr;gap:20px;color:var(--ink)}
@@ -320,6 +320,8 @@
   <script>
   (function(){
     'use strict';
+    // Signed-in visitors only: server.js marks the signed-out homepage with html.pepx-public.
+    if(document.documentElement.classList.contains('pepx-public')){var sec=document.querySelector('.pxc');if(sec)sec.remove();return}
     var CLD=function(id){return 'https://res.cloudinary.com/wwaizwmt/image/upload/c_fill,w_460,h_460,g_center,z_1.25/f_auto,q_auto/pepx-v2-'+id+'.jpg'};
     // Shown only if /api/coas can't be reached. Taken from published reports.
     var FALLBACK=[
