@@ -67,40 +67,41 @@ test('storage reads fall back to the database when the disk copy is absent', () 
   assert.match(readFn, /return null/, 'a genuinely missing file must return null, not throw');
 });
 
-// ---- preview generation --------------------------------------------------
+// ---- report cards and viewer ----------------------------------------------
+// The library shows each product's photo on its card and opens the report
+// itself in an in-page viewer, so the page no longer downloads and rasterises
+// every PDF up front.
 
-test('PDF cards get a preview container; only unknown types get the placeholder outright', () => {
+test('cards show the product photo, with a neutral placeholder when there is none', () => {
   const src = readSource('coas.js');
-  assert.match(src, /coa\.fileType === 'pdf'/);
-  assert.match(src, /class="coa-pdf-preview" data-pdf-coa-id=/,
-    'PDF cards must render a preview container that PDF.js fills in');
-  assert.match(src, /renderAllPdfPreviews/);
-});
-
-test('previews are generated client-side from the PDF itself, with no stored thumbnail required', () => {
-  const src = readSource('coas.js');
-  assert.match(src, /pdfjsLib\.getDocument/, 'first page is rendered from the PDF in the browser');
-  assert.match(src, /canvas\.toBlob/, 'rendered page is encoded in the browser');
+  assert.match(src, /c\.productImageUrl/, 'cards use the product image from /api/coas');
+  assert.match(src, /cx-noimg/, 'a product without an image gets a placeholder, not a broken image');
   assert.doesNotMatch(src, /thumbnail_storage_key/,
-    'the public preview must not depend on an admin-uploaded thumbnail');
+    'the public page must not depend on an admin-uploaded thumbnail');
 });
 
-test('preview failures fall back to the placeholder instead of hanging or throwing', () => {
+test('reports open from the public file route, as a PDF frame or an image', () => {
   const src = readSource('coas.js');
-  const fn = src.slice(src.indexOf('function renderPdfPreview'));
-  assert.match(fn, /\.catch\(function \(\) \{/, 'render failures must be caught');
-  assert.match(fn, /pdfFallback\(productName\)/, 'the caught case shows the generic placeholder');
-  assert.match(src, /withPreviewTimeout\(loadingTask\.promise/,
-    'a report that never loads must time out rather than spin forever');
-  assert.match(src, /PDFJS_MAX_WAIT_MS/,
-    'waiting for the PDF.js library must be bounded, not an endless retry loop');
+  assert.match(src, /'\/api\/coas\/' \+ c\.id \+ '\/file'/, 'the viewer and download use /api/coas/:id/file');
+  assert.match(src, /c\.fileType === 'image'/, 'image reports render as images');
+  assert.match(src, /<iframe src=/, 'PDF reports render in the browser\'s PDF viewer');
 });
 
-test('previews are rendered lazily and with bounded concurrency', () => {
+test('every published report is loaded, page by page, and an outage shows a message', () => {
   const src = readSource('coas.js');
-  assert.match(src, /IntersectionObserver/, 'previews render as cards come into view');
-  assert.match(src, /PREVIEW_CONCURRENCY/, 'only a few reports are fetched at once');
-  assert.match(src, /revokeObjectURL/, 'blob URLs are released so memory does not grow');
+  assert.match(src, /page_size=100&page=/, 'the full set is requested in pages of 100');
+  assert.match(src, /totalPages/, 'paging stops at the last page');
+  assert.match(src, /state\.unavailable = true/, 'a failed load is reported, not left spinning');
+  assert.match(src, /Reports are temporarily unavailable/);
+});
+
+test('batch lookup ignores case, spaces and dashes', () => {
+  const src = readSource('coas.js');
+  const norm = new Function('return ' + src.slice(src.indexOf('function norm'), src.indexOf('}', src.indexOf('function norm')) + 1))();
+  assert.equal(norm('mc-260915-1'), norm('MC 260915 1'));
+  assert.equal(norm(' Mc-260915-1 '), 'MC2609151');
+  assert.match(src, /p\.get\('batch'\)/, 'coas.html?batch=… opens the matching report (for vial QR codes)');
+  assert.match(src, /p\.get\('id'\)/, 'coas.html?id=… still opens a report directly');
 });
 
 // ---- canonical COA navigation -------------------------------------------
@@ -154,10 +155,9 @@ test('a bare COA URL requests every published report', () => {
   assert.equal(currentQueryString({ search: 'wolv', productFilter: '' }), 'search=wolv');
 });
 
-test('the product filter list is built from the full set, not the filtered one', () => {
+test('search is matched against the full set of published reports', () => {
   const src = readSource('coas.js');
   const init = src.slice(src.indexOf('function init()'));
-  assert.match(init, /fetch\('\/api\/coas', \{ credentials: 'include' \}\)/,
-    'init must fetch the unfiltered list so every product appears in the filter');
-  assert.match(init, /buildProductFilter\(all\)/);
+  assert.match(init, /load\(\)/, 'init loads every published report before filtering');
+  assert.match(src, /state\.all\.filter/, 'search narrows the full set in the browser');
 });
