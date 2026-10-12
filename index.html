@@ -173,6 +173,260 @@
 </div>
 </section>
 
+<!-- COA transparency showcase -->
+<!-- ============================================================
+  PepX homepage section: "Transparency" COA showcase
+  Drop this whole block into index.html where you want it.
+  - Reads the newest published reports from /api/coas (falls back to
+    built-in data if the API is unreachable, so it never shows empty).
+  - Tap a vial chip to swap product, lot and report.
+  - Card 02 is a batch lookup that sends people to coas.html?batch=...
+  Everything is scoped to .pxc so it can't affect the rest of the page.
+============================================================= -->
+<section class="pxc" aria-labelledby="pxcTitle">
+  <style>
+    .pxc{--ink:#0d1117;--ink2:#3b4452;--muted:#64748b;--line:#dfe7f1;--card:#ffffff;--soft:#f3f7fb;--ice:#7dd3fc;--navy:#14254a;--ok:#15803d;--okbg:#e7f6ec;--blue:#1c4379;
+      max-width:1180px;margin:0 auto;padding:56px 20px;display:grid;grid-template-columns:1.35fr 1fr;gap:20px;color:var(--ink)}
+    body.dark-mode .pxc{--ink:#eef3fb;--ink2:#c4cede;--muted:#8d9ab0;--line:#223047;--card:#101624;--soft:#141c2c;--okbg:#10261a;--ok:#4ade80}
+    .pxc *{box-sizing:border-box}
+    .pxc-card{position:relative;border-radius:28px;padding:30px;overflow:hidden;border:1px solid var(--line);background:var(--card);box-shadow:0 1px 2px rgba(13,17,23,.04),0 24px 60px -36px rgba(13,17,23,.35)}
+    .pxc-main{background:radial-gradient(120% 90% at 100% 0%,rgba(125,211,252,.28),transparent 55%),linear-gradient(180deg,var(--card),var(--soft))}
+    .pxc-eyebrow{font:600 12.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+    .pxc-eyebrow b{color:var(--blue);font-weight:700}
+    body.dark-mode .pxc-eyebrow b{color:var(--ice)}
+    .pxc-icon{width:56px;height:56px;border-radius:16px;background:var(--card);border:1px solid var(--line);display:grid;place-items:center;margin:22px 0 18px;box-shadow:0 6px 18px -10px rgba(13,17,23,.3)}
+    .pxc-icon svg{width:26px;height:26px}
+    .pxc h2{font-size:clamp(26px,3.2vw,36px);line-height:1.08;letter-spacing:-.025em;margin:0 0 12px;font-weight:800;color:var(--ink)}
+    .pxc p.pxc-lead{font-size:16.5px;line-height:1.55;color:var(--ink2);margin:0 0 20px;max-width:520px}
+    .pxc a{text-decoration:none;color:inherit}
+    .pxc-link{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:17px;color:var(--ink);text-decoration:none}
+    .pxc-link svg{width:20px;height:20px;transition:transform .2s}
+    .pxc-link:hover svg{transform:translateX(4px)}
+
+    /* vial chips */
+    .pxc-chips{display:flex;gap:8px;margin:24px 0 18px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+    .pxc-chips::-webkit-scrollbar{display:none}
+    .pxc-chip{flex:none;display:flex;align-items:center;gap:8px;height:40px;padding:0 14px 0 6px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink2);font:600 13.5px/1 inherit;cursor:pointer;transition:border-color .15s,background .15s}
+    .pxc-chip img{width:28px;height:28px;border-radius:50%;object-fit:cover;background:var(--soft)}
+    .pxc-chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--card)}
+
+    /* stage */
+    .pxc-stage{position:relative;display:grid;grid-template-columns:36% 64%;align-items:center;min-height:330px}
+    .pxc-lot{position:absolute;top:0;left:0;z-index:3}
+    .pxc-lot .code{font:700 21px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;color:var(--ink)}
+    .pxc-lot .meta{margin-top:7px;font-size:13.5px;color:var(--ink2)}
+    .pxc-vial{position:relative;z-index:2;align-self:end;margin-top:70px}
+    .pxc-vial img{width:100%;max-width:200px;aspect-ratio:1;object-fit:cover;border-radius:22px;display:block;box-shadow:0 30px 40px -28px rgba(13,17,23,.55);transition:opacity .25s,transform .35s}
+    .pxc-vial::after{content:"";position:absolute;left:12%;right:20%;bottom:-14px;height:18px;border-radius:50%;background:radial-gradient(rgba(13,17,23,.25),transparent 70%);filter:blur(4px)}
+
+    .pxc-doc{position:relative;z-index:1;margin-left:-6%;transform:rotate(-4deg) translateY(10px);transition:transform .35s ease}
+    .pxc-card:hover .pxc-doc{transform:rotate(-2deg) translateY(4px)}
+    .pxc-paper{background:#fff;color:#1e293b;border-radius:14px;border:1px solid #e3e8ef;box-shadow:0 30px 60px -30px rgba(13,17,23,.45);padding:16px 16px 14px;font-size:10.5px;line-height:1.35;position:relative;overflow:hidden}
+    .pxc-paper .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #f1d5d9;padding-bottom:8px;margin-bottom:8px}
+    .pxc-paper .lab{font:800 12px/1.1 Georgia,serif;letter-spacing:.18em;color:#1f2a44}
+    .pxc-paper .lab small{display:block;font:600 7px/1.4 system-ui;letter-spacing:.3em;color:#94a3b8}
+    .pxc-paper .ttl{font:600 13px/1 system-ui;color:#4f6fb5;text-align:right}
+    .pxc-paper .ttl small{display:block;font-size:8px;color:#94a3b8;margin-top:3px}
+    .pxc-paper dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 10px}
+    .pxc-paper dt{color:#64748b;font-weight:700}
+    .pxc-paper dd{margin:0;text-align:right;font-family:ui-monospace,Menlo,monospace}
+    .pxc-paper .bar{margin:9px 0 6px;background:#fbeff1;color:#a1384a;text-align:center;font-weight:700;font-size:9px;padding:3px;border-radius:3px}
+    .pxc-paper .res{display:grid;grid-template-columns:1fr auto;gap:3px 10px}
+    .pxc-paper .res span:nth-child(even){font-weight:700;text-align:right}
+    .pxc-paper .chrom{margin-top:9px;height:46px;border:1px solid #eef2f7;border-radius:4px;background:linear-gradient(#fff,#fff)}
+    .pxc-paper .chrom svg{width:100%;height:100%;display:block}
+    .pxc-paper.real{padding:0;background:#fff}
+    .pxc-paper.real img{display:block;width:100%;height:340px;object-fit:cover;object-position:top;border-radius:13px}
+    @media (max-width:520px){.pxc-paper.real img{height:240px}}
+    .pxc-paper.real .pxc-scan{z-index:2}
+    .pxc-scan{position:absolute;left:0;right:0;height:46px;top:-60px;background:linear-gradient(180deg,transparent,rgba(125,211,252,.35),transparent);animation:pxcScan 3.2s ease-in-out infinite}
+    @keyframes pxcScan{0%{top:-60px}60%,100%{top:110%}}
+    .pxc-stamp{position:absolute;right:-10px;bottom:-14px;z-index:4;width:104px;height:104px;border-radius:50%;display:grid;place-items:center;text-align:center;background:var(--ok);color:#fff;font:800 11px/1.15 system-ui;letter-spacing:.08em;text-transform:uppercase;transform:rotate(10deg) scale(.6);opacity:0;box-shadow:0 14px 30px -12px rgba(21,128,61,.6);transition:transform .45s cubic-bezier(.2,1.6,.4,1),opacity .2s}
+    .pxc-stamp.on{transform:rotate(10deg) scale(1);opacity:1}
+    .pxc-stamp svg{width:22px;height:22px;display:block;margin:0 auto 3px}
+    .pxc-swap{opacity:0;transform:translateY(6px)}
+
+    /* card 02 */
+    .pxc-side{display:flex;flex-direction:column;background:linear-gradient(180deg,#0f1b33,#14254a);border-color:#0f1b33;color:#e7eef9}
+    .pxc-side .pxc-eyebrow{color:#93a6c6}
+    .pxc-side .pxc-eyebrow b{color:var(--ice)}
+    .pxc-side h2{color:#fff;margin-top:22px}
+    .pxc-side p.pxc-lead{color:#c3d0e4}
+    .pxc-vfy{margin-top:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:16px}
+    .pxc-vfy label{display:block;font:600 11.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.16em;text-transform:uppercase;color:#93a6c6;margin-bottom:10px}
+    .pxc-vfy form{display:flex;gap:8px}
+    .pxc-vfy input{flex:1;min-width:0;height:48px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;padding:0 14px;font:700 16px/1 ui-monospace,Menlo,monospace;letter-spacing:.05em;text-transform:uppercase;outline:none}
+    .pxc-vfy input::placeholder{color:#7f93b3;text-transform:none;letter-spacing:0;font-weight:500}
+    .pxc-vfy input:focus{border-color:var(--ice);box-shadow:0 0 0 3px rgba(125,211,252,.25)}
+    .pxc-vfy button{height:48px;padding:0 18px;border:0;border-radius:12px;background:#fff;color:#0d1117;font-weight:800;font-size:14px;font-family:inherit;cursor:pointer}
+    .pxc-try{margin-top:10px;font-size:12.5px;color:#93a6c6}
+    .pxc-try button{background:none;border:0;color:var(--ice);font:700 12.5px/1 ui-monospace,Menlo,monospace;cursor:pointer;padding:0;text-decoration:underline}
+    .pxc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:18px 0 0;margin-top:auto;padding-top:18px}
+    .pxc-stats div{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px}
+    .pxc-stats b{display:block;font-size:22px;color:#fff;letter-spacing:-.02em}
+    .pxc-stats span{font-size:12px;color:#93a6c6}
+
+    @media (max-width:900px){.pxc{grid-template-columns:1fr;padding:36px 16px}}
+    @media (max-width:520px){
+      .pxc-card{padding:22px;border-radius:24px}
+      .pxc-stage{grid-template-columns:44% 56%;min-height:280px}
+      .pxc-lot .code{font-size:17px}
+      .pxc-paper{font-size:9px;padding:11px}
+      .pxc-stamp{width:84px;height:84px;font-size:9.5px}
+      .pxc-vfy form{flex-direction:column}
+      .pxc-vfy input{flex:none}
+      .pxc-stage{display:block;min-height:0}
+      .pxc-lot{position:static;margin-bottom:14px}
+      .pxc-stage .pxc-vial{position:absolute;left:0;bottom:6px;width:42%;margin:0;z-index:2}
+      .pxc-stage .pxc-doc{display:block;margin:0 0 0 30%;padding-bottom:28px}
+      .pxc-paper .ttl small{display:none}
+      .pxc-paper .ttl{font-size:11px}
+      .pxc-stats b{font-size:19px}
+    }
+    @media (prefers-reduced-motion:reduce){.pxc-scan{animation:none;display:none}.pxc-stamp,.pxc-doc,.pxc-vial img{transition:none}}
+  </style>
+
+  <article class="pxc-card pxc-main">
+    <div class="pxc-eyebrow">01 <b>/</b> Transparency</div>
+    <div class="pxc-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 14l2 2 4-4"/></svg></div>
+    <h2 id="pxcTitle">A lab report behind every vial.</h2>
+    <p class="pxc-lead">Every PepX batch is tested by an independent lab before it ships, and every report is public. Tap a vial to see its latest certificate.</p>
+    <a class="pxc-link" href="/coas.html">Open the COA library <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+
+    <div class="pxc-chips" id="pxcChips" role="group" aria-label="Choose a product"></div>
+
+    <div class="pxc-stage" aria-live="polite">
+      <div class="pxc-lot"><div class="code" id="pxcLot">–</div><div class="meta" id="pxcMeta"></div></div>
+      <a class="pxc-vial" id="pxcVialLink" href="/coas.html"><img id="pxcVial" src="" alt=""></a>
+      <a class="pxc-doc" id="pxcDocLink" href="/coas.html" aria-label="Open this certificate of analysis">
+        <div class="pxc-paper" id="pxcPaper"></div>
+        <div class="pxc-stamp" id="pxcStamp"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>Third-party<br>verified</div></div>
+      </a>
+    </div>
+  </article>
+
+  <article class="pxc-card pxc-side">
+    <div class="pxc-eyebrow">02 <b>/</b> Verify it yourself</div>
+    <h2>Don’t take our word for it.</h2>
+    <p class="pxc-lead">Type the batch code from the side of your vial and read the exact report for the vial in your hand.</p>
+    <div class="pxc-vfy">
+      <label for="pxcBatch">Batch code</label>
+      <form id="pxcForm" action="/coas.html" method="get"><input id="pxcBatch" name="batch" placeholder="e.g. MC-260915-1" autocomplete="off" spellcheck="false"><button>Check</button></form>
+      <div class="pxc-try">Try it: <button type="button" id="pxcTry">MC-260915-1</button></div>
+    </div>
+    <div class="pxc-stats"><div><b id="pxcStatP">14</b><span>products tested</span></div><div><b id="pxcStatR">15</b><span>lab reports</span></div><div><b>100%</b><span>public</span></div></div>
+  </article>
+
+  <script>
+  (function(){
+    'use strict';
+    var CLD=function(id){return 'https://res.cloudinary.com/wwaizwmt/image/upload/c_fill,w_460,h_460,g_center,z_1.25/f_auto,q_auto/pepx-v2-'+id+'.jpg'};
+    // Shown only if /api/coas can't be reached. Taken from published reports.
+    var FALLBACK=[
+      {id:null,productName:'MOTS-C',variantName:'10mg',batchNumber:'MC-260915-1',labName:'Freedom Diagnostics',testType:'HPLC',testDate:'2026-09-23',productImageUrl:CLD('MOTS-C_xz5huk')},
+      {id:null,productName:'Ipamorelin',variantName:'10mg',batchNumber:'IP-260820-1',labName:'Freedom Diagnostics',testType:'HPLC, Mass',testDate:'2026-09-29',productImageUrl:CLD('Ipamorelin_yusjrp')},
+      {id:null,productName:'Wolverine',variantName:'20mg',batchNumber:'WO-260820-1',labName:'Freedom Diagnostics',testType:'HPLC',testDate:'2026-09-29',productImageUrl:CLD('Wolverine_q9usku')},
+      {id:null,productName:'GHK-Cu',variantName:'50mg',batchNumber:'GH-260915-1',labName:'Freedom Diagnostics',testType:'HPLC',testDate:'2026-09-23',productImageUrl:CLD('GHK-Cu_hfocuf')},
+      {id:null,productName:'NAD+',variantName:'500mg',batchNumber:'NJ-260915-1',labName:'Freedom Diagnostics',testType:'HPLC',testDate:'2026-09-23',productImageUrl:CLD('NAD-plus_gskpdl')}
+    ];
+    function $(id){return document.getElementById(id)}
+    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+    function day(c){return String(c.testDate||c.reportDate||c.publishedAt||'').slice(0,10)}
+    function fmt(d){if(!d)return'';var p=d.split('-');var m=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return m[+p[1]-1]+' '+(+p[2])+', '+p[0]}
+    function slash(d){if(!d)return'';var p=d.split('-');return (+p[1])+'/'+(+p[2])+'/'+p[0]}
+    function tests(t){return String(t||'HPLC').split(/\s*,\s*/).filter(Boolean)}
+    function href(c){return '/coas.html?'+(c.id?'id='+c.id:'batch='+encodeURIComponent(c.batchNumber||''))}
+    function chrom(seed){ // decorative trace for the mini report
+      var pts=[],x,y,s=0;for(var i=0;i<seed.length;i++)s+=seed.charCodeAt(i);
+      var peak=40+(s%25);
+      for(x=0;x<=100;x+=2){y=44-2*Math.sin(x/3+s)-38*Math.exp(-Math.pow((x-peak)/2.6,2))-6*Math.exp(-Math.pow((x-peak-14)/2,2));pts.push(x+','+y.toFixed(1))}
+      return '<svg viewBox="0 0 100 46" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="#3b5bdb" stroke-width="1" points="'+pts.join(' ')+'"/></svg>';
+    }
+    var list=[],cur=0,timer=null;
+
+    function paper(c){
+      var t=tests(c.testType);
+      return '<div class="pxc-scan" aria-hidden="true"></div>'
+        +'<div class="hd"><div class="lab">'+esc((c.labName||'Independent lab').split(' ')[0].toUpperCase())+'<small>'+esc((c.labName||'').split(' ').slice(1).join(' ').toUpperCase()||'LABORATORY')+'</small></div><div class="ttl">Certificate of Analysis<small>Independent third-party report</small></div></div>'
+        +'<dl><dt>Client</dt><dd>PepX Research</dd><dt>Product</dt><dd>'+esc(c.productName)+' '+esc(c.variantName||'')+'</dd><dt>Lot</dt><dd>'+esc(c.batchNumber||'—')+'</dd><dt>Reported</dt><dd>'+esc(slash(day(c)))+'</dd></dl>'
+        +'<div class="bar">Analytical results</div>'
+        +'<div class="res"><span>Identity'+(t.join(' ').match(/mass|ms/i)?' (LC-MS)':'')+'</span><span>Confirmed</span>'
+        +'<span>Method</span><span>'+esc(t.join(' + '))+'</span><span>Appearance</span><span>Lyophilized</span></div>'
+        +'<div class="chrom">'+chrom(c.batchNumber||c.productName)+'</div>';
+    }
+
+
+    // ---- real lab reports: render page 1 of the actual PDF with PDF.js ----
+    var PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    var PDFW='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    var pages={},pdfReady=null;
+    function loadPdfjs(){
+      if(pdfReady)return pdfReady;
+      pdfReady=new Promise(function(res,rej){
+        if(window.pdfjsLib)return res(window.pdfjsLib);
+        var sc=document.createElement('script');sc.src=PDFJS;sc.async=true;
+        sc.onload=function(){window.pdfjsLib.GlobalWorkerOptions.workerSrc=PDFW;res(window.pdfjsLib)};
+        sc.onerror=rej;document.head.appendChild(sc);
+      });
+      return pdfReady;
+    }
+    function realPage(c){ // resolves to an image URL of the report's first page
+      if(!c.id)return Promise.reject();
+      if(pages[c.id])return pages[c.id];
+      var url='/api/coas/'+c.id+'/file';
+      pages[c.id]=(c.fileType==='image'?Promise.resolve(url):loadPdfjs().then(function(lib){
+        return lib.getDocument({url:url,isEvalSupported:false}).promise.then(function(pdf){return pdf.getPage(1)}).then(function(pg){
+          var v=pg.getViewport({scale:1}),sc=Math.min(900/v.width,2.2),vp=pg.getViewport({scale:sc});
+          var cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
+          return pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise.then(function(){return cv.toDataURL('image/jpeg',.85)});
+        });
+      }));
+      pages[c.id].catch(function(){delete pages[c.id]});
+      return pages[c.id];
+    }
+    function show(i,animate){
+      cur=i;var c=list[i];if(!c)return;
+      [].forEach.call(document.querySelectorAll('.pxc-chip'),function(b,j){b.setAttribute('aria-pressed',j===i)});
+      var els=[$('pxcVial'),$('pxcPaper'),$('pxcLot'),$('pxcMeta')];
+      var stamp=$('pxcStamp');stamp.classList.remove('on');
+      function apply(){
+        $('pxcVial').src=c.productImageUrl||'';$('pxcVial').alt=c.productName+' '+(c.variantName||'')+' vial';
+        $('pxcLot').textContent='Lot '+(c.batchNumber||'—');
+        $('pxcMeta').textContent=[c.productName+' '+(c.variantName||''),tests(c.testType).join(' · '),fmt(day(c))].filter(Boolean).join(' · ');
+        var pp=$('pxcPaper');pp.classList.remove('real');pp.innerHTML=paper(c);
+        realPage(c).then(function(src){if(list[cur]!==c)return;pp.classList.add('real');pp.innerHTML='<div class="pxc-scan" aria-hidden="true"></div><img src="'+src+'" alt="Certificate of analysis for '+esc(c.productName)+' lot '+esc(c.batchNumber||'')+'">'}).catch(function(){});
+        $('pxcDocLink').href=$('pxcVialLink').href=href(c);
+        els.forEach(function(e){e.classList.remove('pxc-swap')});
+        setTimeout(function(){stamp.classList.add('on')},350);
+      }
+      if(animate){els.forEach(function(e){e.style.transition='opacity .2s, transform .2s';e.classList.add('pxc-swap')});setTimeout(apply,200)}else apply();
+    }
+
+    function build(data){
+      var seen={};list=[];
+      data.slice().sort(function(a,b){return day(b).localeCompare(day(a))}).forEach(function(c){
+        var k=c.productName;if(seen[k]||!c.productImageUrl)return;seen[k]=1;if(list.length<5)list.push(c)});
+      if(!list.length)list=FALLBACK;
+      $('pxcChips').innerHTML=list.map(function(c,i){return '<button type="button" class="pxc-chip" aria-pressed="false" data-i="'+i+'"><img src="'+esc(c.productImageUrl)+'" alt="" loading="lazy">'+esc(c.productName)+'</button>'}).join('');
+      var prods={};data.forEach(function(c){prods[c.productId||c.productName]=1});
+      if(data!==FALLBACK&&data.length){$('pxcStatP').textContent=Object.keys(prods).length;$('pxcStatR').textContent=data.length}
+      show(0,false);autoplay();
+      list.forEach(function(c,i){setTimeout(function(){realPage(c).catch(function(){})},600*i)});
+    }
+    function autoplay(){clearInterval(timer);if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;timer=setInterval(function(){show((cur+1)%list.length,true)},5500)}
+
+    $('pxcChips').addEventListener('click',function(e){var b=e.target.closest('.pxc-chip');if(!b)return;clearInterval(timer);show(+b.getAttribute('data-i'),true)});
+    $('pxcTry').addEventListener('click',function(){$('pxcBatch').value=this.textContent;$('pxcBatch').focus()});
+    $('pxcForm').addEventListener('submit',function(e){if(!$('pxcBatch').value.trim()){e.preventDefault();$('pxcBatch').focus()}});
+
+    fetch('/api/coas?page_size=100',{credentials:'include'})
+      .then(function(r){return r.json()})
+      .then(function(d){build(d&&!d.unavailable&&d.coas&&d.coas.length?d.coas:FALLBACK)})
+      .catch(function(){build(FALLBACK)});
+  })();
+  </script>
+</section>
+
 <section class="section container" id="reviews">
 <h2>Leave a Review</h2>
 <p class="sub">Share your experience with our products and help others discover what we offer.</p>
