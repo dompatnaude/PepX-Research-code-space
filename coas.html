@@ -4,69 +4,129 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Certificates of Analysis | PepX Research</title>
-  <meta name="description" content="Browse published third-party certificates of analysis for PepX Research compounds by product and batch.">
+  <meta name="description" content="Every PepX Research batch is third-party tested. Look up your vial’s batch number and read the full lab report.">
   <link rel="canonical" href="https://pepxresearch.com/coas.html">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="PepX Research">
   <meta property="og:title" content="Certificates of Analysis | PepX Research">
-  <meta property="og:description" content="Browse published third-party certificates of analysis for PepX Research compounds by product and batch.">
+  <meta property="og:description" content="Every PepX Research batch is third-party tested. Look up your vial’s batch number and read the full lab report.">
   <meta property="og:url" content="https://pepxresearch.com/coas.html">
   <meta property="og:image" content="https://pepxresearch.com/assets/logo-pepx-navbar.png">
   <meta property="og:locale" content="en_US">
   <link rel="stylesheet" href="styles.css">
   <style>
-    /* COA-page-only overrides — does not affect shop or other pages */
-    .coa-card{display:flex;flex-direction:column;background:#fff;border:1px solid #e2eaf7;border-radius:14px;overflow:hidden;transition:box-shadow .15s,border-color .15s;}
-    .coa-card:hover{box-shadow:0 4px 18px rgba(15,23,42,.1);border-color:#c4d4f0;}
-    .coa-card-img{position:relative;width:100%;padding-top:75%;background:#f4f6fa;overflow:hidden;}
-    .coa-card-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:.5rem;}
-    .coa-card-img .coa-pdf-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;color:#64748b;}
-    .coa-pdf-icon{width:48px;height:48px;opacity:.55;}
-    .coa-card-body{padding:1rem 1rem .9rem;display:flex;flex-direction:column;gap:.3rem;flex:1;}
-    .coa-product-name{font-size:1rem;font-weight:700;color:#0f172a;line-height:1.25;margin:0;}
-    .coa-variant{font-size:.82rem;color:#475069;font-weight:600;}
-    .coa-meta{font-size:.8rem;color:#64748b;margin-top:.2rem;display:flex;flex-direction:column;gap:.15rem;}
-    .coa-meta span{display:flex;gap:.3rem;}
-    .coa-meta .label{font-weight:600;color:#475069;}
-    .coa-card-actions{padding:.8rem 1rem;border-top:1px solid #e8edf5;display:flex;}
-    .coa-card-actions a{flex:1;text-align:center;}
-    .coa-empty{text-align:center;padding:4rem 1rem;color:#64748b;}
-    .coa-empty h3{font-size:1.2rem;margin:0 0 .5rem;}
-    .coa-empty p{margin:.25rem 0;}
-    .coa-empty button{margin-top:1rem;}
-    .coa-badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .55rem;border-radius:999px;font-size:.72rem;font-weight:700;letter-spacing:.03em;}
-    .coa-badge.pdf{background:#fee2e2;color:#991b1b;}
-    .coa-badge.image{background:#dbeafe;color:#1e40af;}
-    .coa-badge-wrap{position:absolute;top:.55rem;left:.55rem;z-index:1;}
+    /* COA page only. Every rule is scoped to .cx so nothing else on the site changes. */
+    .cx{--cx-surface:#fff;--cx-surface-2:#f6f9fc;--cx-line:#dfe7f1;--cx-line-2:#edf2f8;--cx-ink:#0d1117;--cx-ink-2:#3b4452;--cx-muted:#64748b;--cx-accent:#1c4379;--cx-ok:#15803d;--cx-ok-soft:#e7f6ec;--cx-ring:#dbe8ff;--cx-shadow:0 1px 2px rgba(13,17,23,.04),0 12px 30px -18px rgba(13,17,23,.28);color:var(--cx-ink);padding-bottom:48px}
+    body.dark-mode .cx{--cx-surface:#101624;--cx-surface-2:#141c2c;--cx-line:#223047;--cx-line-2:#1a2436;--cx-ink:#eef3fb;--cx-ink-2:#c4cede;--cx-muted:#8d9ab0;--cx-accent:#7dd3fc;--cx-ok:#4ade80;--cx-ok-soft:#10261a;--cx-ring:#16314f;--cx-shadow:0 1px 2px rgba(0,0,0,.3),0 12px 30px -18px rgba(0,0,0,.8)}
+    .cx *{box-sizing:border-box}
+    .cx-card{background:var(--cx-surface);border:1px solid var(--cx-line);border-radius:16px;box-shadow:var(--cx-shadow)}
+    .cx-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .cx-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 18px;border-radius:12px;border:1px solid var(--cx-line);background:var(--cx-surface);color:var(--cx-ink);font:inherit;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;text-decoration:none}
+    .cx-btn:hover{border-color:var(--cx-muted)}
+    .cx-btn svg{width:16px;height:16px;flex:none}
+    .cx-primary{background:var(--cx-ink);border-color:var(--cx-ink);color:var(--cx-surface)}
+    .cx-primary:hover{opacity:.9;border-color:var(--cx-ink)}
+    .cx-sm{height:38px;padding:0 13px;font-size:13px;border-radius:10px}
+    .cx-grow{flex:1;min-width:0}
+    .cx-small{font-size:13px;color:var(--cx-ink-2)}
 
-    /* COA detail modal */
-    .coa-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:flex-start;justify-content:center;padding:1.5rem;z-index:9999;overflow-y:auto;}
-    .coa-modal-card{width:min(800px,100%);background:#fff;border-radius:14px;border:1px solid #d8deea;box-shadow:0 20px 60px rgba(15,23,42,.22);overflow:hidden;}
-    .coa-modal-head{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.2rem;border-bottom:1px solid #e8ecf4;}
-    .coa-modal-body{display:grid;grid-template-columns:1.2fr 1fr;gap:1.2rem;padding:1.2rem;}
-    .coa-modal-preview{border-radius:10px;overflow:hidden;border:1px solid #e2eaf7;background:#f4f6fa;display:flex;align-items:center;justify-content:center;min-height:280px;}
-    .coa-modal-preview img{max-width:100%;max-height:400px;object-fit:contain;}
-    .coa-modal-preview iframe{width:100%;height:400px;border:none;}
-    .coa-modal-preview .coa-pdf-placeholder{display:flex;flex-direction:column;align-items:center;gap:.6rem;padding:2rem;color:#64748b;}
-    .coa-modal-meta{display:flex;flex-direction:column;gap:.5rem;}
-    .coa-modal-meta h2{margin:0 0 .3rem;font-size:1.15rem;color:#0f172a;}
-    .coa-detail-row{display:grid;grid-template-columns:6.5rem 1fr;gap:.25rem .5rem;font-size:.88rem;border-bottom:1px solid #f0f4fa;padding:.35rem 0;}
-    .coa-detail-row:last-child{border-bottom:none;}
-    .coa-detail-row .k{font-weight:700;color:#475069;}
-    .coa-modal-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.75rem;}
-    .coa-back-link{display:inline-flex;align-items:center;gap:.3rem;color:#3f51d6;font-size:.9rem;font-weight:600;text-decoration:none;margin-bottom:.6rem;}
-    .coa-back-link:hover{text-decoration:underline;}
-    @media (max-width:640px){
-      .coa-modal-body{grid-template-columns:1fr;}
+    .cx-hero{display:grid;grid-template-columns:1.2fr 1fr;gap:40px;align-items:center;padding:52px 0 34px}
+    .cx-eyebrow{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--cx-accent)}
+    .cx-hero h1{font-size:clamp(32px,4.6vw,52px);line-height:1.04;letter-spacing:-.03em;margin:10px 0 14px;font-weight:800;color:var(--cx-ink)}
+    .cx-lead{font-size:17px;color:var(--cx-ink-2);margin:0 0 22px;max-width:560px}
+    .cx-trust{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:14px;font-weight:600;color:var(--cx-ink-2)}
+    .cx-trust span{display:flex;align-items:center;gap:7px}
+    .cx-trust svg{width:18px;height:18px;color:var(--cx-ok)}
+    .cx-lookup{padding:24px}
+    .cx-lookup h2{font-size:19px;margin:0 0 4px;color:var(--cx-ink)}
+    .cx-lookup p{margin:0 0 14px;color:var(--cx-muted);font-size:14px}
+    .cx-lookup form{display:flex;gap:8px}
+    .cx-lookup input{flex:1;min-width:0;height:48px;border-radius:12px;border:1px solid var(--cx-line);background:var(--cx-surface-2);color:var(--cx-ink);padding:0 14px;font:inherit;font-size:16px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;outline:none}
+    .cx-lookup input::placeholder{text-transform:none;letter-spacing:0;font-weight:500;color:var(--cx-muted)}
+    .cx-lookup input:focus,.cx-search input:focus{border-color:var(--cx-accent);box-shadow:0 0 0 3px var(--cx-ring)}
+    .cx-hint{display:flex;gap:10px;align-items:center;margin-top:14px;font-size:13px;color:var(--cx-muted)}
+    .cx-tag{font:700 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--cx-surface-2);border:1px dashed var(--cx-line);padding:6px 8px;border-radius:6px;color:var(--cx-ink);white-space:nowrap}
+    .cx-result{margin-top:14px;display:none}
+    .cx-result.on{display:block}
+    .cx-match{display:flex;gap:12px;align-items:center;padding:12px;border-radius:12px;background:var(--cx-ok-soft);border:1px solid rgba(21,128,61,.3)}
+    .cx-match b{color:var(--cx-ink)}
+    .cx-nomatch{padding:12px;border-radius:12px;background:var(--cx-surface-2);border:1px solid var(--cx-line);font-size:14px;color:var(--cx-ink-2)}
+    .cx-nomatch a{text-decoration:underline;color:inherit}
+    .cx-mthumb,.cx-vthumb{width:48px;height:48px;border-radius:10px;object-fit:cover;flex:none;background:var(--cx-surface-2)}
+
+    .cx-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:6px 0 44px}
+    .cx-step{padding:20px;display:flex;gap:14px}
+    .cx-step .n{width:34px;height:34px;border-radius:10px;background:var(--cx-ink);color:var(--cx-surface);display:grid;place-items:center;font-weight:800;flex:none}
+    .cx-step b{display:block;margin-bottom:2px;color:var(--cx-ink)}
+    .cx-step p{margin:0;color:var(--cx-muted);font-size:14px}
+
+    .cx-libhead h2{font-size:26px;letter-spacing:-.02em;margin:0;color:var(--cx-ink)}
+    .cx-libhead p{margin:2px 0 16px;color:var(--cx-muted)}
+    .cx-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+    .cx-search{position:relative;flex:1;min-width:220px;max-width:420px}
+    .cx-search input{width:100%;height:44px;border-radius:12px;border:1px solid var(--cx-line);background:var(--cx-surface);color:var(--cx-ink);padding:0 14px 0 40px;font:inherit;outline:none}
+    .cx-search svg{position:absolute;left:13px;top:13px;width:18px;height:18px;color:var(--cx-muted)}
+    .cx-sel{height:44px;border-radius:12px;border:1px solid var(--cx-line);background:var(--cx-surface);color:var(--cx-ink);padding:0 10px;font:inherit;margin-left:auto}
+    .cx-count{font-size:13.5px;color:var(--cx-muted);margin:0 0 14px}
+    .cx-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+    .cx-coa{display:flex;flex-direction:column;overflow:hidden;transition:transform .15s,border-color .15s}
+    .cx-coa:hover{transform:translateY(-2px);border-color:var(--cx-muted)}
+    .cx-top{display:flex;gap:14px;align-items:center;padding:16px 16px 12px}
+    .cx-thumb{width:64px;height:64px;border-radius:12px;object-fit:cover;background:var(--cx-surface-2);flex:none}
+    .cx-noimg{display:grid;place-items:center;color:var(--cx-muted)}
+    .cx-noimg svg{width:26px;height:26px}
+    .cx-coa h3{margin:0;font-size:17px;letter-spacing:-.01em;line-height:1.2;color:var(--cx-ink)}
+    .cx-dose{color:var(--cx-muted);font-size:13.5px;font-weight:600}
+    .cx-verified{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:var(--cx-ok);background:var(--cx-ok-soft);padding:3px 8px;border-radius:999px;margin-top:6px}
+    .cx-verified svg{width:13px;height:13px}
+    .cx-coa dl{margin:0;padding:0 16px 14px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13.5px}
+    .cx-coa dt{color:var(--cx-muted)}
+    .cx-coa dd{margin:0;font-weight:600;text-align:right;color:var(--cx-ink);overflow-wrap:anywhere}
+    .cx-coa dd.cx-mono{font-size:13px}
+    .cx-acts{display:flex;gap:8px;padding:12px 16px 16px;margin-top:auto;border-top:1px solid var(--cx-line-2)}
+    .cx-acts .cx-btn{flex:1}
+    .cx-older{padding:0 16px 12px;font-size:13px}
+    .cx-older summary{cursor:pointer;color:var(--cx-accent);font-weight:700}
+    .cx-older ul{list-style:none;margin:8px 0 0;padding:0}
+    .cx-older li{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--cx-line-2);color:var(--cx-ink-2)}
+    .cx-older li button{border:0;background:none;color:var(--cx-accent);font:inherit;font-weight:700;cursor:pointer;padding:0}
+    .cx-empty{grid-column:1/-1;padding:40px 20px;text-align:center;color:var(--cx-muted)}
+    .cx-empty b{display:block;color:var(--cx-ink);font-size:16px;margin-bottom:4px}
+    .cx-empty p{margin:0 0 14px}
+    .cx-skel{height:240px;border-radius:16px;background:linear-gradient(90deg,var(--cx-surface),var(--cx-surface-2),var(--cx-surface));background-size:200% 100%;animation:cxsk 1.2s infinite}
+    @keyframes cxsk{to{background-position:-200% 0}}
+    .cx-coverage{margin:40px 0 0;padding:22px 24px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+    .cx-coverage b{color:var(--cx-ink)}
+    .cx-coverage p{margin:2px 0 0;color:var(--cx-muted);font-size:14px}
+
+    dialog.cx-viewer{border:0;padding:0;width:min(980px,calc(100vw - 24px));height:min(92vh,1100px);max-height:none;border-radius:18px;background:#fff;color:#0d1117;box-shadow:0 30px 90px -20px rgba(0,0,0,.55);overflow:hidden}
+    dialog.cx-viewer[open]{display:flex;flex-direction:column}
+    dialog.cx-viewer::backdrop{background:rgba(8,10,14,.6)}
+    body.dark-mode dialog.cx-viewer{background:#101624;color:#eef3fb}
+    .cx-vhead{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #e4e8ee}
+    body.dark-mode .cx-vhead{border-color:#223047}
+    .cx-vhead b{display:block;line-height:1.2}
+    .cx-vhead small{color:#64748b;font-size:13px}
+    .cx-vhead .cx-btn{background:transparent;color:inherit;border-color:#d6dde8}
+    .cx-vbody{flex:1;background:#525659;min-height:0}
+    .cx-vbody iframe{width:100%;height:100%;border:0;display:block;background:#fff}
+    .cx-imgwrap{height:100%;overflow:auto;display:flex;justify-content:center;background:#525659}
+    .cx-imgwrap img{max-width:100%;height:auto;align-self:flex-start;background:#fff}
+
+    @media (max-width:900px){
+      .cx-hero{grid-template-columns:1fr;gap:24px;padding:30px 0 22px}
+      .cx-steps{grid-template-columns:1fr}
+      .cx-search{max-width:none;flex-basis:100%}
+      .cx-sel{margin-left:0}
     }
-
-    /* PDF preview inside card */
-    .coa-pdf-preview{position:absolute;inset:0;overflow:hidden;background:#f4f6fa;display:flex;align-items:center;justify-content:center;}
-    .coa-pdf-rendered{width:100%;height:100%;object-fit:contain;display:block;}
-    .coa-pdf-load-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;width:100%;height:100%;color:#94a3b8;}
-    .coa-pdf-spinner{width:22px;height:22px;border:3px solid #e2eaf7;border-top-color:#3f51d6;border-radius:50%;animation:coa-spin .7s linear infinite;flex-shrink:0;}
-    @keyframes coa-spin{to{transform:rotate(360deg)}}
+    @media (max-width:480px){
+      .cx-lookup{padding:18px}
+      .cx-lookup form{flex-direction:column}
+      .cx-lookup input{flex:none}
+      .cx-grid{grid-template-columns:1fr}
+      .cx-hide-xs{display:none}
+    }
   </style>
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
@@ -93,34 +153,47 @@
     </div>
   </div></header>
 
-  <main class="container page-shop">
-    <section class="shop-banner" aria-label="COA page banner">
-      <h1>Certificates of Analysis</h1>
-      <p>Browse available third-party laboratory reports by product and batch.</p>
-    </section>
-
-    <section class="section section-shop">
-      <div class="shop-layout">
-        <aside class="shop-categories" aria-label="Filter COAs">
-          <h3>Filter</h3>
-          <div id="coaProductFilter" class="pill-list pill-list-vertical">
-            <button type="button" class="pill active" data-product="">All Products</button>
-          </div>
-        </aside>
-
-        <div class="shop-results">
-          <div class="shop-tools">
-            <div class="shop-search-panel">
-              <label for="coaSearch">Search COAs</label>
-              <input type="text" id="coaSearch" class="shop-search-input" placeholder="Search by product, batch, or lab name">
-            </div>
-          </div>
-
-          <div id="coaStatusMsg" role="status" aria-live="polite" class="muted" style="font-size:.9rem;margin-bottom:.5rem;"></div>
-          <div class="grid grid-shop" id="coaGrid" aria-label="COA cards"></div>
+  <main class="container cx">
+    <section class="cx-hero" aria-labelledby="cxTitle">
+      <div>
+        <div class="cx-eyebrow">Certificates of analysis</div>
+        <h1 id="cxTitle">Every batch tested.<br>Every report public.</h1>
+        <p class="cx-lead">Each PepX batch is sent to an independent lab before it ships. Find your vial’s batch number and read the full report, no account needed.</p>
+        <div class="cx-trust">
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><b id="cxStatProducts">–</b>&nbsp;products tested</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg><b id="cxStatReports">–</b>&nbsp;lab reports</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>Latest:&nbsp;<b id="cxStatLatest">–</b></span>
         </div>
       </div>
+      <div class="cx-card cx-lookup" id="cxLookupCard">
+        <h2>Check your vial</h2>
+        <p>Enter the batch number printed on the side of your vial.</p>
+        <form id="cxLookup" role="search"><label class="visually-hidden" for="cxBatch" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Batch number</label><input id="cxBatch" placeholder="e.g. MC-260915-1" autocomplete="off" spellcheck="false" autocapitalize="characters"><button class="cx-btn cx-primary">Find report</button></form>
+        <div class="cx-result" id="cxResult" aria-live="polite"></div>
+        <div class="cx-hint"><span class="cx-tag">MC-260915-1</span><span>Printed next to the QR code on your vial label.</span></div>
+      </div>
     </section>
+
+    <div class="cx-steps">
+      <div class="cx-card cx-step"><span class="n">1</span><div><b>Find the batch</b><p>Every vial label carries a batch code and QR code.</p></div></div>
+      <div class="cx-card cx-step"><span class="n">2</span><div><b>Open the report</b><p>Look it up above or browse the library below.</p></div></div>
+      <div class="cx-card cx-step"><span class="n">3</span><div><b>Match it</b><p>The batch, product and dose on the report match your vial.</p></div></div>
+    </div>
+
+    <section aria-labelledby="cxLibTitle">
+      <div class="cx-libhead"><h2 id="cxLibTitle">Report library</h2><p>Latest batch for each product. Earlier batches are listed on each card.</p></div>
+      <div class="cx-tools">
+        <label class="cx-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Search reports</span><input id="cxSearch" type="search" placeholder="Search product, batch or lab" autocomplete="off"></label>
+        <select class="cx-sel" id="cxSort" aria-label="Sort reports"><option value="newest">Newest tests</option><option value="az">Name A–Z</option></select>
+      </div>
+      <div class="cx-count" id="cxCount" aria-live="polite"></div>
+      <div class="cx-grid" id="cxGrid"></div>
+    </section>
+
+    <div class="cx-card cx-coverage">
+      <div class="cx-grow"><b>Don’t see a product?</b><p>Some products are still at the lab. We publish each report the day it comes back.</p></div>
+      <a class="cx-btn" href="mailto:pepxaminos@gmail.com?subject=COA%20request">Request a report</a>
+    </div>
   </main>
 
   <footer><div class="container">
@@ -161,29 +234,9 @@
     <div class="copy">&copy; 2026 PepX Research. All rights reserved.</div>
   </div></footer>
 
-  <!-- COA detail modal -->
-  <div class="coa-modal-backdrop hidden" id="coaModal" role="dialog" aria-modal="true" aria-labelledby="coaModalTitle">
-    <div class="coa-modal-card">
-      <div class="coa-modal-head">
-        <h2 id="coaModalTitle" style="margin:0;font-size:1.05rem;">Certificate of Analysis</h2>
-        <button type="button" id="coaModalClose" class="link-btn" aria-label="Close">Close &times;</button>
-      </div>
-      <div class="coa-modal-body" id="coaModalBody">
-        <div class="coa-modal-preview" id="coaModalPreview"></div>
-        <div class="coa-modal-meta" id="coaModalMeta"></div>
-      </div>
-    </div>
-  </div>
+  <dialog class="cx-viewer" id="cxViewer" aria-label="Certificate of analysis"></dialog>
 
   <div class="toast" id="toast"></div>
-  <!-- PDF.js for first-page preview rendering -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
-  <script>
-    if (typeof pdfjsLib !== 'undefined') {
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-  </script>
   <script src="coas.js"></script>
   <script src="/public-nav.js" defer></script>
 </body>

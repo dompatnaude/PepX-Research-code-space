@@ -1,569 +1,272 @@
+/* PepX Research — public Certificates of Analysis page.
+ *
+ * Reads published reports from /api/coas (routes/coas.js) and shows:
+ *   - a "Check your vial" batch lookup
+ *   - a report library (latest batch per product + dose, earlier batches tucked under it)
+ *   - an in-page viewer for the PDF / image served by /api/coas/:id/file
+ *
+ * Deep links (all still work):
+ *   coas.html?id=12              opens report 12
+ *   coas.html?batch=MC-260915-1  looks up a batch (use this in vial QR codes)
+ *   coas.html?search=bpc         pre-fills the library search
+ */
 (function () {
   'use strict';
 
-  var state = {
-    coas: [],
-    products: [],
-    search: '',
-    productFilter: '',
-    loading: false,
-    openCoaId: null
-  };
+  var state = { all: [], search: '', sort: 'newest', unavailable: false, loaded: false };
+  var SUPPORT_EMAIL = 'pepxaminos@gmail.com';
 
   function $(id) { return document.getElementById(id); }
-
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-
+  function norm(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
   function fmtDate(d) {
     if (!d) return '';
-    try {
-      var parts = String(d).split('T')[0].split('-');
-      if (parts.length === 3) {
-        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        return months[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
-      }
-      return String(d);
-    } catch (e) { return String(d); }
+    var p = String(d).split('T')[0].split('-');
+    if (p.length !== 3) return String(d);
+    var m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return m[parseInt(p[1], 10) - 1] + ' ' + parseInt(p[2], 10) + ', ' + p[0];
   }
-
+  function dateKey(c) { return String(c.testDate || c.reportDate || c.publishedAt || '').slice(0, 10); }
+  function fileUrl(c) { return '/api/coas/' + c.id + '/file'; }
   function toast(msg) {
-    var t = $('toast');
-    if (!t) return;
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(function () { t.classList.remove('show'); }, 2200);
+    var t = $('toast'); if (!t) return;
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function () { t.classList.remove('show'); }, 2400);
   }
 
-  function pdfFallback(productName) {
-    return '<div class="coa-pdf-load-wrap" aria-label="PDF document: ' + esc(productName || 'Certificate of Analysis') + '">'
-      + '<svg width="44" height="44" viewBox="0 0 48 48" aria-hidden="true" fill="none">'
-      + '<rect x="8" y="4" width="32" height="40" rx="4" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.5"/>'
-      + '<path d="M16 16h16M16 22h16M16 28h10" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>'
-      + '<path d="M28 36h8v-6h-5l-3 6z" fill="#ef4444" opacity=".7"/>'
-      + '<text x="30" y="35" font-size="6" fill="#fff" font-family="sans-serif" font-weight="700">PDF</text>'
-      + '</svg>'
-      + '<span style="font-size:.75rem;">PDF Report</span>'
-      + '</div>';
+  var ICON = {
+    check: '<path d="m5 12 5 5 9-10"/>',
+    doc: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
+    dl: '<path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    ext: '<path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>',
+    vial: '<path d="M9 3h6M10 3v4l-3 3v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V10l-3-3V3"/><path d="M7 14h10"/>'
+  };
+  function svg(n) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[n] + '</svg>';
+  }
+  function thumb(c, cls) {
+    return c.productImageUrl
+      ? '<img class="' + cls + '" src="' + esc(c.productImageUrl) + '" alt="" loading="lazy">'
+      : '<span class="' + cls + ' cx-noimg">' + svg('vial') + '</span>';
   }
 
-  // Kept for use in modal detail view
-  function pdfPlaceholder(productName) { return pdfFallback(productName); }
+  /* ---------------- data ---------------- */
 
-  function coaCardHtml(coa) {
-    var imgHtml;
-    if (coa.fileType === 'image') {
-      imgHtml = '<img src="/api/coas/' + coa.id + '/file" alt="COA for ' + esc(coa.productName) + '" loading="lazy">';
-    } else if (coa.fileType === 'pdf') {
-      // Live PDF preview container — first page is rendered into this by renderPdfPreview()
-      imgHtml = '<div class="coa-pdf-preview" data-pdf-coa-id="' + coa.id + '" data-pdf-name="' + esc(coa.productName || '') + '" aria-label="PDF preview for ' + esc(coa.productName || 'COA') + '">'
-        + '<div class="coa-pdf-load-wrap"><div class="coa-pdf-spinner" aria-hidden="true"></div></div>'
-        + '</div>';
-    } else {
-      imgHtml = '<div class="coa-pdf-preview"><div class="coa-pdf-load-wrap" aria-label="No preview available"><span style="font-size:.8rem;color:#94a3b8;">No preview</span></div></div>';
+  // Pull every published report (the API pages at most 100 at a time).
+  function fetchAll() {
+    var out = [];
+    function page(n) {
+      return fetch('/api/coas?page_size=100&page=' + n, { credentials: 'include' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data && data.unavailable) throw new Error('unavailable');
+          out = out.concat((data && data.coas) || []);
+          var pg = (data && data.pagination) || {};
+          return n < (pg.totalPages || 1) && n < 20 ? page(n + 1) : out;
+        });
     }
+    return page(1);
+  }
 
-    var badgeHtml = coa.fileType
-      ? '<div class="coa-badge-wrap"><span class="coa-badge ' + esc(coa.fileType) + '">' + esc(coa.fileType.toUpperCase()) + '</span></div>'
-      : '';
+  // One card per product + dose; newest batch on top, earlier batches listed under it.
+  function groups(list) {
+    var map = {}, order = [];
+    list.forEach(function (c) {
+      var k = (c.productId || c.productName) + '|' + (c.variantId || c.variantName || '');
+      if (!map[k]) { map[k] = []; order.push(k); }
+      map[k].push(c);
+    });
+    return order.map(function (k) {
+      return map[k].sort(function (a, b) { return dateKey(b).localeCompare(dateKey(a)); });
+    });
+  }
 
-    var variantHtml = coa.variantName
-      ? '<div class="coa-variant">' + esc(coa.variantName) + '</div>'
-      : '';
+  /* ---------------- library ---------------- */
 
-    var metaItems = [];
-    if (coa.batchNumber) metaItems.push('<span><span class="label">Batch:</span> ' + esc(coa.batchNumber) + '</span>');
-    if (coa.labName) metaItems.push('<span><span class="label">Lab:</span> ' + esc(coa.labName) + '</span>');
-    if (coa.testDate) metaItems.push('<span><span class="label">Tested:</span> ' + esc(fmtDate(coa.testDate)) + '</span>');
-    else if (coa.reportDate) metaItems.push('<span><span class="label">Report:</span> ' + esc(fmtDate(coa.reportDate)) + '</span>');
-
-    return '<article class="coa-card" data-coa-id="' + coa.id + '">'
-      + '<div class="coa-card-img">'
-      + badgeHtml
-      + imgHtml
-      + '</div>'
-      + '<div class="coa-card-body">'
-      + '<h2 class="coa-product-name">' + esc(coa.productName || 'Product') + '</h2>'
-      + variantHtml
-      + '<div class="coa-meta">' + metaItems.join('') + '</div>'
-      + '</div>'
-      + '<div class="coa-card-actions">'
-      + '<a href="#" class="btn primary" data-coa-open="' + coa.id + '" aria-label="View COA for ' + esc(coa.productName) + (coa.batchNumber ? ', batch ' + esc(coa.batchNumber) : '') + '">View COA</a>'
-      + '</div>'
+  function card(g) {
+    var c = g[0], older = g.slice(1);
+    var rows = '';
+    if (c.batchNumber) rows += '<dt>Batch</dt><dd class="cx-mono">' + esc(c.batchNumber) + '</dd>';
+    if (c.labName) rows += '<dt>Lab</dt><dd>' + esc(c.labName) + '</dd>';
+    if (c.testType) rows += '<dt>Test</dt><dd>' + esc(c.testType) + '</dd>';
+    if (dateKey(c)) rows += '<dt>' + (c.testDate ? 'Tested' : 'Report') + '</dt><dd>' + fmtDate(dateKey(c)) + '</dd>';
+    return '<article class="cx-card cx-coa" id="coa-' + c.id + '">'
+      + '<div class="cx-top">' + thumb(c, 'cx-thumb')
+      + '<div><h3>' + esc(c.productName || 'Product') + '</h3>'
+      + (c.variantName ? '<div class="cx-dose">' + esc(c.variantName) + '</div>' : '')
+      + '<span class="cx-verified">' + svg('check') + 'Third-party tested</span></div></div>'
+      + '<dl>' + rows + '</dl>'
+      + (older.length
+        ? '<details class="cx-older"><summary>' + older.length + ' earlier batch' + (older.length > 1 ? 'es' : '') + '</summary><ul>'
+          + older.map(function (o) {
+            return '<li><span class="cx-mono">' + esc(o.batchNumber || 'Report') + (dateKey(o) ? ' · ' + fmtDate(dateKey(o)) : '') + '</span><button type="button" data-view="' + o.id + '">View</button></li>';
+          }).join('') + '</ul></details>'
+        : '')
+      + '<div class="cx-acts"><button type="button" class="cx-btn cx-primary cx-sm" data-view="' + c.id + '" aria-label="View COA for ' + esc(c.productName) + (c.batchNumber ? ', batch ' + esc(c.batchNumber) : '') + '">' + svg('doc') + 'View COA</button>'
+      + '<a class="cx-btn cx-sm" href="' + fileUrl(c) + '" download aria-label="Download ' + esc(c.productName) + ' report">' + svg('dl') + (c.fileType === 'image' ? 'Image' : 'PDF') + '</a></div>'
       + '</article>';
   }
 
-  function renderGrid() {
-    var grid = $('coaGrid');
-    var status = $('coaStatusMsg');
-    if (!grid) return;
-
-    if (state.loading) {
-      grid.innerHTML = '';
-      if (status) status.textContent = 'Loading COAs\u2026';
+  function render() {
+    var grid = $('cxGrid'), count = $('cxCount');
+    if (!state.loaded) { grid.innerHTML = '<div class="cx-skel"></div><div class="cx-skel"></div><div class="cx-skel"></div>'; count.textContent = 'Loading reports…'; return; }
+    if (state.unavailable) {
+      count.textContent = '';
+      grid.innerHTML = '<div class="cx-card cx-empty"><b>Reports are temporarily unavailable.</b><p>Everything else on the site works normally. Please try again shortly.</p><button type="button" class="cx-btn cx-sm" id="cxRetry">Try again</button></div>';
+      $('cxRetry').onclick = load;
       return;
     }
-
-    // The COA feed is a self-contained section of the site. If it cannot be
-  // reached, say so here and leave every other page working normally.
-  if (state.unavailable) {
-    if (status) status.textContent = '';
-    grid.innerHTML = '<div class="coa-empty" style="grid-column:1/-1">'
-      + '<svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true"><rect x="10" y="6" width="36" height="44" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/><path d="M18 18h20M18 25h20M18 32h12" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round"/></svg>'
-      + '<h3>COA information is temporarily unavailable</h3>'
-      + '<p>Certificates of analysis could not be loaded right now. Everything else on the site is unaffected \u2014 please try again shortly.</p>'
-      + '<button type="button" class="btn ghost" id="coaRetry">Try again</button>'
-      + '</div>';
-    var retryBtn = $('coaRetry');
-    if (retryBtn) retryBtn.addEventListener('click', function () { loadCoas(); });
-    return;
-  }
-
-  if (!state.coas.length) {
-      if (status) status.textContent = '';
-      grid.innerHTML = '<div class="coa-empty" style="grid-column:1/-1">'
-        + '<svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true"><rect x="10" y="6" width="36" height="44" rx="5" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/><path d="M18 18h20M18 25h20M18 32h12" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round"/></svg>'
-        + (state.search || state.productFilter
-          ? '<h3>No COAs match your search</h3><p>Try adjusting your search or filters.</p>'
-            + '<button type="button" class="btn ghost" id="coaClearFilters">Clear filters</button>'
-          : '<h3>No certificates of analysis published yet</h3><p>Check back soon for third-party lab reports.</p>'
-        )
-        + '</div>';
-
-      var clearBtn = $('coaClearFilters');
-      if (clearBtn) {
-        clearBtn.addEventListener('click', function () {
-          state.search = '';
-          state.productFilter = '';
-          var searchInput = $('coaSearch');
-          if (searchInput) searchInput.value = '';
-          setActiveProductFilter('');
-          loadCoas();
-        });
-      }
-      return;
-    }
-
-    if (status) status.textContent = state.coas.length + ' report' + (state.coas.length !== 1 ? 's' : '') + ' found';
-    grid.innerHTML = state.coas.map(coaCardHtml).join('');
-
-    Array.prototype.forEach.call(grid.querySelectorAll('[data-coa-open]'), function (el) {
-      el.addEventListener('click', function (evt) {
-        evt.preventDefault();
-        openCoaModal(parseInt(el.getAttribute('data-coa-open'), 10));
-      });
+    var q = state.search.trim().toLowerCase(), nq = norm(q);
+    var list = state.all.filter(function (c) {
+      if (!q) return true;
+      return [c.productName, c.variantName, c.batchNumber, c.labName].join(' ').toLowerCase().indexOf(q) !== -1
+        || (nq.length > 2 && norm(c.batchNumber).indexOf(nq) !== -1);
     });
-
-    // Render first-page previews for all PDF cards
-    renderAllPdfPreviews(grid);
-  }
-
-  // Render all PDF card previews in the grid after HTML is set
-    // --- PDF first-page previews ------------------------------------------
-  // Rendered client-side with PDF.js. Nothing is rasterised on the server and
-  // nothing is written to disk, so this works unchanged on serverless, and
-  // admins never have to upload a separate thumbnail. Previews render lazily
-  // as cards scroll into view, a couple at a time, so opening the page does
-  // not pull down every report at once.
-
-  var PDFJS_MAX_WAIT_MS = 8000;
-  var PREVIEW_CONCURRENCY = 2;
-  // Only the fetch/parse of the PDF is time-limited; see renderPdfPreview.
-  var PREVIEW_LOAD_TIMEOUT_MS = 20000;
-  var previewQueue = [];
-  var previewActive = 0;
-  var previewObserver = null;
-  var previewObjectUrls = [];
-
-  function pdfjsReady() {
-    return typeof pdfjsLib !== 'undefined' && pdfjsLib && typeof pdfjsLib.getDocument === 'function';
-  }
-
-  // Bounded wait. The old code retried every 400ms forever, so a blocked or
-  // slow CDN left every card spinning indefinitely.
-  function whenPdfjsReady(cb) {
-    if (pdfjsReady()) return cb(true);
-    var waited = 0;
-    var timer = setInterval(function () {
-      if (pdfjsReady()) { clearInterval(timer); return cb(true); }
-      waited += 200;
-      if (waited >= PDFJS_MAX_WAIT_MS) { clearInterval(timer); return cb(false); }
-    }, 200);
-  }
-
-  // Guards a promise so a preview can never hang a card forever.
-  function withPreviewTimeout(promise, ms) {
-    return new Promise(function (resolve, reject) {
-      var timer = setTimeout(function () { reject(new Error('preview timed out')); }, ms);
-      promise.then(
-        function (v) { clearTimeout(timer); resolve(v); },
-        function (e) { clearTimeout(timer); reject(e); }
-      );
+    var gs = groups(list);
+    gs.sort(function (a, b) {
+      return state.sort === 'az'
+        ? String(a[0].productName).localeCompare(String(b[0].productName))
+        : dateKey(b[0]).localeCompare(dateKey(a[0]));
     });
+    count.textContent = list.length + ' report' + (list.length === 1 ? '' : 's');
+    grid.innerHTML = gs.length ? gs.map(card).join('')
+      : (state.all.length
+        ? '<div class="cx-card cx-empty"><b>No reports match “' + esc(state.search) + '”.</b><p>Try a product name or the batch code on your vial.</p><button type="button" class="cx-btn cx-sm" id="cxClear">Clear search</button></div>'
+        : '<div class="cx-card cx-empty"><b>No reports published yet.</b><p>Check back soon.</p></div>');
+    var clr = $('cxClear'); if (clr) clr.onclick = function () { state.search = ''; $('cxSearch').value = ''; syncUrl(); render(); };
   }
 
-  function releasePreviewUrls() {
-    previewObjectUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} });
-    previewObjectUrls = [];
-  }
-
-  function pumpPreviewQueue() {
-    while (previewActive < PREVIEW_CONCURRENCY && previewQueue.length) {
-      var job = previewQueue.shift();
-      previewActive += 1;
-      renderPdfPreview(job.container, job.url, job.name).then(function () {
-        previewActive -= 1;
-        pumpPreviewQueue();
-      });
-    }
-  }
-
-  function queuePreview(container) {
-    if (container.getAttribute('data-preview-state')) return;
-    container.setAttribute('data-preview-state', 'queued');
-    previewQueue.push({
-      container: container,
-      url: '/api/coas/' + container.getAttribute('data-pdf-coa-id') + '/file',
-      name: container.getAttribute('data-pdf-name') || ''
-    });
-    pumpPreviewQueue();
-  }
-
-  function renderAllPdfPreviews(scope) {
-    var containers = (scope || document).querySelectorAll('.coa-pdf-preview[data-pdf-coa-id]');
-    if (!containers.length) return;
-
-    whenPdfjsReady(function (ready) {
-      if (!ready) {
-        Array.prototype.forEach.call(containers, function (c) {
-          c.setAttribute('data-preview-state', 'failed');
-          c.innerHTML = pdfFallback(c.getAttribute('data-pdf-name') || '');
-        });
-        return;
-      }
-
-      if (typeof IntersectionObserver === 'undefined') {
-        Array.prototype.forEach.call(containers, queuePreview);
-        return;
-      }
-
-      if (previewObserver) previewObserver.disconnect();
-      previewObserver = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-          if (!entry.isIntersecting) return;
-          previewObserver.unobserve(entry.target);
-          queuePreview(entry.target);
-        });
-      }, { rootMargin: '200px 0px' });
-
-      Array.prototype.forEach.call(containers, function (c) { previewObserver.observe(c); });
-    });
-  }
-
-  // Renders page 1 of the PDF at `url` into `container`. Always resolves. On
-  // any failure -- network, 404, password-protected, malformed -- it swaps in
-  // the generic placeholder instead of leaving a spinner or throwing.
-  function renderPdfPreview(container, url, productName) {
-    if (!pdfjsReady()) {
-      container.setAttribute('data-preview-state', 'failed');
-      container.innerHTML = pdfFallback(productName);
-      return Promise.resolve(false);
-    }
-
-    var loadingTask = pdfjsLib.getDocument({ url: url, isEvalSupported: false });
-
-    return withPreviewTimeout(loadingTask.promise, PREVIEW_LOAD_TIMEOUT_MS)
-      .then(function (pdf) {
-        return pdf.getPage(1).then(function (page) { return { pdf: pdf, page: page }; });
-      })
-      .then(function (bundle) {
-        var page = bundle.page;
-        var baseViewport = page.getViewport({ scale: 1 });
-        // ~600px wide: crisp at card size (~300px) including retina.
-        var scale = Math.min(600 / baseViewport.width, 2);
-        var viewport = page.getViewport({ scale: scale });
-
-        var canvas = document.createElement('canvas');
-        canvas.width = Math.round(viewport.width);
-        canvas.height = Math.round(viewport.height);
-        var ctx = canvas.getContext('2d');
-
-        return page.render({ canvasContext: ctx, viewport: viewport }).promise
-          .then(function () {
-            return new Promise(function (resolve) {
-              // A blob URL holds far less memory alive than a base64 data URL.
-              canvas.toBlob(function (blob) {
-                if (!blob) return resolve(false);
-                var objectUrl = URL.createObjectURL(blob);
-                previewObjectUrls.push(objectUrl);
-                var img = new Image();
-                img.className = 'coa-pdf-rendered';
-                img.alt = '';
-                img.onload = function () { resolve(true); };
-                img.onerror = function () { resolve(false); };
-                img.src = objectUrl;
-                container.innerHTML = '';
-                container.appendChild(img);
-                container.setAttribute('data-preview-state', 'rendered');
-              }, 'image/png');
-            });
-          })
-          .then(function (encoded) {
-            canvas.width = 0;
-            canvas.height = 0;
-            if (bundle.pdf && bundle.pdf.destroy) { try { bundle.pdf.destroy(); } catch (e) {} }
-            if (!encoded) throw new Error('preview encode failed');
-            return true;
-          });
-      })
-      .catch(function () {
-        container.setAttribute('data-preview-state', 'failed');
-        container.innerHTML = pdfFallback(productName);
-        return false;
-      });
-  }
-
-  // --- URL-backed filter state ------------------------------------------
-
-  function currentQueryString() {
-    var params = new URLSearchParams();
-    if (state.search) params.set('search', state.search);
-    if (state.productFilter) params.set('product_id', state.productFilter);
-    return params.toString();
-  }
-
-  // Filter and search belong in the URL, not only in memory. Without this a
-  // page restored from the browser's back/forward cache kept a stale product
-  // filter while the address bar still showed a bare /coas.html -- which read
-  // as "the COA page opened but the reports are missing".
   function syncUrl() {
-    if (!window.history || !window.history.replaceState) return;
-    var qs = currentQueryString();
-    var next = window.location.pathname + (qs ? '?' + qs : '');
-    if (next !== window.location.pathname + window.location.search) {
-      window.history.replaceState(null, '', next);
+    if (!history.replaceState) return;
+    var p = new URLSearchParams(location.search);
+    p.delete('search'); p.delete('product_id');
+    if (state.search) p.set('search', state.search);
+    var qs = p.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  }
+
+  function stats() {
+    var products = {}, latest = '';
+    state.all.forEach(function (c) { products[c.productId || c.productName] = 1; if (dateKey(c) > latest) latest = dateKey(c); });
+    $('cxStatProducts').textContent = Object.keys(products).length;
+    $('cxStatReports').textContent = state.all.length;
+    $('cxStatLatest').textContent = latest ? fmtDate(latest) : '—';
+  }
+
+  /* ---------------- batch lookup ---------------- */
+
+  function lookup(evt) {
+    if (evt) evt.preventDefault();
+    var raw = $('cxBatch').value.trim(), v = norm(raw), out = $('cxResult');
+    if (!v) { out.classList.remove('on'); return null; }
+    var hit = null;
+    state.all.forEach(function (c) { if (!hit && norm(c.batchNumber) === v) hit = c; });
+    if (!hit && v.length >= 5) state.all.forEach(function (c) { if (!hit && norm(c.batchNumber).indexOf(v) === 0) hit = c; });
+    out.classList.add('on');
+    if (hit) {
+      out.innerHTML = '<div class="cx-match">' + thumb(hit, 'cx-mthumb')
+        + '<div class="cx-grow"><b>Match found: ' + esc(hit.productName) + (hit.variantName ? ' ' + esc(hit.variantName) : '') + '</b>'
+        + '<div class="cx-small">Batch <b class="cx-mono">' + esc(hit.batchNumber) + '</b>' + (hit.labName ? ' · ' + esc(hit.labName) : '') + (dateKey(hit) ? ' · ' + fmtDate(dateKey(hit)) : '') + '</div></div>'
+        + '<button type="button" class="cx-btn cx-primary cx-sm" data-view="' + hit.id + '">View</button></div>';
+    } else {
+      out.innerHTML = '<div class="cx-nomatch"><b>No report found for “' + esc(raw) + '”.</b> Check the code on the side of your vial (it looks like <span class="cx-mono">MC-260915-1</span>), or <a href="mailto:' + SUPPORT_EMAIL + '?subject=' + encodeURIComponent('COA for batch ' + raw) + '">email us</a> and we will send it.</div>';
     }
+    return hit;
   }
 
+  /* ---------------- viewer ---------------- */
+
+  function findCoa(id) {
+    for (var i = 0; i < state.all.length; i++) if (state.all[i].id === id) return Promise.resolve(state.all[i]);
+    return fetch('/api/coas/' + id, { credentials: 'include' }).then(function (r) { return r.json(); }).then(function (d) { return d && d.coa; });
+  }
+
+  function openViewer(id) {
+    id = parseInt(id, 10); if (!id) return;
+    findCoa(id).then(function (c) {
+      if (!c) { toast('That report is not available'); return; }
+      var d = $('cxViewer'), url = fileUrl(c);
+      var body = c.fileType === 'image'
+        ? '<div class="cx-imgwrap"><img src="' + url + '" alt="Certificate of analysis for ' + esc(c.productName) + '"></div>'
+        : '<iframe src="' + url + '#view=FitH" title="Certificate of analysis for ' + esc(c.productName) + '"></iframe>';
+      d.innerHTML = '<div class="cx-vhead">' + thumb(c, 'cx-vthumb')
+        + '<div class="cx-grow"><b>' + esc(c.productName) + (c.variantName ? ' ' + esc(c.variantName) : '') + '</b>'
+        + '<small>' + (c.batchNumber ? 'Batch <span class="cx-mono">' + esc(c.batchNumber) + '</span>' : '') + (c.labName ? ' · ' + esc(c.labName) : '') + (dateKey(c) ? ' · ' + fmtDate(dateKey(c)) : '') + '</small></div>'
+        + '<a class="cx-btn cx-sm" href="' + url + '" target="_blank" rel="noopener">' + svg('ext') + '<span class="cx-hide-xs">Open</span></a>'
+        + '<a class="cx-btn cx-sm" href="' + url + '" download aria-label="Download">' + svg('dl') + '</a>'
+        + '<button type="button" class="cx-btn cx-sm" data-close aria-label="Close">' + svg('x') + '</button></div>'
+        + '<div class="cx-vbody">' + body + '</div>';
+      d.querySelector('[data-close]').onclick = function () { d.close(); };
+      if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+      var p = new URLSearchParams(location.search); p.set('id', c.id);
+      history.replaceState(null, '', location.pathname + '?' + p.toString());
+    });
+  }
+
+  /* ---------------- boot ---------------- */
+
+  function load() {
+    state.loaded = false; state.unavailable = false; render();
+    return fetchAll().then(function (list) {
+      state.all = list; state.loaded = true; stats(); render();
+    }).catch(function () {
+      state.loaded = true; state.unavailable = true; render();
+    });
+  }
+
+  // Search lives in the URL so a shared or restored page shows the same view.
   function applyStateFromUrl() {
-    var p = new URLSearchParams(window.location.search);
-    state.search = (p.get('search') || '').trim();
-    state.productFilter = (p.get('product_id') || '').trim();
-    var searchInput = $('coaSearch');
-    if (searchInput) searchInput.value = state.search;
-    setActiveProductFilter(state.productFilter);
-  }
-
-  function loadCoas(options) {
-    options = options || {};
-    if (options.updateUrl !== false) syncUrl();
-
-    releasePreviewUrls();
-    state.loading = true;
-    renderGrid();
-
-    fetch('/api/coas?' + currentQueryString(), { credentials: 'include' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        state.coas = (data && data.coas) || [];
-        state.unavailable = !!(data && data.unavailable);
-        state.loading = false;
-        renderGrid();
-      })
-      .catch(function () {
-        state.coas = [];
-        state.unavailable = true;
-        state.loading = false;
-        renderGrid();
-        toast('Failed to load COAs');
-      });
-  }
-
-function openCoaModal(id) {
-    var modal = $('coaModal');
-    var preview = $('coaModalPreview');
-    var meta = $('coaModalMeta');
-    var title = $('coaModalTitle');
-    if (!modal || !preview || !meta) return;
-
-    state.openCoaId = id;
-    preview.innerHTML = '<div style="padding:1.5rem;color:#64748b">Loading\u2026</div>';
-    meta.innerHTML = '';
-    modal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-
-    fetch('/api/coas/' + id, { credentials: 'include' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var coa = data && data.coa;
-        if (!coa) { closeCoaModal(); return; }
-
-        if (title) title.textContent = (coa.productName || 'Certificate of Analysis')
-          + (coa.batchNumber ? ' \u2014 Batch ' + coa.batchNumber : '');
-
-        // Preview area
-        if (coa.fileType === 'image') {
-          preview.innerHTML = '<img src="/api/coas/' + id + '/file" alt="Certificate of Analysis for ' + esc(coa.productName) + '" style="max-width:100%;max-height:400px;object-fit:contain;">';
-        } else if (coa.fileType === 'pdf') {
-          preview.innerHTML = '<iframe src="/api/coas/' + id + '/file#toolbar=1" title="Certificate of Analysis for ' + esc(coa.productName) + '" loading="lazy"></iframe>';
-        } else {
-          preview.innerHTML = pdfPlaceholder(coa.productName);
-        }
-
-        // Meta area
-        var rows = [];
-
-        function row(k, v) {
-          if (!v) return '';
-          return '<div class="coa-detail-row"><span class="k">' + esc(k) + '</span><span>' + esc(v) + '</span></div>';
-        }
-
-        rows.push('<h2 style="margin:0 0 .4rem;font-size:1.05rem;color:#0f172a">' + esc(coa.productName || '') + '</h2>');
-        if (coa.variantName) rows.push('<div style="font-size:.87rem;color:#475069;font-weight:600;margin-bottom:.5rem">' + esc(coa.variantName) + '</div>');
-        rows.push(row('Batch', coa.batchNumber));
-        rows.push(row('Lab', coa.labName));
-        rows.push(row('Test type', coa.testType));
-        rows.push(row('Test date', fmtDate(coa.testDate)));
-        rows.push(row('Report date', fmtDate(coa.reportDate)));
-        rows.push(row('Published', fmtDate(coa.publishedAt)));
-
-        var actionHtml = '<div class="coa-modal-actions">';
-        actionHtml += '<a href="/api/coas/' + id + '/file" target="_blank" rel="noopener noreferrer" class="btn primary" aria-label="Open full report for ' + esc(coa.productName) + '">Open Full Report &#8599;</a>';
-        actionHtml += '<a href="shop.html" class="btn ghost">Browse Products</a>';
-        actionHtml += '</div>';
-        rows.push(actionHtml);
-
-        meta.innerHTML = rows.join('');
-      })
-      .catch(function () {
-        closeCoaModal();
-        toast('Failed to load COA details');
-      });
-  }
-
-  function closeCoaModal() {
-    var modal = $('coaModal');
-    if (modal) modal.classList.add('hidden');
-    document.body.style.overflow = '';
-    state.openCoaId = null;
-  }
-
-  function setActiveProductFilter(productId) {
-    var filter = $('coaProductFilter');
-    if (!filter) return;
-    Array.prototype.forEach.call(filter.querySelectorAll('.pill'), function (btn) {
-      btn.classList.toggle('active', btn.getAttribute('data-product') === productId);
-    });
-  }
-
-    function buildProductFilter(coas) {
-    // Gather unique products from loaded COAs
-    var seen = {};
-    var products = [];
-    coas.forEach(function (c) {
-      if (c.productId && !seen[c.productId]) {
-        seen[c.productId] = true;
-        products.push({ id: c.productId, name: c.productName });
-      }
-    });
-
-    var filter = $('coaProductFilter');
-    if (!filter || !products.length) return;
-
-    var extra = products.map(function (p) {
-      return '<button type="button" class="pill" data-product="' + p.id + '">' + esc(p.name) + '</button>';
-    }).join('');
-    filter.innerHTML = '<button type="button" class="pill" data-product="">All Products</button>' + extra;
-
-    Array.prototype.forEach.call(filter.querySelectorAll('.pill'), function (btn) {
-      btn.addEventListener('click', function () {
-        state.productFilter = btn.getAttribute('data-product') || '';
-        setActiveProductFilter(state.productFilter);
-        loadCoas();
-      });
-    });
-
-    // Highlight whatever the URL asked for (nothing = All Products).
-    setActiveProductFilter(state.productFilter);
+    state.search = (new URLSearchParams(location.search).get('search') || '').trim();
+    $('cxSearch').value = state.search;
   }
 
   function init() {
-    var searchInput = $('coaSearch');
-    var searchTimer = null;
-    if (searchInput) {
-      searchInput.addEventListener('input', function () {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(function () {
-          state.search = searchInput.value.trim();
-          loadCoas();
-        }, 300);
-      });
-    }
+    var p = new URLSearchParams(location.search);
+    applyStateFromUrl();
 
-    var closeBtn = $('coaModalClose');
-    if (closeBtn) closeBtn.addEventListener('click', closeCoaModal);
+    var timer;
+    $('cxSearch').addEventListener('input', function (e) {
+      clearTimeout(timer);
+      timer = setTimeout(function () { state.search = e.target.value; syncUrl(); render(); }, 120);
+    });
+    $('cxSort').addEventListener('change', function (e) { state.sort = e.target.value; render(); });
+    $('cxLookup').addEventListener('submit', lookup);
+    $('cxBatch').addEventListener('input', function () { if (!$('cxBatch').value) $('cxResult').classList.remove('on'); });
+    document.addEventListener('click', function (e) {
+      var v = e.target.closest && e.target.closest('[data-view]');
+      if (v) { e.preventDefault(); openViewer(v.getAttribute('data-view')); }
+    });
+    var viewer = $('cxViewer');
+    viewer.addEventListener('close', function () {
+      viewer.innerHTML = '';
+      var q = new URLSearchParams(location.search); q.delete('id');
+      history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+    });
+    viewer.addEventListener('click', function (e) { if (e.target === viewer) viewer.close(); });
 
-    var modal = $('coaModal');
-    if (modal) {
-      modal.addEventListener('click', function (evt) {
-        if (evt.target === modal) closeCoaModal();
-      });
-    }
-
-    document.addEventListener('keydown', function (evt) {
-      if (evt.key === 'Escape' && state.openCoaId) closeCoaModal();
+    load().then(function () {
+      var batch = p.get('batch');
+      var openId = parseInt(p.get('id'), 10);
+      if (batch) {
+        $('cxBatch').value = batch;
+        var hit = lookup();
+        if (hit && !openId) openViewer(hit.id);
+        $('cxLookupCard').scrollIntoView({ block: 'center' });
+      }
+      if (openId) openViewer(openId);
     });
 
-    // Read URL params for deep-linking
-    var urlParams = new URLSearchParams(window.location.search);
-    var openId = parseInt(urlParams.get('id'), 10);
-
-    // Mobile nav toggle lives in public-nav.js, which this page loads.
-
-    applyStateFromUrl();
-    state.loading = true;
-    renderGrid();
-
-    // Always fetch the unfiltered set once so the product pills can list every
-    // product that has a published report; only then narrow the grid if the
-    // URL asked for a filter. A bare /coas.html always shows everything.
-    fetch('/api/coas', { credentials: 'include' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var all = (data && data.coas) || [];
-        state.unavailable = !!(data && data.unavailable);
-        buildProductFilter(all);
-
-        if (state.productFilter || state.search) {
-          loadCoas({ updateUrl: false });
-        } else {
-          state.coas = all;
-          state.loading = false;
-          renderGrid();
-        }
-
-        if (openId) openCoaModal(openId);
-      })
-      .catch(function () {
-        state.coas = [];
-        state.unavailable = true;
-        state.loading = false;
-        renderGrid();
-      });
-
-    // A page restored from the back/forward cache keeps its old JavaScript
-    // state, including any product filter that was active when the user left.
-    // Re-apply whatever the URL says so the canonical COA page never comes
-    // back showing a stale, filtered subset of the reports.
+    // Back/forward cache: re-read the URL so the page never comes back stale.
     window.addEventListener('pageshow', function (evt) {
       if (!evt.persisted) return;
-      applyStateFromUrl();
-      loadCoas({ updateUrl: false });
+      applyStateFromUrl(); render();
     });
   }
 
-document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
