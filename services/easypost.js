@@ -397,6 +397,10 @@ function buildCustomsInfo({ items, packageInfo, env }) {
         currency: 'USD'
       };
       if (hsCode) item.hs_tariff_number = hsCode;
+      // Some carriers (USA Export powered by Asendia) require an item code
+      // such as a SKU on every customs line.
+      const code = it.sku || [it.product_id, it.variant_id].filter(function (v) { return v != null && v !== ''; }).join('-');
+      if (code) item.code = String(it.sku ? code : 'PX-' + code).slice(0, 50);
       return item;
     })
   };
