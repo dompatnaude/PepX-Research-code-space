@@ -11,7 +11,9 @@ const {
   validatePackageInput,
   buildShipmentCreateParams,
   addressesMatch,
-  formatAddressForComparison
+  formatAddressForComparison,
+  buildCustomsInfo,
+  isDomesticCountry
 } = require('./easypost');
 
 class ShippingWorkflowError extends Error {
@@ -84,18 +86,33 @@ async function createRatesForOrder(options) {
   }
   const shipFrom = getShipFromAddress(options.env);
   const originalAddress = formatAddressForComparison(destination);
+  const domestic = isDomesticCountry(destination.country);
 
-  let verifiedAddress = null;
+  // Strict USPS verification is a U.S. check. International addresses are
+  // validated by FedEx when rating and when the label is bought.
+  let verifiedAddress = destination;
   let verification = null;
-  try {
-    verifiedAddress = await client.Address.createAndVerify({
-      ...destination,
-      verify_strict: true
-    });
-    verification = verifiedAddress && verifiedAddress.verifications ? verifiedAddress.verifications.delivery || null : null;
-  } catch (error) {
-    const message = error && error.message ? error.message : 'Address verification failed';
-    throw new ShippingWorkflowError(422, message, 'address-verification-failed');
+  if (domestic) {
+    try {
+      verifiedAddress = await client.Address.createAndVerify({
+        ...destination,
+        verify_strict: true
+      });
+      verification = verifiedAddress && verifiedAddress.verifications ? verifiedAddress.verifications.delivery || null : null;
+    } catch (error) {
+      const message = error && error.message ? error.message : 'Address verification failed';
+      throw new ShippingWorkflowError(422, message, 'address-verification-failed');
+    }
+  }
+
+  // International labels need a customs declaration built from the order lines.
+  let customsInfo = null;
+  if (!domestic) {
+    const itemsResult = await db.query(
+      'SELECT name, variant_name, variant_price, price, quantity FROM order_items WHERE order_id = $1 ORDER BY id ASC',
+      [orderId]
+    );
+    customsInfo = buildCustomsInfo({ items: itemsResult.rows, packageInfo, env: options.env });
   }
 
   const suggestedAddress = formatAddressForComparison(verifiedAddress);
@@ -117,7 +134,8 @@ async function createRatesForOrder(options) {
     shipment = await client.Shipment.create(buildShipmentCreateParams({
       toAddress: addressChanged ? verifiedAddress : destination,
       fromAddress: shipFrom,
-      packageInfo
+      packageInfo,
+      customsInfo
     }));
   } catch (error) {
     const message = error && error.message ? error.message : 'EasyPost shipment creation failed';

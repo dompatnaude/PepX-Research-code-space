@@ -2,7 +2,7 @@ const express = require("express");
 const pool = require("../db/connection");
 const { money, validatePromoCode } = require("../services/promo-service");
 const sitewideSale = require("../services/sitewide-sale");
-const { getEasyPostClient, classifyUspsService } = require("../services/easypost");
+const { getEasyPostClient, classifyCheckoutService, toCountryCode, isDomesticCountry } = require("../services/easypost");
 
 function getQuantityDiscountRate(quantity) {
   const qty = Number(quantity) || 0;
@@ -482,8 +482,21 @@ async function createOrder(req, res) {
       return res.status(400).json({ error: "Selected shipping rate is no longer valid. Please select a new shipping method." });
     }
 
-    const canonicalService = classifyUspsService(verifiedRate.carrier, verifiedRate.service);
-    const isGroundAdvantage = canonicalService === 'USPS Ground Advantage';
+    // The carrier must match the destination: USPS for U.S. orders, FedEx
+    // International everywhere else. A rate from the wrong zone is refused.
+    const destinationCountry = toCountryCode(body.shipping_country);
+    const domesticOrder = isDomesticCountry(destinationCountry);
+    const canonicalService = classifyCheckoutService(verifiedRate.carrier, verifiedRate.service, destinationCountry);
+    if (!canonicalService) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "The selected shipping method isn't available for this destination. Please choose a shipping method again." });
+    }
+    if (!domesticOrder && String(body.payment_method || "").trim() === 'zelle') {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Zelle is available for U.S. orders only. Please pay by card." });
+    }
+    // Free shipping is a U.S. Ground Advantage offer only.
+    const isGroundAdvantage = domesticOrder && canonicalService === 'USPS Ground Advantage';
 
     const totals = computeCheckoutTotals({
       subtotalBeforeDiscount,
@@ -507,7 +520,7 @@ async function createOrder(req, res) {
     const total = totals.total;
     const shippingService = canonicalService || verifiedRate.service || null;
     const shippingDeliveryDays = verifiedRate.delivery_days != null ? Number(verifiedRate.delivery_days) : null;
-    const shippingCountry = String(body.shipping_country || "").trim() || null;
+    const shippingCountry = destinationCountry || null;
     const shippingPhone = String(body.shipping_phone || "").trim() || null;
     const paymentMethod = String(body.payment_method || "").trim() || null;
     const paymentStatus = paymentMethod === 'zelle' ? 'awaiting_payment' : null;

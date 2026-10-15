@@ -7,17 +7,17 @@ const {
   sanitizeRate,
   validatePackageInput,
   buildShipmentCreateParams,
-  classifyUspsService,
+  classifyCheckoutService,
+  checkoutServiceOrder,
+  toCountryCode,
+  isDomesticCountry,
+  isRegionRequired,
+  isPostalOptional,
   getCheckoutPackage
 } = require('../services/easypost');
 
-// Preferred display order for USPS services in checkout.
-const USPS_SERVICE_ORDER = [
-  'USPS Ground Advantage',
-  'USPS Priority Mail',
-  'USPS Priority Mail Express'
-];
-
+// U.S. addresses go to USPS, every other country to FedEx International.
+// The zone is decided here from the destination country, never by the browser.
 function createCheckoutShippingRouter(requireAuth) {
   const router = express.Router();
 
@@ -28,21 +28,38 @@ function createCheckoutShippingRouter(requireAuth) {
       const state = String(body.state || '').trim();
       const city = String(body.city || '').trim();
       const address = String(body.address || '').trim();
-      const country = String(body.country || 'US').trim() || 'US';
+      const address2 = String(body.address2 || '').trim();
+      const country = toCountryCode(body.country);
       const name = String(body.name || '').trim();
       const phone = String(body.phone || '').trim();
-        const confirmVerifiedAddress = !!(body.confirmVerifiedAddress || body.confirm_verified_address);
+      const confirmVerifiedAddress = !!(body.confirmVerifiedAddress || body.confirm_verified_address);
+      const domestic = isDomesticCountry(country);
 
-      if (!zip || !state) {
+      if (!/^[A-Z]{2}$/.test(country)) {
+        return res.status(400).json({ error: 'Please choose the country you are shipping to.' });
+      }
+      if (domestic && (!zip || !state)) {
         return res.status(400).json({ error: 'ZIP code and state are required to calculate shipping rates.' });
+      }
+      if (!domestic) {
+        if (!address || !city) {
+          return res.status(400).json({ error: 'Street address and city are required to calculate international shipping.' });
+        }
+        if (!zip && !isPostalOptional(country)) {
+          return res.status(400).json({ error: 'A postal code is required to calculate shipping to this country.' });
+        }
+        if (!state && isRegionRequired(country)) {
+          return res.status(400).json({ error: 'A state or province is required to calculate shipping to this country.' });
+        }
       }
 
       const destination = {
         name: name || 'Customer',
         street1: address || zip,
+        street2: address2 || null,
         city: city || state,
-        state,
-        zip,
+        state: state || null,
+        zip: zip || null,
         country,
         phone: phone || null
       };
@@ -61,7 +78,10 @@ function createCheckoutShippingRouter(requireAuth) {
         return res.status(500).json({ error: 'Shipping service is not available. Please contact support.' });
       }
 
-        // ---- USPS address verification (EasyPost) ----
+      // ---- USPS address verification (EasyPost), U.S. addresses only ----
+      // Strict USPS verification does not apply abroad; FedEx validates the
+      // destination when rating and again when the label is bought.
+      if (domestic) {
         function normAddr(a){
           if(!a) return {};
           return { street1:String(a.street1||'').trim().toUpperCase(), street2:String(a.street2||'').trim().toUpperCase(), city:String(a.city||'').trim().toUpperCase(), state:String(a.state||'').trim().toUpperCase(), zip:String(a.zip||'').trim().toUpperCase(), country:String(a.country||'US').trim().toUpperCase() };
@@ -87,6 +107,7 @@ function createCheckoutShippingRouter(requireAuth) {
           destination.zip = verifiedAddress.zip || destination.zip;
           destination.country = verifiedAddress.country || destination.country;
         }
+      }
 
       const rawPkg = getCheckoutPackage(process.env);
       let packageInfo;
@@ -110,22 +131,23 @@ function createCheckoutShippingRouter(requireAuth) {
 
       const allRates = Array.isArray(shipment.rates) ? shipment.rates.map(sanitizeRate).filter(Boolean) : [];
 
-      // Keep cheapest rate per canonical USPS service and sort by preferred order.
+      // Keep the cheapest rate per offered service, in the zone's display order.
       allRates.sort((a, b) => Number(a.price) - Number(b.price));
       const seen = new Map();
       for (const rate of allRates) {
-        const canonical = classifyUspsService(rate.carrier, rate.service);
+        const canonical = classifyCheckoutService(rate.carrier, rate.service, country);
         if (canonical && !seen.has(canonical)) {
           seen.set(canonical, { ...rate, canonicalService: canonical });
         }
       }
-      const uspsRates = USPS_SERVICE_ORDER
-        .map(name => seen.get(name))
+      const rates = checkoutServiceOrder(country)
+        .map(serviceName => seen.get(serviceName))
         .filter(Boolean);
 
       return res.json({
         shipmentId: shipment.id,
-        rates: uspsRates
+        zone: domestic ? 'domestic' : 'international',
+        rates
       });
     } catch (err) {
       console.error('Checkout shipping rates error:', err);
