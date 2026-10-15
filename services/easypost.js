@@ -439,11 +439,55 @@ const INTERNATIONAL_SERVICE_ORDER = [
   'FedEx International Priority'
 ];
 
-// U.S. orders ship USPS only; every other country ships FedEx only.
+// Friendly carrier names for the account types EasyPost reports.
+const CARRIER_DISPLAY_NAMES = {
+  USPS: 'USPS',
+  FEDEX: 'FedEx',
+  FEDEXDEFAULT: 'FedEx',
+  FEDEXSMARTPOST: 'FedEx',
+  UPS: 'UPS',
+  UPSDAP: 'UPS',
+  UPSMAILINNOVATIONS: 'UPS',
+  DHLEXPRESS: 'DHL Express',
+  DHLECOMMERCE: 'DHL eCommerce',
+  CANADAPOST: 'Canada Post',
+  ASENDIAUSA: 'Asendia',
+  GLOBEGISTICS: 'Globegistics',
+  PASSPORTGLOBAL: 'Passport'
+};
+const SERVICE_WORDS = { usps: 'USPS', ups: 'UPS', dhl: 'DHL', fedex: 'FedEx', ddp: 'DDP', ddu: 'DDU', dap: 'DAP', nondoc: 'Non-Document' };
+
+function carrierDisplayName(carrier) {
+  const raw = String(carrier || '').trim();
+  const key = raw.toUpperCase().replace(/[\s_-]/g, '');
+  return CARRIER_DISPLAY_NAMES[key] || raw;
+}
+
+// "PriorityMailInternational" / "FEDEX_INTERNATIONAL_ECONOMY" -> readable words,
+// with the carrier's own name dropped from the front of the service.
+function serviceDisplayName(carrier, service) {
+  const carrierName = carrierDisplayName(carrier);
+  const words = String(service || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map(function (w) {
+      const lower = w.toLowerCase();
+      if (SERVICE_WORDS[lower]) return SERVICE_WORDS[lower];
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    });
+  const carrierWords = carrierName.toLowerCase().split(/\s+/);
+  while (words.length && carrierWords.indexOf(words[0].toLowerCase()) !== -1) words.shift();
+  return [carrierName].concat(words).join(' ').trim();
+}
+
+// U.S. orders ship USPS only. International orders may use any service the
+// EasyPost account returns; FedEx keeps its familiar names.
 function classifyCheckoutService(carrier, service, country) {
-  return isDomesticCountry(country)
-    ? classifyUspsService(carrier, service)
-    : classifyFedexInternationalService(carrier, service);
+  if (isDomesticCountry(country)) return classifyUspsService(carrier, service);
+  if (!String(carrier || '').trim() || !String(service || '').trim()) return null;
+  return classifyFedexInternationalService(carrier, service) || serviceDisplayName(carrier, service);
 }
 
 function checkoutServiceOrder(country) {
@@ -484,6 +528,8 @@ module.exports = {
   classifyUspsService,
   classifyFedexInternationalService,
   classifyCheckoutService,
+  carrierDisplayName,
+  serviceDisplayName,
   checkoutServiceOrder,
   DOMESTIC_SERVICE_ORDER,
   INTERNATIONAL_SERVICE_ORDER,

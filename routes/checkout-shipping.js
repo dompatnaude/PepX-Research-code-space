@@ -131,18 +131,42 @@ function createCheckoutShippingRouter(requireAuth) {
 
       const allRates = Array.isArray(shipment.rates) ? shipment.rates.map(sanitizeRate).filter(Boolean) : [];
 
-      // Keep the cheapest rate per offered service, in the zone's display order.
+      // Keep the cheapest rate per offered service. U.S. orders list the three
+      // USPS services in their usual order; international orders list every
+      // service the account returns, cheapest to most expensive.
       allRates.sort((a, b) => Number(a.price) - Number(b.price));
       const seen = new Map();
       for (const rate of allRates) {
+        if (!(Number(rate.price) > 0)) continue;
         const canonical = classifyCheckoutService(rate.carrier, rate.service, country);
         if (canonical && !seen.has(canonical)) {
           seen.set(canonical, { ...rate, canonicalService: canonical });
         }
       }
-      const rates = checkoutServiceOrder(country)
-        .map(serviceName => seen.get(serviceName))
-        .filter(Boolean);
+      const rates = domestic
+        ? checkoutServiceOrder(country).map(serviceName => seen.get(serviceName)).filter(Boolean)
+        : Array.from(seen.values());
+
+      // Carriers explain missing rates in shipment.messages (an account not
+      // enabled for a country, a missing phone number, ...). Log them so the
+      // reason is visible in the server logs; customers get a plain message.
+      const carrierMessages = Array.isArray(shipment.messages) ? shipment.messages : [];
+      if (!rates.length || carrierMessages.length) {
+        console.warn('[checkout-shipping] carrier messages', {
+          country,
+          returnedRates: allRates.length,
+          offeredRates: rates.length,
+          messages: carrierMessages.map(m => ({ carrier: m && m.carrier, type: m && m.type, message: m && m.message }))
+        });
+      }
+      if (!rates.length) {
+        return res.status(422).json({
+          code: 'no-shipping-options',
+          error: domestic
+            ? 'No USPS shipping rates are available for your address. Please verify the ZIP code.'
+            : "We couldn't find an international shipping option for this address. Please check the postal code and city, or email pepxaminos@gmail.com and we'll help."
+        });
+      }
 
       return res.json({
         shipmentId: shipment.id,
