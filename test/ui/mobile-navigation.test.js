@@ -57,7 +57,8 @@ test('the rendered header carries a real button with the right semantics', () =>
 test('the rendered page loads the public nav script and never the signed-in bundle', () => {
   const html = page();
   assert.match(html, /<script src="\/public-nav\.js" defer><\/script>/);
-  assert.doesNotMatch(html, /script\.js/, 'the signed-in storefront bundle must stay private');
+  // Matches the storefront bundle itself, not Vercel's /_vercel/insights/script.js.
+  assert.doesNotMatch(html, /src="\/?script\.js"/, 'the signed-in storefront bundle must stay private');
 });
 
 test('every static page with a collapsing nav has the control, the id and the script', () => {
