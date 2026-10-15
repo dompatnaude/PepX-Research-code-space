@@ -110,7 +110,7 @@ async function createRatesForOrder(options) {
   let customsInfo = null;
   if (!domestic) {
     const itemsResult = await db.query(
-      'SELECT name, variant_name, variant_price, price, quantity FROM order_items WHERE order_id = $1 ORDER BY id ASC',
+      'SELECT product_id, variant_id, name, variant_name, variant_price, price, quantity FROM order_items WHERE order_id = $1 ORDER BY id ASC',
       [orderId]
     );
     customsInfo = buildCustomsInfo({ items: itemsResult.rows, packageInfo, env: options.env });

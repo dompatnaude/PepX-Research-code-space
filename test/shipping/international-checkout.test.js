@@ -79,7 +79,7 @@ test('postal-code-free countries do not require a postal code', () => {
 test('customs declaration lists each order line and splits the weight', () => {
   const customs = buildCustomsInfo({
     items: [
-      { name: 'MOTS-C', variant_name: '10mg', price: '48.75', quantity: 2 },
+      { product_id: 7, variant_id: 12, name: 'MOTS-C', variant_name: '10mg', price: '48.75', quantity: 2 },
       { name: 'BPC-157', variant_name: '5mg', price: '30.00', quantity: 1 }
     ],
     packageInfo: { weight_oz: 9 },
@@ -93,6 +93,8 @@ test('customs declaration lists each order line and splits the weight', () => {
   assert.equal(customs.customs_items[0].weight, 6);
   assert.equal(customs.customs_items[1].weight, 3);
   assert.equal(customs.customs_items[0].origin_country, 'US');
+  assert.equal(customs.customs_items[0].code, 'PX-7-12', 'USA Export (Asendia) needs an item code');
+  assert.equal('code' in customs.customs_items[1], false, 'no ids, no invented code');
 });
 
 test('customs description and HS code can be set from env', () => {
