@@ -3507,7 +3507,7 @@ function initCheckoutPage(){
     if(!listEl) return;
     if(!rates || !rates.length){
       setShippingRatesUI('error', isInternationalCheckout()
-        ? 'No FedEx International options are available for this address. Please check the postal code and city.'
+        ? 'No international shipping options are available for this address. Please check the postal code and city.'
         : 'No USPS shipping rates are available for your address. Please verify the ZIP code.');
       return;
     }

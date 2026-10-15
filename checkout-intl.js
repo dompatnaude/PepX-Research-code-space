@@ -5,7 +5,7 @@
  *
  * script.js still owns the cart, totals, shipping rates and order placement;
  * it reads the same field IDs it always has. This file only:
- *   - switches between U.S. (USPS) and International (FedEx) delivery,
+ *   - switches between U.S. (USPS) and International delivery,
  *   - fills the country dropdown and adapts the address fields to it,
  *   - keeps the hidden #shipping_country (ISO code) and #shipping_state fields
  *     in sync with what the shopper picked,

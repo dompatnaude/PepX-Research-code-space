@@ -172,6 +172,32 @@
     return '<span class="badge gray">' + esc(value ? value.replace(/_/g, ' ') : 'unknown') + '</span>';
   }
 
+  // "DK" -> "Denmark". Older orders stored the full name, which passes through.
+  var regionNames = null;
+  try { regionNames = new Intl.DisplayNames(['en'], { type: 'region' }); } catch (e) { regionNames = null; }
+  function countryName(value) {
+    var raw = String(value == null ? '' : value).trim();
+    if (!/^[A-Za-z]{2}$/.test(raw) || !regionNames) return raw;
+    try { return regionNames.of(raw.toUpperCase()) || raw; } catch (e) { return raw; }
+  }
+  function isInternationalCountry(value) {
+    var raw = String(value == null ? '' : value).trim().toLowerCase();
+    return !!raw && ['us', 'usa', 'united states', 'united states of america'].indexOf(raw) === -1;
+  }
+  // "PriorityMailInternational" / "INTERNATIONAL_ECONOMY" -> "Priority Mail International".
+  function serviceWords(service) {
+    return String(service || '')
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .split(/[\s_-]+/).filter(Boolean)
+      .map(function (w) { var l = w.toLowerCase(); return /^(usps|ups|dhl)$/.test(l) ? l.toUpperCase() : (l === 'fedex' ? 'FedEx' : l.charAt(0).toUpperCase() + l.slice(1)); })
+      .join(' ');
+  }
+  function rateLabel(rate) {
+    if (!rate) return '';
+    return rate.canonicalService || [rate.carrier, rate.service].filter(Boolean).join(' ');
+  }
+
   function formatShippingAddress(row) {
     if (!row) return 'No shipping address on file.';
     var lines = [];
@@ -179,7 +205,7 @@
     if (row.address) lines.push(row.address);
     var cityStateZip = [row.city, row.state, row.zip].filter(Boolean).join(', ');
     if (cityStateZip) lines.push(cityStateZip);
-    if (row.country) lines.push(row.country);
+    if (row.country) lines.push(countryName(row.country));
     if (row.phone) lines.push('Phone: ' + row.phone);
     if (row.email) lines.push('Email: ' + row.email);
     return lines.join('\n');
@@ -194,7 +220,7 @@
     if (address.street2) lines.push(address.street2);
     var cityStateZip = [address.city, address.state, address.zip].filter(Boolean).join(', ');
     if (cityStateZip) lines.push(cityStateZip);
-    if (address.country) lines.push(address.country);
+    if (address.country) lines.push(countryName(address.country));
     return lines.join('\n');
   }
 
@@ -1311,7 +1337,7 @@
     var rates = Array.isArray(state.shipping.rates) ? state.shipping.rates : [];
     var selectedRate = rates.find(function (rate) { return rate.rateId === state.shipping.selectedRateId; }) || null;
     var shipmentHistoryRows = shipments.map(function (shipment) {
-      var rateText = [shipment.carrier, shipment.service].filter(Boolean).join(' ');
+      var rateText = [shipment.carrier, serviceWords(shipment.service)].filter(Boolean).join(' ');
       var labelLink = shipment.labelUrl ? '<a href="' + esc(shipment.labelUrl) + '" target="_blank" rel="noopener">original</a>' : '<span class="muted">none</span>';
       return '<tr>'
         + '<td>' + esc(fmtDate(shipment.createdAt || shipment.purchasedAt || shipment.updatedAt)) + '</td>'
@@ -1339,7 +1365,7 @@
       ? '<div class="shipping-summary-grid">'
         + '<div class="shipping-summary-row"><span class="label">Status</span><span>' + shipmentStatusBadge(displayShipment.shipmentStatus) + '</span></div>'
         + '<div class="shipping-summary-row"><span class="label">Carrier</span><span>' + esc(displayShipment.carrier || '\u2014') + '</span></div>'
-        + '<div class="shipping-summary-row"><span class="label">Service</span><span>' + esc(displayShipment.service || '\u2014') + '</span></div>'
+        + '<div class="shipping-summary-row"><span class="label">Service</span><span>' + esc(serviceWords(displayShipment.service) || '\u2014') + '</span></div>'
         + '<div class="shipping-summary-row"><span class="label">Cost</span><span>' + money(displayShipment.labelCost || 0) + '</span></div>'
         + '<div class="shipping-summary-row"><span class="label">Tracking</span><span>' + esc(displayShipment.trackingNumber || '\u2014') + '</span></div>'
         + '<div class="shipping-summary-row"><span class="label">Label</span><span>' + (displayShipment.labelUrl ? '<a href="/api/admin/orders/' + encodeURIComponent(order.id) + '/label-4x6.pdf" target="_blank" rel="noopener">View Label</a>'
@@ -1349,14 +1375,20 @@
         + '</div>'
       : '<div class="muted">No purchased shipment yet.</div>';
 
+    var orderServiceName = order.shipping_service || '';
+    var internationalOrder = isInternationalCountry(addr.country);
+    var internationalBanner = internationalOrder
+      ? '<div class="shipping-banner"><strong>International order to ' + esc(countryName(addr.country)) + '</strong>'
+        + '<div>The label is bought with a customs declaration built from this order\'s items. USPS address verification is skipped; the carrier checks the address when you get rates.</div></div>'
+      : '';
     var ratesHtml = rates.length
       ? rates.map(function (rate) {
         var selected = rate.rateId === state.shipping.selectedRateId;
         return '<label class="shipping-rate' + (selected ? ' selected' : '') + '">'
           + '<input type="radio" name="shippingRate" value="' + esc(rate.rateId) + '"' + (selected ? ' checked' : '') + '>'
           + '<div class="shipping-rate-main">'
-          + '<strong>' + esc(rate.carrier || '') + ' ' + esc(rate.service || '') + '</strong>'
-          + '<span class="muted">' + esc(rate.deliveryDays != null ? String(rate.deliveryDays) + ' business days' : (rate.deliveryDate ? 'ETA ' + fmtDate(rate.deliveryDate) : '')) + '</span>'
+          + '<strong>' + esc(rateLabel(rate)) + (orderServiceName && rate.canonicalService === orderServiceName ? ' <span class="badge green">Customer paid for this</span>' : '') + '</strong>'
+          + '<span class="muted">' + esc([rate.canonicalService ? (rate.carrier + ' ' + rate.service) : '', rate.deliveryDays != null ? String(rate.deliveryDays) + ' business days' : (rate.deliveryDate ? 'ETA ' + fmtDate(rate.deliveryDate) : '')].filter(Boolean).join(' \u00b7 ')) + '</span>'
           + '</div>'
           + '<div><strong>' + money(rate.price || 0) + '</strong><div class="muted">' + esc(rate.currency || 'USD') + '</div></div>'
           + '</label>';
@@ -1377,7 +1409,7 @@
       + '<div>' + esc(addr.name || '') + '</div>'
       + '<div>' + esc(addr.address || '') + '</div>'
       + '<div>' + esc([addr.city, addr.state, addr.zip].filter(Boolean).join(', ')) + '</div>'
-      + '<div>' + esc(addr.country || '') + '</div></div>'
+      + '<div>' + esc(countryName(addr.country)) + '</div></div>'
       + '</div>'
       + '<h3 style="margin-top:1rem;">Items</h3>'
       + '<table class="admin-table"><thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Line total</th></tr></thead>'
@@ -1416,6 +1448,7 @@
       + '<div class="shipping-card"><h4>Saved destination address</h4><div class="shipping-address">' + esc(formatShippingAddress(addr)).replace(/\n/g, '<br>') + '</div></div>'
       + '<div class="shipping-card"><h4>Current shipment</h4>' + shippingSummary + '</div>'
       + '</div>'
+      + internationalBanner
       + verificationBanner
       + '<div class="shipping-card">'
       + '<h4>Package details</h4>'
@@ -1439,7 +1472,7 @@
       + '<div class="shipping-rates" id="shippingRates">' + ratesHtml + '</div>'
       + '<div class="shipping-actions" style="margin-top:10px;">'
       + '<button type="button" class="btn-sm secondary" id="btnRefreshRates"' + (state.shipping.loadingRates ? ' disabled' : '') + '>Refresh rates</button>'
-      + '<div class="muted">Selected rate: ' + (selectedRate ? esc(selectedRate.carrier + ' ' + selectedRate.service + ' · ' + money(selectedRate.price || 0)) : 'none') + '</div>'
+      + '<div class="muted">Selected rate: ' + (selectedRate ? esc(rateLabel(selectedRate) + ' · ' + money(selectedRate.price || 0)) : 'none') + '</div>'
       + '</div>'
       + '</div>'
       + '<div class="shipping-card">'
@@ -1544,7 +1577,8 @@
         // Auto-select the rate matching the customer's chosen shipping service.
         var orderService = state.orderDetail && state.orderDetail.order && state.orderDetail.order.shipping_service;
         if (orderService) {
-          var match = state.shipping.rates.find(function (r) {
+          var match = state.shipping.rates.find(function (r) { return r.canonicalService && r.canonicalService === orderService; })
+            || state.shipping.rates.find(function (r) {
             var s = String(r.service || '').toLowerCase().replace(/[\s_-]/g, '');
             var canonical = String(r.carrier || '').toUpperCase() === 'USPS'
               ? (s.includes('groundadvantage') ? 'USPS Ground Advantage'
@@ -1585,9 +1619,9 @@
     var confirmText = [
       'Purchase label?',
       'Carrier: ' + (selectedRate.carrier || ''),
-      'Service: ' + (selectedRate.service || ''),
+      'Service: ' + rateLabel(selectedRate),
       'Cost: ' + money(selectedRate.price || 0),
-      'Destination: ' + [destination.city, destination.state].filter(Boolean).join(', '),
+      'Destination: ' + [destination.city, destination.state, countryName(destination.country)].filter(Boolean).join(', '),
       'Package: ' + [state.shipping.package.pounds || 0, 'lb', state.shipping.package.ounces || 0, 'oz'] .join(' ')
     ].join('\n');
 

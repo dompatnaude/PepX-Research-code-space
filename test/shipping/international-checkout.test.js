@@ -33,12 +33,21 @@ test('U.S. destinations only accept USPS services', () => {
   assert.equal(classifyCheckoutService('FedEx', 'INTERNATIONAL_ECONOMY', 'US'), null);
 });
 
-test('international destinations only accept the three FedEx International services', () => {
+test('international destinations accept every carrier service, with readable names', () => {
+  assert.equal(classifyCheckoutService('USPS', 'PriorityMailInternational', 'DK'), 'USPS Priority Mail International');
+  assert.equal(classifyCheckoutService('USPS', 'FirstClassPackageInternationalService', 'DK'), 'USPS First Class Package International Service');
+  assert.equal(classifyCheckoutService('USPS', 'ExpressMailInternational', 'DK'), 'USPS Express Mail International');
+  assert.equal(classifyCheckoutService('FedEx', 'FEDEX_INTERNATIONAL_PRIORITY_EXPRESS', 'DK'), 'FedEx International Priority Express');
+  assert.equal(classifyCheckoutService('DHLExpress', 'ExpressWorldwideNonDoc', 'DK'), 'DHL Express Worldwide Non Doc');
+  assert.equal(classifyCheckoutService('UPSDAP', 'UPSSaver', 'DK'), 'UPS Saver');
+  assert.equal(classifyCheckoutService('', '', 'DK'), null);
+});
+
+test('FedEx International services keep their familiar names', () => {
   assert.equal(classifyCheckoutService('FedEx', 'FEDEX_INTERNATIONAL_CONNECT_PLUS', 'DK'), 'FedEx International Connect Plus');
   assert.equal(classifyCheckoutService('FedEx', 'INTERNATIONAL_ECONOMY', 'DK'), 'FedEx International Economy');
   assert.equal(classifyCheckoutService('FedExDefault', 'INTERNATIONAL_PRIORITY', 'DK'), 'FedEx International Priority');
   assert.equal(classifyCheckoutService('FedEx', 'FEDEX_INTERNATIONAL_PRIORITY', 'DK'), 'FedEx International Priority');
-  assert.equal(classifyCheckoutService('USPS', 'PriorityMailInternational', 'DK'), null);
   assert.equal(classifyFedexInternationalService('FedEx', 'FEDEX_INTERNATIONAL_PRIORITY_EXPRESS'), null);
   assert.equal(classifyFedexInternationalService('FedEx', 'INTERNATIONAL_PRIORITY_FREIGHT'), null);
   assert.equal(classifyFedexInternationalService('FedEx', 'INTERNATIONAL_FIRST'), null);
