@@ -11,6 +11,7 @@ const {
   checkoutServiceOrder,
   toCountryCode,
   isDomesticCountry,
+  isShippableCountry,
   isRegionRequired,
   isPostalOptional,
   getCheckoutPackage
@@ -37,6 +38,9 @@ function createCheckoutShippingRouter(requireAuth) {
 
       if (!/^[A-Z]{2}$/.test(country)) {
         return res.status(400).json({ error: 'Please choose the country you are shipping to.' });
+      }
+      if (!isShippableCountry(country)) {
+        return res.status(422).json({ code: 'country-not-served', error: "Sorry, we don't ship to this country yet." });
       }
       if (domestic && (!zip || !state)) {
         return res.status(400).json({ error: 'ZIP code and state are required to calculate shipping rates.' });

@@ -2,7 +2,7 @@ const express = require("express");
 const pool = require("../db/connection");
 const { money, validatePromoCode } = require("../services/promo-service");
 const sitewideSale = require("../services/sitewide-sale");
-const { getEasyPostClient, classifyCheckoutService, toCountryCode, isDomesticCountry } = require("../services/easypost");
+const { getEasyPostClient, classifyCheckoutService, toCountryCode, isDomesticCountry, isShippableCountry } = require("../services/easypost");
 
 function getQuantityDiscountRate(quantity) {
   const qty = Number(quantity) || 0;
@@ -486,6 +486,10 @@ async function createOrder(req, res) {
     // International everywhere else. A rate from the wrong zone is refused.
     const destinationCountry = toCountryCode(body.shipping_country);
     const domesticOrder = isDomesticCountry(destinationCountry);
+    if (!isShippableCountry(destinationCountry)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Sorry, we don't ship to this country yet." });
+    }
     const canonicalService = classifyCheckoutService(verifiedRate.carrier, verifiedRate.service, destinationCountry);
     if (!canonicalService) {
       await client.query("ROLLBACK");
