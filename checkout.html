@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>PepX Research</title>
+  <title>Checkout | PepX Research</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="checkout-v2.css">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
@@ -28,18 +29,16 @@
     </div>
   </div></header>
 
-  <main class="container page-checkout">
+  <main class="container page-checkout cx" id="checkoutPage">
     <section class="section checkout-section">
       <div id="cartLiveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
-      <div class="checkout-head">
-        <p class="checkout-kicker">Your Cart</p>
-        <h1>Your Cart</h1>
-        <p class="sub">Review your items, adjust quantities, and continue to secure checkout.</p>
-        <p class="checkout-item-count" id="checkoutItemCountText">0 items</p>
+      <div class="checkout-head cx-head">
+        <h1>Checkout</h1>
+        <p class="sub">Three quick steps. Any sale price is already applied.</p>
       </div>
 
-      <div class="checkout-layout">
-        <div class="checkout-main">
+      <div class="checkout-layout cx-layout">
+        <div class="checkout-main cx-main">
           <article class="checkout-card checkout-empty-state" id="checkoutEmptyState" style="display:none;">
             <div class="checkout-empty-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false"><circle cx="9" cy="20" r="1.4" fill="currentColor"></circle><circle cx="18" cy="20" r="1.4" fill="currentColor"></circle><path d="M2 4h2l2.2 9.2a1 1 0 0 0 1 .8h9.6a1 1 0 0 0 1-.8L17 7H6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -49,158 +48,175 @@
             <a class="btn primary co" href="shop.html">Continue Shopping</a>
           </article>
 
-          <article class="checkout-card checkout-summary-card checkout-cart-card" id="checkoutCartShell">
-            <div class="checkout-card-head">
-              <h2>Cart Items</h2>
-              <p>Verify product options, quantities, and totals before checkout.</p>
-            </div>
-            <div class="checkout-free-ship" id="checkoutFreeShipPanel">
-              <p id="checkoutFreeShipMessage">🚚 Add $150.00 more to qualify for FREE Shipping!</p>
-              <div class="checkout-free-ship-track" aria-hidden="true"><span id="checkoutFreeShipBar"></span></div>
-            </div>
-            <div class="cart-table checkout-summary-items" id="checkoutCart"></div>
+          <div id="checkoutFlowCards" class="cx-steps">
+            <form id="shippingForm" class="checkout-form cx-form" autocomplete="on">
 
-            <div class="checkout-cart-footer-links">
-              <a href="shop.html" class="checkout-continue-link">Continue shopping</a>
-            </div>
-          </article>
-
-          <div id="checkoutFlowCards">
-          <article class="checkout-card">
-            <div class="checkout-card-head">
-              <h2>Customer Information</h2>
-              <p>Use the email associated with your account for faster order updates.</p>
-            </div>
-            <form id="shippingForm" class="checkout-form" autocomplete="on">
-              <label><span>Email Address</span><input type="email" id="shipping_email" name="shipping_email" autocomplete="email" required></label>
-              <div class="checkout-form-row">
-                <label><span>First Name</span><input type="text" id="shipping_first_name" name="shipping_first_name" autocomplete="given-name" required></label>
-                <label><span>Last Name</span><input type="text" id="shipping_last_name" name="shipping_last_name" autocomplete="family-name" required></label>
-              </div>
-              <label><span>Shipping Address</span><input type="text" id="shipping_address" name="shipping_address" autocomplete="street-address" required></label>
-              <div class="checkout-form-row checkout-form-row-3">
-                <label><span>City</span><input type="text" id="shipping_city" name="shipping_city" autocomplete="address-level2" required></label>
-                <label><span>State</span><input type="text" id="shipping_state" name="shipping_state" autocomplete="address-level1" required></label>
-                <label><span>ZIP</span><input type="text" id="shipping_zip" name="shipping_zip" autocomplete="postal-code" required></label>
-              </div>
-              <div class="checkout-form-row">
-                <label><span>Country</span><input type="text" id="shipping_country" name="shipping_country" autocomplete="country-name" value="United States" required></label>
-                <label><span>Phone Number</span><input type="tel" id="shipping_phone" name="shipping_phone" autocomplete="tel" required></label>
-              </div>
-            </form>
-          </article>
-
-          <article class="checkout-card checkout-trust">
-            <h3>Why Order With PepX</h3>
-            <ul>
-              <li>Secure checkout session with server-side order validation.</li>
-              <li>Inventory is verified at checkout to prevent overselling.</li>
-              <li>Need help? Contact <a href="mailto:pepxaminos@gmail.com">pepxaminos@gmail.com</a>.</li>
-              <li>Shipping status and tracking updates appear in your account orders.</li>
-            </ul>
-          </article>
-          </div>
-        </div>
-
-        <aside class="checkout-side" id="checkoutSide">
-          <article class="checkout-card checkout-totals-card">
-            <div class="checkout-card-head">
-              <h2>Order Summary</h2>
-              <p>Estimated totals update instantly as you edit your cart.</p>
-            </div>
-
-            <div class="checkout-promo">
-              <label for="promoCodeInput">Promo Code</label>
-              <div class="checkout-promo-row">
-                <input type="text" id="promoCodeInput" placeholder="Enter promo code" aria-describedby="promoCodeMessage">
-                <button type="button" class="btn ghost btn-sm" id="applyPromoBtn">Apply</button>
-              </div>
-              <div class="checkout-promo-applied" id="checkoutPromoApplied" style="display:none;">
-                <span id="checkoutPromoAppliedCode"></span>
-                <button type="button" class="checkout-promo-remove" id="removePromoBtn">Remove</button>
-              </div>
-              <p class="checkout-note" id="promoCodeMessage" aria-live="polite">Volume discounts are applied automatically when eligible.</p>
-            </div>
-
-            <div class="checkout-totals">
-              <div><span>Subtotal</span><strong id="checkoutSubtotal">$0.00</strong></div>
-              <div id="checkoutPromoRow" style="display:none;"><span>Discount</span><strong id="checkoutPromoDiscount">-$0.00</strong></div>
-              <div><span>Shipping</span><strong id="checkoutShipping">$0.00</strong></div>
-              <div class="checkout-summary-shipping" id="shippingMethodCard">
-                <h3 class="checkout-summary-subhead">Shipping Method</h3>
-                    <div id="shippingRatesLoading" class="shipping-rates-state" style="display:none;">
-                      <span class="shipping-rates-loading-text">Calculating shipping options&hellip;</span>
-                    </div>
-                    <div id="shippingRatesError" class="shipping-rates-state shipping-rates-error-state" style="display:none;">
-                      <p id="shippingRatesErrorMsg">Could not load shipping rates.</p>
-                      <button type="button" class="btn ghost btn-sm" id="retryShippingRates">Try Again</button>
-                    </div>
-                    <div id="shippingRatesPrompt" class="shipping-rates-state">
-                      <p class="shipping-rates-prompt-text">Enter your shipping address above to see available rates.</p>
-                    </div>
-                    <div id="shippingAddressSuggestion" class="shipping-rates-state address-suggestion" style="display:none;">
-                  <div class="address-suggestion-head">
-                    <span class="address-verified-badge">&#10004; USPS Verified Address</span>
-                    <p class="address-suggestion-lead">We found a USPS verified version of your address. USPS recommends using the verified address to avoid delivery issues.</p>
-                  </div>
-                  <div class="address-suggestion-cols">
-                    <div class="address-suggestion-card">
-                      <h4>Original Address</h4>
-                      <address id="suggestionOriginalAddress" class="address-suggestion-body"></address>
-                    </div>
-                    <div class="address-suggestion-card is-suggested">
-                      <h4>Suggested Address</h4>
-                      <address id="suggestionSuggestedAddress" class="address-suggestion-body"></address>
-                    </div>
-                  </div>
-                  <div class="address-suggestion-actions">
-                    <button type="button" class="btn" id="useSuggestedAddress">Use Suggested Address</button>
-                    <button type="button" class="btn ghost" id="keepOriginalAddress">Keep Original Address</button>
+              <!-- Step 1: Contact -->
+              <article class="checkout-card cx-card">
+                <div class="cx-step-head">
+                  <span class="cx-step-num" aria-hidden="true">1</span>
+                  <div>
+                    <h2>Contact</h2>
+                    <p>For your receipt and tracking updates.</p>
                   </div>
                 </div>
-                <div id="shippingRatesList" class="shipping-rates-list" style="display:none;" role="radiogroup" aria-label="Shipping methods"></div>
-              </div>
-              <div class="checkout-savings" id="cartSavings" style="display:none;">You saved $0.00</div>
-              <p class="checkout-tax-note">Estimated tax is calculated at final checkout.</p>
-              <div class="total"><span>Total</span><strong id="checkoutTotal">$0.00</strong></div>
-            </div>
+                <div class="cx-grid cx-grid-2">
+                  <label class="cx-field cx-span-all"><span>Email</span><input type="email" id="shipping_email" name="shipping_email" autocomplete="email" placeholder="you@example.com" required></label>
+                  <label class="cx-field"><span>First name</span><input type="text" id="shipping_first_name" name="shipping_first_name" autocomplete="given-name" required></label>
+                  <label class="cx-field"><span>Last name</span><input type="text" id="shipping_last_name" name="shipping_last_name" autocomplete="family-name" required></label>
+                  <div class="cx-field cx-span-all">
+                    <label for="shipping_phone">Phone <em>· the carrier uses it for delivery updates</em></label>
+                    <div class="cx-phone">
+                      <span class="cx-dial" id="cxPhoneDial" aria-hidden="true">+1</span>
+                      <input type="tel" id="shipping_phone" name="shipping_phone" autocomplete="tel-national" placeholder="(312) 555-0123" required>
+                    </div>
+                  </div>
+                </div>
+              </article>
 
-            <div class="checkout-summary-payment">
-              <h3 class="checkout-summary-subhead">Payment</h3>
-              <div class="checkout-payments" id="paymentMethods">
-                <label class="checkout-payment-option checkout-payment-option--disabled" id="cardOption">
+              <!-- Step 2: Delivery -->
+              <article class="checkout-card cx-card">
+                <div class="cx-step-head">
+                  <span class="cx-step-num" aria-hidden="true">2</span>
+                  <div>
+                    <h2>Delivery</h2>
+                    <p>We ship across the U.S. and internationally.</p>
+                  </div>
+                </div>
+
+                <fieldset class="cx-zone">
+                  <legend class="sr-only">Where are we shipping?</legend>
+                  <label class="cx-zone-option">
+                    <input type="radio" name="cx_zone" value="us" checked>
+                    <span><strong>United States</strong><small>USPS · free shipping over $150</small></span>
+                  </label>
+                  <label class="cx-zone-option">
+                    <input type="radio" name="cx_zone" value="intl">
+                    <span><strong>International</strong><small>FedEx · pick your country</small></span>
+                  </label>
+                </fieldset>
+
+                <input type="hidden" id="shipping_country" name="shipping_country" value="US">
+                <input type="hidden" id="shipping_state" name="shipping_state" value="">
+
+                <div class="cx-grid cx-grid-6 cx-address" id="cxAddress">
+                  <label class="cx-field cx-span-all cx-country" id="cxCountryWrap" hidden>
+                    <span>Country</span>
+                    <select id="cxCountry" autocomplete="country"></select>
+                  </label>
+                  <label class="cx-field cx-span-all"><span id="cxLine1Label">Street address</span><input type="text" id="shipping_address" name="shipping_address" autocomplete="address-line1" placeholder="123 Main St" required></label>
+                  <label class="cx-field cx-span-all"><span>Apartment, suite, floor <em>(optional)</em></span><input type="text" id="shipping_address2" name="shipping_address2" autocomplete="address-line2" placeholder="Apt 4B"></label>
+                  <label class="cx-field cx-city"><span id="cxCityLabel">City</span><input type="text" id="shipping_city" name="shipping_city" autocomplete="address-level2" required></label>
+                  <div class="cx-field cx-region" id="cxRegionWrap">
+                    <label for="cxRegionSelect" id="cxRegionLabel">State</label>
+                    <select id="cxRegionSelect" autocomplete="address-level1" required></select>
+                    <input type="text" id="cxRegionText" autocomplete="address-level1" hidden>
+                  </div>
+                  <label class="cx-field cx-postal"><span id="cxPostalLabel">ZIP code</span><input type="text" id="shipping_zip" name="shipping_zip" autocomplete="postal-code" inputmode="numeric" maxlength="10" placeholder="60490" required></label>
+                </div>
+                <p class="cx-hint" id="cxFormatHint" hidden></p>
+
+                <div class="cx-divider"></div>
+
+                <div class="checkout-summary-shipping cx-shipping" id="shippingMethodCard">
+                  <h3 class="cx-subhead">Shipping speed</h3>
+                  <div id="shippingRatesLoading" class="shipping-rates-state" style="display:none;">
+                    <span class="shipping-rates-loading-text">Calculating shipping options&hellip;</span>
+                  </div>
+                  <div id="shippingRatesError" class="shipping-rates-state shipping-rates-error-state" style="display:none;">
+                    <p id="shippingRatesErrorMsg">Could not load shipping rates.</p>
+                    <button type="button" class="btn ghost btn-sm" id="retryShippingRates">Try Again</button>
+                  </div>
+                  <div id="shippingRatesPrompt" class="shipping-rates-state">
+                    <p class="shipping-rates-prompt-text">Enter your address above to see shipping options.</p>
+                  </div>
+                  <div id="shippingAddressSuggestion" class="shipping-rates-state address-suggestion" style="display:none;">
+                    <div class="address-suggestion-head">
+                      <span class="address-verified-badge">&#10004; USPS Verified Address</span>
+                      <p class="address-suggestion-lead">We found a USPS verified version of your address. USPS recommends using the verified address to avoid delivery issues.</p>
+                    </div>
+                    <div class="address-suggestion-cols">
+                      <div class="address-suggestion-card">
+                        <h4>Original Address</h4>
+                        <address id="suggestionOriginalAddress" class="address-suggestion-body"></address>
+                      </div>
+                      <div class="address-suggestion-card is-suggested">
+                        <h4>Suggested Address</h4>
+                        <address id="suggestionSuggestedAddress" class="address-suggestion-body"></address>
+                      </div>
+                    </div>
+                    <div class="address-suggestion-actions">
+                      <button type="button" class="btn" id="useSuggestedAddress">Use Suggested Address</button>
+                      <button type="button" class="btn ghost" id="keepOriginalAddress">Keep Original Address</button>
+                    </div>
+                  </div>
+                  <div id="shippingRatesList" class="shipping-rates-list" style="display:none;" role="radiogroup" aria-label="Shipping methods"></div>
+                </div>
+
+                <div class="cx-customs" id="cxCustomsNotice" hidden>
+                  <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16.5v.01"></path></svg>
+                  <div>
+                    <p class="cx-customs-title">Heads up: customs &amp; import taxes</p>
+                    <p>Prices don't include import VAT, duties or carrier fees. <span data-cx-country-name>Your country</span>'s customs may collect these on delivery. Please make sure these products can be imported where you live.</p>
+                  </div>
+                </div>
+              </article>
+            </form>
+
+            <!-- Step 3: Payment -->
+            <article class="checkout-card cx-card checkout-summary-payment">
+              <div class="cx-step-head">
+                <span class="cx-step-num" aria-hidden="true">3</span>
+                <div>
+                  <h2>Payment</h2>
+                  <p>All transactions are encrypted.</p>
+                </div>
+              </div>
+
+              <div class="cx-express" id="cxExpress" hidden>
+                <p class="cx-subhead">Express checkout</p>
+                <div class="cx-express-buttons">
+                  <button type="button" class="cx-express-btn cx-express-apple" data-cx-express>Apple Pay</button>
+                  <button type="button" class="cx-express-btn cx-express-google" data-cx-express>Google Pay</button>
+                  <button type="button" class="cx-express-btn cx-express-cashapp" data-cx-express data-cx-us-only>Cash App Pay</button>
+                </div>
+                <div class="cx-or"><span>or pay another way</span></div>
+              </div>
+
+              <div class="checkout-payments cx-payments" id="paymentMethods">
+                <label class="checkout-payment-option checkout-payment-option--disabled cx-tile" id="cardOption">
                   <input type="radio" name="payment_method" value="card" disabled data-card-rail>
                   <span>
-                    <strong>Credit or Debit Card</strong>
-                    <small>Visa, Mastercard, American Express and Discover accepted.</small>
+                    <strong>Credit or debit card</strong>
+                    <small>Visa, Mastercard, American Express, Discover</small>
                   </span>
                 </label>
-                <label class="checkout-payment-option checkout-payment-option--disabled" id="walletOption">
+                <label class="checkout-payment-option checkout-payment-option--disabled cx-tile cx-wallet-tile" id="walletOption">
                   <input type="radio" name="payment_method" value="wallet" disabled data-wallet-rail>
                   <span>
-                    <strong>Apple Pay, Google Pay or Cash App Pay</strong>
-                    <small>Express checkout &mdash; pay with the card already in your wallet. Nothing to type.</small>
+                    <strong id="cxWalletName">Apple Pay, Google Pay or Cash App Pay</strong>
+                    <small>Express checkout &mdash; pay with the card already in your wallet.</small>
                   </span>
                 </label>
-                <label class="checkout-payment-option">
+                <label class="checkout-payment-option cx-tile" id="zelleOption">
                   <input type="radio" name="payment_method" value="zelle" checked>
                   <span>
                     <strong>Zelle</strong>
-                    <small>Send payment after placing your order using the instructions provided.</small>
+                    <small>Pay after placing your order using the instructions provided.</small>
                   </span>
                 </label>
               </div>
-              <div id="cardPanel" class="card-panel" aria-live="polite">
+              <div id="cardPanel" class="card-panel cx-card-panel" aria-live="polite">
                 <div id="cardFrameWrap" class="card-frame-wrap">
                   <div id="cardFrameBoot" class="card-frame-boot">Loading secure card form&hellip;</div>
                   <iframe id="cardFrame" title="Card details" referrerpolicy="no-referrer" allow="payment"
                           style="display:none;width:100%;border:0;height:0;"></iframe>
                 </div>
                 <p id="cardMsg" class="card-msg" role="status"></p>
-                <p class="card-note">Your card details are entered directly into the payment provider's secure form. They are never sent to or stored on this site.</p>
+                <p class="card-note">Entered directly into the payment provider's secure form &mdash; never sent to or stored on our site.</p>
               </div>
-              <div id="walletPanel" class="card-panel" aria-live="polite" style="display:none;">
-                <p class="card-note">When you place your order you will be taken to our payment provider's secure page to approve the payment with your wallet, then brought straight back here.</p>
+              <div id="walletPanel" class="card-panel cx-card-panel" aria-live="polite" style="display:none;">
+                <p class="card-note">When you place your order you'll go to our payment provider's secure page to approve the payment with your wallet, then come straight back here.</p>
               </div>
               <div id="zelleInstructions" class="zelle-instructions" aria-live="polite">
                 <h4 class="zelle-instructions-title">Pay with Zelle</h4>
@@ -219,29 +235,96 @@
                 <p class="zelle-warning"><strong>Important:</strong> Please verify that you are sending payment to the correct Zelle recipient before submitting the transfer. PepX Research is not responsible for payments sent to the wrong recipient.</p>
                 <p class="zelle-pre-order-note">Your exact order number and total will be shown <strong>after</strong> you click Place Order — you will need them for the Zelle memo and amount.</p>
               </div>
+              <p class="cx-hint" id="cxIntlPayNote" hidden>Zelle and Cash App Pay are for U.S. orders only. You're charged in USD &mdash; your bank converts to your currency.</p>
+
+              <div class="cx-divider"></div>
+
+              <div class="checkout-agreements cx-agreements" id="checkoutAgreements">
+                <label class="checkout-agreement">
+                  <input type="checkbox" id="agreeResearchTerms" required>
+                  <span>I confirm that I am 21+ years old, understand these products are for laboratory research purposes only (not for human consumption), and agree to the <a href="terms-conditions.html" target="_blank" rel="noopener noreferrer">Terms &amp; Conditions</a>. I understand and agree that these products are not approved by the FDA, and are not intended for human or animal consumption, diagnosis, treatment, cure, or prevention of any disease. I understand my personal data will be used to process my order, support my experience throughout this website, and for other purposes described in the <a href="privacy-policy.html" target="_blank" rel="noopener noreferrer">privacy policy</a>.</span>
+                </label>
+                <label class="checkout-agreement">
+                  <input type="checkbox" id="agreeLabUseOnly" required>
+                  <span>I confirm this purchase is for laboratory research use only and not for human or veterinary use.</span>
+                </label>
+                <label class="checkout-agreement" id="agreeImportDutiesRow" hidden>
+                  <input type="checkbox" id="agreeImportDuties">
+                  <span>I'm responsible for import duties, taxes and the import rules of <span data-cx-country-name>my country</span>.</span>
+                </label>
+                <p class="checkout-agreement-hint" id="checkoutAgreementHint">Please accept the agreements above to place your order.</p>
+              </div>
+
+              <p class="checkout-note" id="checkoutError" aria-live="polite"></p>
+
+              <button class="btn primary co cx-pay-btn" id="checkoutBtn" type="button">Place Order</button>
+
+              <p class="checkout-secure-msg">Totals are verified on our server before you're charged.</p>
+            </article>
+          </div>
+        </div>
+
+        <aside class="checkout-side cx-side" id="checkoutSide">
+          <article class="checkout-card checkout-summary-card checkout-cart-card checkout-totals-card cx-card cx-summary" id="checkoutCartShell">
+            <div class="cx-summary-head">
+              <h2>Your order</h2>
+              <span class="checkout-item-count" id="checkoutItemCountText">0 items</span>
             </div>
 
-            <div class="checkout-agreements" id="checkoutAgreements">
-              <label class="checkout-agreement">
-                <input type="checkbox" id="agreeResearchTerms" required>
-                <span>I confirm that I am 21+ years old, understand these products are for laboratory research purposes only (not for human consumption), and agree to the <a href="terms-conditions.html" target="_blank" rel="noopener noreferrer">Terms &amp; Conditions</a>. I understand and agree that these products are not approved by the FDA, and are not intended for human or animal consumption, diagnosis, treatment, cure, or prevention of any disease. I understand my personal data will be used to process my order, support my experience throughout this website, and for other purposes described in the <a href="privacy-policy.html" target="_blank" rel="noopener noreferrer">privacy policy</a>.</span>
-              </label>
-              <label class="checkout-agreement">
-                <input type="checkbox" id="agreeLabUseOnly" required>
-                <span>I confirm this purchase is for laboratory research use only and not for human or veterinary use.</span>
-              </label>
-              <p class="checkout-agreement-hint" id="checkoutAgreementHint">Please accept both agreements to place your order.</p>
+            <div class="cart-table checkout-summary-items" id="checkoutCart"></div>
+
+            <div class="checkout-promo cx-promo">
+              <label for="promoCodeInput">Promo code</label>
+              <div class="checkout-promo-row">
+                <input type="text" id="promoCodeInput" placeholder="Enter promo code" aria-describedby="promoCodeMessage">
+                <button type="button" class="btn ghost btn-sm" id="applyPromoBtn">Apply</button>
+              </div>
+              <div class="checkout-promo-applied" id="checkoutPromoApplied" style="display:none;">
+                <span id="checkoutPromoAppliedCode"></span>
+                <button type="button" class="checkout-promo-remove" id="removePromoBtn">Remove</button>
+              </div>
+              <p class="checkout-note cx-promo-note" id="promoCodeMessage" aria-live="polite">Volume discounts are applied automatically when eligible.</p>
             </div>
 
-            <p class="checkout-note" id="checkoutError" aria-live="polite"></p>
+            <div class="checkout-totals cx-totals">
+              <div><span>Subtotal</span><strong id="checkoutSubtotal">$0.00</strong></div>
+              <div id="checkoutPromoRow" class="cx-discount-row" style="display:none;"><span>Discount</span><strong id="checkoutPromoDiscount">-$0.00</strong></div>
+              <div><span>Shipping <em id="cxShipName"></em></span><strong id="checkoutShipping">$0.00</strong></div>
+              <div class="cx-tax-row" id="cxTaxRow"><span>Estimated tax</span><em>Calculated at final step</em></div>
+              <div class="total cx-total"><span>Total</span><strong><small>USD</small> <span id="checkoutTotal">$0.00</span></strong></div>
+              <div class="checkout-savings cx-savings" id="cartSavings" style="display:none;">You saved $0.00</div>
+            </div>
 
-            <button class="btn primary co" id="checkoutBtn" type="button">Place Order</button>
+            <div class="checkout-free-ship cx-free-ship" id="checkoutFreeShipPanel">
+              <p id="checkoutFreeShipMessage">Add $150.00 more to qualify for FREE Shipping!</p>
+              <div class="checkout-free-ship-track" aria-hidden="true"><span id="checkoutFreeShipBar"></span></div>
+            </div>
+            <div class="cx-intl-ship" id="cxIntlShipNote" hidden>
+              <p><strong>Shipping to <span data-cx-country-name>your country</span>.</strong> Free shipping is for U.S. orders only.</p>
+            </div>
 
-            <p class="checkout-secure-msg">Secure checkout uses your authenticated session and server-validated order totals.</p>
+            <a href="shop.html" class="checkout-continue-link cx-continue">Continue shopping</a>
           </article>
 
-          <article class="checkout-card checkout-continue-card">
-            <a class="btn ghost co" href="shop.html">Continue Shopping</a>
+          <article class="checkout-card cx-card cx-trust">
+            <ul>
+              <li>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6z"></path><path d="M9 12l2 2 4-4"></path></svg>
+                <span><strong>Secure checkout</strong> with server-validated totals</span>
+              </li>
+              <li>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v9H3z"></path><path d="M14 10h4l3 3v3h-7"></path><circle cx="7" cy="18" r="1.8"></circle><circle cx="17" cy="18" r="1.8"></circle></svg>
+                <span><strong>Tracked shipping</strong> &mdash; USPS in the U.S., FedEx worldwide</span>
+              </li>
+              <li>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path><path d="M10 14l2 2 3-4"></path></svg>
+                <span><strong>COA verified</strong> &middot; <a href="coas.html">view certificates</a></span>
+              </li>
+              <li>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>
+                <span>Questions? <a href="mailto:pepxaminos@gmail.com">pepxaminos@gmail.com</a></span>
+              </li>
+            </ul>
           </article>
         </aside>
       </div>
@@ -287,6 +370,7 @@
   </div></footer>
 
   <div class="toast" id="toast"></div>
+  <script src="checkout-intl.js"></script>
   <script src="card-rail.js"></script>
   <script src="script.js"></script>
   <script src="/pepx-cart-fix.js"></script>

@@ -211,6 +211,42 @@ function normalizeAddressText(value) {
   return String(value == null ? '' : value).trim();
 }
 
+// ---- Countries -----------------------------------------------------------
+// Checkout stores ISO-3166 alpha-2 codes. Older orders stored "United States",
+// so names that mean the US are still understood.
+const US_COUNTRY_NAMES = new Set([
+  'united states', 'united states of america', 'usa', 'u.s.', 'u.s.a.', 'us', 'america'
+]);
+
+function toCountryCode(value) {
+  const raw = normalizeAddressText(value);
+  if (!raw) return 'US';
+  if (US_COUNTRY_NAMES.has(raw.toLowerCase())) return 'US';
+  if (/^[A-Za-z]{2}$/.test(raw)) return raw.toUpperCase();
+  return raw;
+}
+
+function isDomesticCountry(value) {
+  return toCountryCode(value) === 'US';
+}
+
+// Countries whose addresses need a state / province to be deliverable.
+const REGION_REQUIRED_COUNTRIES = new Set(['US', 'CA', 'AU']);
+
+// Countries that do not use postal codes (or where they are optional).
+const POSTAL_OPTIONAL_COUNTRIES = new Set([
+  'AE', 'AG', 'AO', 'AW', 'BS', 'BZ', 'BO', 'CW', 'DM', 'FJ', 'GD', 'GH',
+  'HK', 'JM', 'LC', 'MO', 'QA', 'SC', 'SR', 'TT', 'UG', 'ZW'
+]);
+
+function isRegionRequired(country) {
+  return REGION_REQUIRED_COUNTRIES.has(toCountryCode(country));
+}
+
+function isPostalOptional(country) {
+  return POSTAL_OPTIONAL_COUNTRIES.has(toCountryCode(country));
+}
+
 function buildOrderDestinationAddress(order) {
   return {
     name: normalizeAddressText(order.shipping_name),
@@ -220,7 +256,7 @@ function buildOrderDestinationAddress(order) {
     city: normalizeAddressText(order.shipping_city),
     state: normalizeAddressText(order.shipping_state),
     zip: normalizeAddressText(order.shipping_zip),
-    country: normalizeAddressText(order.shipping_country) || 'US',
+    country: toCountryCode(order.shipping_country),
     phone: normalizeAddressText(order.shipping_phone) || null,
     email: normalizeAddressText(order.shipping_email) || null
   };
@@ -231,8 +267,8 @@ function validateDestinationAddress(order) {
   const missing = [];
   if (!destination.street1) missing.push('street1');
   if (!destination.city) missing.push('city');
-  if (!destination.state) missing.push('state');
-  if (!destination.zip) missing.push('zip');
+  if (!destination.state && isRegionRequired(destination.country)) missing.push('state');
+  if (!destination.zip && !isPostalOptional(destination.country)) missing.push('zip');
   if (!destination.country) missing.push('country');
 
   if (missing.length) {
@@ -309,8 +345,8 @@ const SHIPMENT_LABEL_OPTIONS = {
   label_format: 'PDF'
 };
 
-function buildShipmentCreateParams({ toAddress, fromAddress, packageInfo }) {
-  return {
+function buildShipmentCreateParams({ toAddress, fromAddress, packageInfo, customsInfo }) {
+  const params = {
     to_address: toAddress,
     from_address: fromAddress,
     parcel: {
@@ -320,6 +356,49 @@ function buildShipmentCreateParams({ toAddress, fromAddress, packageInfo }) {
       height: packageInfo.height
     },
     options: Object.assign({}, SHIPMENT_LABEL_OPTIONS)
+  };
+  if (customsInfo) params.customs_info = customsInfo;
+  return params;
+}
+
+// Customs declaration for an international label. Each order line becomes one
+// customs item; the package weight is split across them by quantity. The
+// declared description, HS code and signer come from env so they can be set
+// to whatever PepX's broker or carrier requires without a code change.
+function buildCustomsInfo({ items, packageInfo, env }) {
+  const src = env || process.env;
+  const lines = (Array.isArray(items) ? items : []).filter(function (it) {
+    return it && Number(it.quantity) > 0;
+  });
+  if (!lines.length) return null;
+  const totalQty = lines.reduce(function (sum, it) { return sum + Number(it.quantity); }, 0);
+  const totalOz = Number(packageInfo && packageInfo.weight_oz) > 0 ? Number(packageInfo.weight_oz) : 8;
+  const describe = String(src.CUSTOMS_ITEM_DESCRIPTION || '').trim();
+  const hsCode = String(src.CUSTOMS_HS_TARIFF_NUMBER || '').trim();
+
+  return {
+    contents_type: String(src.CUSTOMS_CONTENTS_TYPE || 'merchandise').trim() || 'merchandise',
+    contents_explanation: String(src.CUSTOMS_CONTENTS_EXPLANATION || '').trim() || null,
+    customs_certify: true,
+    customs_signer: String(src.CUSTOMS_SIGNER || src.SHIP_FROM_NAME || '').trim() || null,
+    eel_pfc: String(src.CUSTOMS_EEL_PFC || 'NOEEI 30.37(a)').trim(),
+    non_delivery_option: String(src.CUSTOMS_NON_DELIVERY || 'return').trim() || 'return',
+    restriction_type: 'none',
+    customs_items: lines.map(function (it) {
+      const qty = Number(it.quantity);
+      const unit = Number(it.price != null ? it.price : it.variant_price) || 0;
+      const name = [it.name, it.variant_name].filter(Boolean).join(' ');
+      const item = {
+        description: (describe || name || 'Merchandise').slice(0, 45),
+        quantity: qty,
+        value: normalizeMoney(unit * qty),
+        weight: Math.max(0.1, Math.round((totalOz * qty / totalQty) * 10) / 10),
+        origin_country: String(src.CUSTOMS_ORIGIN_COUNTRY || 'US').trim() || 'US',
+        currency: 'USD'
+      };
+      if (hsCode) item.hs_tariff_number = hsCode;
+      return item;
+    })
   };
 }
 
@@ -332,6 +411,43 @@ function classifyUspsService(carrier, service) {
   if (s === 'express') return 'USPS Priority Mail Express';
   if (s.includes('priority')) return 'USPS Priority Mail';
   return null;
+}
+
+// Maps EasyPost FedEx carrier+service strings to the international services
+// checkout offers. FedEx has renamed International Priority over time
+// (INTERNATIONAL_PRIORITY -> FEDEX_INTERNATIONAL_PRIORITY), so both are read.
+// Express, freight and distribution variants are deliberately not offered.
+function classifyFedexInternationalService(carrier, service) {
+  if (String(carrier || '').toUpperCase().indexOf('FEDEX') === -1) return null;
+  const s = String(service || '').toLowerCase().replace(/[\s_-]/g, '');
+  if (/freight|distribution|first|express|onerate/.test(s)) return null;
+  if (s.includes('internationalconnectplus') || s.includes('connectplus')) return 'FedEx International Connect Plus';
+  if (s.includes('internationaleconomy')) return 'FedEx International Economy';
+  if (s.includes('internationalpriority')) return 'FedEx International Priority';
+  return null;
+}
+
+// Display order for each zone at checkout, cheapest tier first.
+const DOMESTIC_SERVICE_ORDER = [
+  'USPS Ground Advantage',
+  'USPS Priority Mail',
+  'USPS Priority Mail Express'
+];
+const INTERNATIONAL_SERVICE_ORDER = [
+  'FedEx International Connect Plus',
+  'FedEx International Economy',
+  'FedEx International Priority'
+];
+
+// U.S. orders ship USPS only; every other country ships FedEx only.
+function classifyCheckoutService(carrier, service, country) {
+  return isDomesticCountry(country)
+    ? classifyUspsService(carrier, service)
+    : classifyFedexInternationalService(carrier, service);
+}
+
+function checkoutServiceOrder(country) {
+  return isDomesticCountry(country) ? DOMESTIC_SERVICE_ORDER : INTERNATIONAL_SERVICE_ORDER;
 }
 
 // Default package dimensions for checkout rate requests (overridable via env).
@@ -366,5 +482,15 @@ module.exports = {
   SHIPMENT_LABEL_OPTIONS,
   missingConfigError,
   classifyUspsService,
+  classifyFedexInternationalService,
+  classifyCheckoutService,
+  checkoutServiceOrder,
+  DOMESTIC_SERVICE_ORDER,
+  INTERNATIONAL_SERVICE_ORDER,
+  buildCustomsInfo,
+  toCountryCode,
+  isDomesticCountry,
+  isRegionRequired,
+  isPostalOptional,
   getCheckoutPackage
 };
