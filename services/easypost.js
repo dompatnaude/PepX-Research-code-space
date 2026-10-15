@@ -230,12 +230,30 @@ function isDomesticCountry(value) {
   return toCountryCode(value) === 'US';
 }
 
+// Countries PepX ships to outside the U.S. Checkout only lists these, and
+// the server refuses rates and orders for anything else. Override with a
+// comma-separated SHIPPING_COUNTRIES env var (ISO codes) without a deploy.
+const DEFAULT_INTERNATIONAL_COUNTRIES = ['MX', 'CO', 'NL', 'GB', 'AE', 'TH'];
+
+function internationalShippingCountries(env) {
+  const raw = String(((env || process.env).SHIPPING_COUNTRIES) || '').trim();
+  const list = raw
+    ? raw.split(',').map(function (c) { return c.trim().toUpperCase(); }).filter(function (c) { return /^[A-Z]{2}$/.test(c) && c !== 'US'; })
+    : DEFAULT_INTERNATIONAL_COUNTRIES;
+  return new Set(list);
+}
+
+function isShippableCountry(value, env) {
+  const code = toCountryCode(value);
+  return code === 'US' || internationalShippingCountries(env).has(code);
+}
+
 // Countries whose addresses need a state / province to be deliverable.
-const REGION_REQUIRED_COUNTRIES = new Set(['US', 'CA', 'AU']);
+const REGION_REQUIRED_COUNTRIES = new Set(['US', 'CA', 'AU', 'MX', 'AE']);
 
 // Countries that do not use postal codes (or where they are optional).
 const POSTAL_OPTIONAL_COUNTRIES = new Set([
-  'AE', 'AG', 'AO', 'AW', 'BS', 'BZ', 'BO', 'CW', 'DM', 'FJ', 'GD', 'GH',
+  'AE', 'AG', 'AO', 'AW', 'BS', 'BZ', 'BO', 'CO', 'CW', 'DM', 'FJ', 'GD', 'GH',
   'HK', 'JM', 'LC', 'MO', 'QA', 'SC', 'SR', 'TT', 'UG', 'ZW'
 ]);
 
@@ -536,6 +554,9 @@ module.exports = {
   buildCustomsInfo,
   toCountryCode,
   isDomesticCountry,
+  isShippableCountry,
+  internationalShippingCountries,
+  DEFAULT_INTERNATIONAL_COUNTRIES,
   isRegionRequired,
   isPostalOptional,
   getCheckoutPackage

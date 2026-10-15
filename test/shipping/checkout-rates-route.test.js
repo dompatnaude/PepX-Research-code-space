@@ -37,7 +37,7 @@ function callRates(body) {
 
 const rate = (id, carrier, service, price) => ({ id, carrier, service, rate: String(price), delivery_days: 5 });
 
-test('Denmark lists every returned service, cheapest to most expensive', async () => {
+test('Mexico lists every returned service, cheapest to most expensive', async () => {
   const errors = console.warn; console.warn = () => {};
   nextShipment = { id: 'shp_1', messages: [], rates: [
     rate('a', 'FedEx', 'INTERNATIONAL_PRIORITY', 88.1),
@@ -47,7 +47,7 @@ test('Denmark lists every returned service, cheapest to most expensive', async (
     rate('e', 'USPS', 'PriorityMailInternational', 64.0) // pricier duplicate is dropped
   ] };
   const { status, body } = await callRates({
-    country: 'DK', address: 'Østerbrogade 12', city: 'København Ø', zip: '2100'
+    country: 'MX', address: 'Av. Reforma 222', city: 'Ciudad de México', state: 'CMX', zip: '06600'
   });
   console.warn = errors;
   assert.equal(status, 200);
@@ -79,11 +79,29 @@ test('no rates abroad gives a clear message instead of an empty list', async () 
   const warn = console.warn; let logged = null; console.warn = (...a) => { logged = a; };
   nextShipment = { id: 'shp_3', rates: [], messages: [{ carrier: 'FedEx', type: 'rate_error', message: 'account not enabled' }] };
   const { status, body } = await callRates({
-    country: 'DK', address: 'Østerbrogade 12', city: 'København Ø', zip: '2100'
+    country: 'NL', address: 'Damrak 1', city: 'Amsterdam', zip: '1012 AB'
   });
   console.warn = warn;
   assert.equal(status, 422);
   assert.equal(body.code, 'no-shipping-options');
   assert.match(body.error, /international shipping option/);
   assert.ok(logged && JSON.stringify(logged).includes('account not enabled'), 'carrier reason is logged');
+});
+
+test('countries outside the shipping list are refused before any carrier call', async () => {
+  nextShipment = null; // a carrier call would crash on this
+  for (const country of ['DK', 'DE', 'CA']) {
+    const { status, body } = await callRates({ country, address: '1 Main St', city: 'Town', state: 'ON', zip: '12345' });
+    assert.equal(status, 422, country);
+    assert.equal(body.code, 'country-not-served');
+  }
+});
+
+test('the six shipping countries are all accepted', async () => {
+  const { isShippableCountry, DEFAULT_INTERNATIONAL_COUNTRIES } = require('../../services/easypost');
+  assert.deepEqual(DEFAULT_INTERNATIONAL_COUNTRIES, ['MX', 'CO', 'NL', 'GB', 'AE', 'TH']);
+  for (const c of ['US', 'United States', 'MX', 'CO', 'NL', 'GB', 'AE', 'TH']) assert.equal(isShippableCountry(c, {}), true, c);
+  for (const c of ['DK', 'CA', 'DE', 'FR', 'AU']) assert.equal(isShippableCountry(c, {}), false, c);
+  assert.equal(isShippableCountry('DK', { SHIPPING_COUNTRIES: 'dk, nl' }), true, 'env override');
+  assert.equal(isShippableCountry('MX', { SHIPPING_COUNTRIES: 'dk, nl' }), false, 'env override replaces the list');
 });

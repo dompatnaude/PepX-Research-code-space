@@ -33,72 +33,69 @@
     ['SD','South Dakota'],['TN','Tennessee'],['TX','Texas'],['UT','Utah'],['VT','Vermont'],['VA','Virginia'],
     ['WA','Washington'],['WV','West Virginia'],['WI','Wisconsin'],['WY','Wyoming']
   ];
-  var CA_PROVINCES = [
-    ['AB','Alberta'],['BC','British Columbia'],['MB','Manitoba'],['NB','New Brunswick'],
-    ['NL','Newfoundland and Labrador'],['NS','Nova Scotia'],['NT','Northwest Territories'],['NU','Nunavut'],
-    ['ON','Ontario'],['PE','Prince Edward Island'],['QC','Quebec'],['SK','Saskatchewan'],['YT','Yukon']
+  var MX_STATES = [
+    ['AGU','Aguascalientes'],['BCN','Baja California'],['BCS','Baja California Sur'],['CAM','Campeche'],
+    ['CHP','Chiapas'],['CHH','Chihuahua'],['CMX','Ciudad de México'],['COA','Coahuila'],['COL','Colima'],
+    ['DUR','Durango'],['GUA','Guanajuato'],['GRO','Guerrero'],['HID','Hidalgo'],['JAL','Jalisco'],
+    ['MEX','Estado de México'],['MIC','Michoacán'],['MOR','Morelos'],['NAY','Nayarit'],['NLE','Nuevo León'],
+    ['OAX','Oaxaca'],['PUE','Puebla'],['QUE','Querétaro'],['ROO','Quintana Roo'],['SLP','San Luis Potosí'],
+    ['SIN','Sinaloa'],['SON','Sonora'],['TAB','Tabasco'],['TAM','Tamaulipas'],['TLA','Tlaxcala'],
+    ['VER','Veracruz'],['YUC','Yucatán'],['ZAC','Zacatecas']
   ];
-  var AU_STATES = [
-    ['ACT','Australian Capital Territory'],['NSW','New South Wales'],['NT','Northern Territory'],
-    ['QLD','Queensland'],['SA','South Australia'],['TAS','Tasmania'],['VIC','Victoria'],['WA','Western Australia']
+  var AE_EMIRATES = [
+    ['AZ','Abu Dhabi'],['AJ','Ajman'],['DU','Dubai'],['FU','Fujairah'],['RK','Ras Al Khaimah'],
+    ['SH','Sharjah'],['UQ','Umm Al Quwain']
   ];
 
-  function postalFirst(code, name, dial, max, postalEx, cityEx, phoneEx, line1Ex, hint) {
-    return { code: code, name: name, dial: dial, postalFirst: true, postal: 'Postal code', postalEx: postalEx,
-      postalMax: max, postalMode: 'numeric', city: 'City', cityEx: cityEx, phoneEx: phoneEx,
-      line1: 'Street and house number', line1Ex: line1Ex, line2Ex: '', hint: hint, region: null };
-  }
-
+  // The only countries PepX ships to. Keep in step with
+  // INTERNATIONAL_SHIPPING_COUNTRIES in services/easypost.js (the server
+  // refuses any other country even if this list is edited in the browser).
   var DETAILED = [
     { code: 'US', name: 'United States', dial: '+1', postalFirst: false, postal: 'ZIP code', postalEx: '60490', postalMax: 10,
       postalMode: 'numeric', city: 'City', cityEx: '', phoneEx: '(312) 555-0123', line1: 'Street address',
       line1Ex: '123 Main St', line2Ex: 'Apt 4B', hint: '', region: { label: 'State', list: US_STATES, required: true } },
-    { code: 'CA', name: 'Canada', dial: '+1', postalFirst: false, postal: 'Postal code', postalEx: 'M5V 2T6', postalMax: 7,
-      postalMode: 'text', city: 'City', cityEx: 'Toronto', phoneEx: '(416) 555-0123', line1: 'Street address',
-      line1Ex: '200 King St W', line2Ex: 'Unit 1200', hint: 'street, city, province, postal code (A1A 1A1).',
-      region: { label: 'Province', list: CA_PROVINCES, required: true } },
-    { code: 'GB', name: 'United Kingdom', dial: '+44', postalFirst: false, postal: 'Postcode', postalEx: 'SW1A 1AA', postalMax: 8,
-      postalMode: 'text', city: 'Town / city', cityEx: 'London', phoneEx: '7700 900123', line1: 'Street address',
+
+    { code: 'MX', name: 'Mexico', group: 'Central & South America', dial: '+52', postalFirst: false,
+      postal: 'Código postal', postalEx: '06600', postalMax: 5, postalMode: 'numeric', city: 'City / municipality',
+      cityEx: 'Ciudad de México', phoneEx: '55 1234 5678', line1: 'Street and number', line1Ex: 'Av. Reforma 222',
+      line2Ex: 'Colonia, interior number', hint: 'street and number, colonia on the second line, then city, state and 5-digit código postal.',
+      region: { label: 'State', list: MX_STATES, required: true } },
+    { code: 'CO', name: 'Colombia', group: 'Central & South America', dial: '+57', postalFirst: false,
+      postal: 'Postal code', postalEx: '110111', postalMax: 6, postalMode: 'numeric', city: 'City',
+      cityEx: 'Bogotá', phoneEx: '301 234 5678', line1: 'Street address', line1Ex: 'Calle 93 # 11-26',
+      line2Ex: 'Apto, barrio', hint: 'street address (e.g. Calle 93 # 11-26), city and department; postal code if you know it.',
+      region: { label: 'Department', list: null, required: true, placeholder: 'Cundinamarca' } },
+
+    { code: 'NL', name: 'Netherlands', group: 'Europe', dial: '+31', postalFirst: true, postal: 'Postal code',
+      postalEx: '1012 AB', postalMax: 7, postalMode: 'text', city: 'City', cityEx: 'Amsterdam', phoneEx: '6 12345678',
+      line1: 'Street and house number', line1Ex: 'Damrak 1', line2Ex: '', hint: 'street and number, then postal code (1234 AB) and city.',
+      region: null },
+    { code: 'GB', name: 'United Kingdom', group: 'Europe', dial: '+44', postalFirst: false, postal: 'Postcode', postalEx: 'SW1A 1AA',
+      postalMax: 8, postalMode: 'text', city: 'Town / city', cityEx: 'London', phoneEx: '7700 900123', line1: 'Street address',
       line1Ex: '10 High Street', line2Ex: 'Flat 2', hint: 'street, town, county (optional), postcode.',
       region: { label: 'County (optional)', list: null, required: false, placeholder: 'Greater London' } },
-    postalFirst('DK', 'Denmark', '+45', 4, '2100', 'København Ø', '12 34 56 78', 'Østerbrogade 12', 'street and number, then 4-digit postal code and city. Put floor/side (e.g. 3. th.) on the apartment line.'),
-    postalFirst('DE', 'Germany', '+49', 5, '10115', 'Berlin', '1512 3456789', 'Hauptstraße 5', 'street and number, then 5-digit postal code and city.'),
-    postalFirst('NL', 'Netherlands', '+31', 7, '1012 AB', 'Amsterdam', '6 12345678', 'Damrak 1', 'street and number, then postal code (1234 AB) and city.'),
-    postalFirst('SE', 'Sweden', '+46', 6, '111 22', 'Stockholm', '70 123 45 67', 'Drottninggatan 10', 'street and number, then postal code (123 45) and city.'),
-    postalFirst('NO', 'Norway', '+47', 4, '0150', 'Oslo', '412 34 567', 'Karl Johans gate 1', 'street and number, then 4-digit postal code and city.'),
-    postalFirst('FR', 'France', '+33', 5, '75001', 'Paris', '6 12 34 56 78', '12 rue de Rivoli', 'number and street, then 5-digit postal code and city.'),
-    { code: 'AU', name: 'Australia', dial: '+61', postalFirst: false, postal: 'Postcode', postalEx: '2000', postalMax: 4,
-      postalMode: 'numeric', city: 'Suburb', cityEx: 'Sydney', phoneEx: '412 345 678', line1: 'Street address',
-      line1Ex: '1 George St', line2Ex: 'Unit 3', hint: 'street, suburb, state, 4-digit postcode.',
-      region: { label: 'State', list: AU_STATES, required: true } }
-  ];
-  // NL and SE postal codes contain a space and letters.
-  DETAILED.forEach(function (c) { if (c.code === 'NL' || c.code === 'SE') c.postalMode = 'text'; });
 
-  // code|name|dial|p (p = postal code comes before the city).
-  // Countries under U.S. sanctions are intentionally not listed.
-  var RAW = 'AD|Andorra|376|p;AE|United Arab Emirates|971;AG|Antigua and Barbuda|1;AL|Albania|355|p;AM|Armenia|374|p;AO|Angola|244;AR|Argentina|54|p;AT|Austria|43|p;AW|Aruba|297;AZ|Azerbaijan|994;BA|Bosnia and Herzegovina|387|p;BB|Barbados|1;BD|Bangladesh|880;BE|Belgium|32|p;BG|Bulgaria|359|p;BH|Bahrain|973;BM|Bermuda|1;BN|Brunei|673;BO|Bolivia|591;BR|Brazil|55;BS|Bahamas|1;BT|Bhutan|975;BW|Botswana|267;BZ|Belize|501;CH|Switzerland|41|p;CI|Ivory Coast|225;CL|Chile|56;CM|Cameroon|237;CN|China|86;CO|Colombia|57;CR|Costa Rica|506;CV|Cape Verde|238;CW|Curaçao|599;CY|Cyprus|357|p;CZ|Czechia|420|p;DM|Dominica|1;DO|Dominican Republic|1;DZ|Algeria|213|p;EC|Ecuador|593;EE|Estonia|372|p;EG|Egypt|20;ES|Spain|34|p;ET|Ethiopia|251;FI|Finland|358|p;FJ|Fiji|679;FO|Faroe Islands|298|p;GD|Grenada|1;GE|Georgia|995|p;GH|Ghana|233;GI|Gibraltar|350;GL|Greenland|299|p;GR|Greece|30|p;GT|Guatemala|502;GY|Guyana|592;HK|Hong Kong|852;HN|Honduras|504;HR|Croatia|385|p;HT|Haiti|509;HU|Hungary|36;ID|Indonesia|62;IE|Ireland|353;IL|Israel|972;IN|India|91;IQ|Iraq|964;IS|Iceland|354|p;IT|Italy|39|p;JM|Jamaica|1;JO|Jordan|962;JP|Japan|81;KE|Kenya|254;KG|Kyrgyzstan|996;KH|Cambodia|855;KR|South Korea|82;KW|Kuwait|965;KY|Cayman Islands|1;KZ|Kazakhstan|7;LA|Laos|856;LB|Lebanon|961;LC|Saint Lucia|1;LI|Liechtenstein|423|p;LK|Sri Lanka|94;LT|Lithuania|370|p;LU|Luxembourg|352|p;LV|Latvia|371|p;MA|Morocco|212|p;MC|Monaco|377|p;MD|Moldova|373|p;ME|Montenegro|382|p;MG|Madagascar|261;MK|North Macedonia|389|p;MM|Myanmar|95;MN|Mongolia|976;MO|Macau|853;MT|Malta|356;MU|Mauritius|230;MV|Maldives|960;MW|Malawi|265;MX|Mexico|52;MY|Malaysia|60;MZ|Mozambique|258;NA|Namibia|264;NC|New Caledonia|687|p;NG|Nigeria|234;NI|Nicaragua|505;NP|Nepal|977;NZ|New Zealand|64;OM|Oman|968;PA|Panama|507;PE|Peru|51;PF|French Polynesia|689|p;PG|Papua New Guinea|675;PH|Philippines|63;PK|Pakistan|92;PL|Poland|48|p;PT|Portugal|351|p;PY|Paraguay|595;QA|Qatar|974;RO|Romania|40;RS|Serbia|381|p;RW|Rwanda|250;SA|Saudi Arabia|966;SC|Seychelles|248;SG|Singapore|65;SI|Slovenia|386|p;SK|Slovakia|421|p;SM|San Marino|378|p;SN|Senegal|221;SR|Suriname|597;SV|El Salvador|503;TH|Thailand|66;TJ|Tajikistan|992;TM|Turkmenistan|993;TN|Tunisia|216|p;TR|Türkiye|90|p;TT|Trinidad and Tobago|1;TW|Taiwan|886;TZ|Tanzania|255;UA|Ukraine|380;UG|Uganda|256;UY|Uruguay|598|p;UZ|Uzbekistan|998;VE|Venezuela|58;VN|Vietnam|84;XK|Kosovo|383|p;ZA|South Africa|27;ZM|Zambia|260;ZW|Zimbabwe|263';
+    { code: 'AE', name: 'United Arab Emirates', group: 'Middle East & Asia', dial: '+971', postalFirst: false,
+      postal: 'Postal code', postalEx: '', postalMax: 10, postalMode: 'text', city: 'City / area', cityEx: 'Dubai Marina',
+      phoneEx: '50 123 4567', line1: 'Building and street', line1Ex: 'Marina Plaza, Al Marsa St', line2Ex: 'Apartment / office number',
+      hint: 'building and street, apartment number, area and emirate. No postal code needed.',
+      region: { label: 'Emirate', list: AE_EMIRATES, required: true } },
+    { code: 'TH', name: 'Thailand', group: 'Middle East & Asia', dial: '+66', postalFirst: false, postal: 'Postal code',
+      postalEx: '10110', postalMax: 5, postalMode: 'numeric', city: 'District / city', cityEx: 'Khlong Toei',
+      phoneEx: '81 234 5678', line1: 'House number and street', line1Ex: '123 Sukhumvit Rd', line2Ex: 'Soi, sub-district',
+      hint: 'house number and street, soi and sub-district on the second line, then district, province and 5-digit postal code.',
+      region: { label: 'Province', list: null, required: true, placeholder: 'Bangkok' } }
+  ];
+
+  var GROUPS = ['Central & South America', 'Europe', 'Middle East & Asia'];
 
   // Mirrors POSTAL_OPTIONAL_COUNTRIES in services/easypost.js.
-  var POSTAL_OPTIONAL = { AE:1, AG:1, AO:1, AW:1, BS:1, BZ:1, BO:1, CW:1, DM:1, FJ:1, GD:1, GH:1, HK:1, JM:1, LC:1, MO:1, QA:1, SC:1, SR:1, TT:1, UG:1, ZW:1 };
+  var POSTAL_OPTIONAL = { AE: 1, CO: 1 };
 
   var COUNTRIES = DETAILED.slice();
   var byCode = {};
   DETAILED.forEach(function (c) { byCode[c.code] = c; });
-  RAW.split(';').forEach(function (row) {
-    var a = row.split('|');
-    if (byCode[a[0]]) return;
-    var pf = a[3] === 'p';
-    var c = { code: a[0], name: a[1], dial: '+' + a[2], postalFirst: pf, postal: 'Postal code', postalEx: '',
-      postalMax: 10, postalMode: 'text', city: 'City', cityEx: '', phoneEx: '',
-      line1: pf ? 'Street and house number' : 'Street address', line1Ex: '', line2Ex: '',
-      hint: pf ? 'street and number, then postal code and city.' : 'street, city, state or province, postal code.',
-      region: pf ? null : { label: 'State / province (optional)', list: null, required: false, placeholder: '' } };
-    COUNTRIES.push(c);
-    byCode[c.code] = c;
-  });
-  var INTL = COUNTRIES.filter(function (c) { return c.code !== 'US'; })
-    .sort(function (a, b) { return a.name.localeCompare(b.name); });
+  var INTL = COUNTRIES.filter(function (c) { return c.code !== 'US'; });
 
   // ---- Elements ------------------------------------------------------------
   function $(id) { return document.getElementById(id); }
@@ -119,8 +116,10 @@
 
   var state = { code: 'US', lastIntl: null };
 
-  el.countrySelect.innerHTML = INTL.map(function (c) {
-    return '<option value="' + c.code + '">' + c.name + '</option>';
+  el.countrySelect.innerHTML = GROUPS.map(function (g) {
+    return '<optgroup label="' + g.replace(/&/g, '&amp;') + '">' + INTL.filter(function (c) { return c.group === g; }).map(function (c) {
+      return '<option value="' + c.code + '">' + c.name + '</option>';
+    }).join('') + '</optgroup>';
   }).join('');
 
   // ---- Helpers -------------------------------------------------------------
@@ -133,7 +132,9 @@
     for (var i = 0; i < COUNTRIES.length; i++) {
       if (COUNTRIES[i].name.toLowerCase() === lower) return COUNTRIES[i].code;
     }
-    return 'US';
+    // A saved address abroad in a country we don't ship to: keep the shopper
+    // on International so they can see which countries are available.
+    return INTL[0].code;
   }
 
   function regionCode(country, value) {
