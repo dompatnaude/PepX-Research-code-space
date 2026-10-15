@@ -13,7 +13,8 @@ const {
   addressesMatch,
   formatAddressForComparison,
   buildCustomsInfo,
-  isDomesticCountry
+  isDomesticCountry,
+  classifyCheckoutService
 } = require('./easypost');
 
 class ShippingWorkflowError extends Error {
@@ -142,7 +143,15 @@ async function createRatesForOrder(options) {
     throw new ShippingWorkflowError(502, message, 'easypost-shipment-create-failed');
   }
 
-  const rates = Array.isArray(shipment.rates) ? shipment.rates.map(sanitizeRate).filter(Boolean) : [];
+  // canonicalService uses the same names checkout showed the customer, so the
+  // admin page can pre-select the service they paid for.
+  const rates = Array.isArray(shipment.rates)
+    ? shipment.rates.map(sanitizeRate).filter(Boolean).map(function (rate) {
+      return Object.assign({}, rate, {
+        canonicalService: classifyCheckoutService(rate.carrier, rate.service, destination.country) || null
+      });
+    })
+    : [];
   if (!rates.length) {
     throw new ShippingWorkflowError(422, 'No shipping rates were returned for this shipment.', 'no-rates-returned');
   }
@@ -173,6 +182,8 @@ async function createRatesForOrder(options) {
   return {
     order: order,
     shipment: buildOrderResponseShipment(insertResult.rows[0]),
+    international: !domestic,
+    customsAttached: !!customsInfo,
     addressVerification: {
       originalAddress,
       suggestedAddress,
