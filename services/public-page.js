@@ -331,6 +331,8 @@ function document_({ seo, origin, ogType, jsonLd, categories, body }) {
     '<html lang="en" class="pepx-public">',
     '<head>',
     '  ' + head({ seo, origin, ogType, jsonLd }),
+    '  <script src="/pepx-analytics.js"></script>',
+    '  <script defer src="/_vercel/insights/script.js"></script>',
     '</head>',
     '<body>',
     header(categories),

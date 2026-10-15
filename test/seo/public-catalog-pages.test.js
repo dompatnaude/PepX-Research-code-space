@@ -236,7 +236,8 @@ test('a product page renders specs, price and a login CTA, and never a cart cont
   assert.match(html, /Log in to order/);
   assert.match(html, /"@type": "Product"/);
   assert.doesNotMatch(html, /addToCart|id="cartBtn"|Add to Cart/i);
-  assert.doesNotMatch(html, /script\.js/, 'the signed-in storefront bundle must not be referenced');
+  // Matches the storefront bundle itself, not Vercel's /_vercel/insights/script.js.
+  assert.doesNotMatch(html, /src="\/?script\.js"/, 'the signed-in storefront bundle must not be referenced');
 });
 
 test('an undescribed product page omits the details section entirely', () => {
